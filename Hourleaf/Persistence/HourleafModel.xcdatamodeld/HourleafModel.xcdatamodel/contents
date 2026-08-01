@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="26600" systemVersion="26A" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithCloudKit="YES">
+    <entity name="EntryEntity" representedClassName="EntryEntity" syncable="YES">
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="kind" optional="YES" attributeType="String"/>
+        <attribute name="localDay" optional="YES" attributeType="String"/>
+        <attribute name="minutes" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="note" optional="YES" attributeType="String"/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+    </entity>
+    <entity name="PolicyRevisionEntity" representedClassName="PolicyRevisionEntity" syncable="YES">
+        <attribute name="carryAcrossServiceYear" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="effectiveMonth" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="mode" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="ReminderEntity" representedClassName="ReminderEntity" syncable="YES">
+        <attribute name="hour" attributeType="Integer 16" defaultValueString="9" usesScalarValueType="YES"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="isEnabled" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="minute" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="weekday" attributeType="Integer 16" defaultValueString="2" usesScalarValueType="YES"/>
+    </entity>
+    <entity name="ReportReceiptEntity" representedClassName="ReportReceiptEntity" syncable="YES">
+        <attribute name="confirmedSentAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="creditCarryOut" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="creditHours" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="monthKey" optional="YES" attributeType="String"/>
+        <attribute name="preparedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="reportText" optional="YES" attributeType="String"/>
+        <attribute name="serviceCarryOut" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="serviceHours" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+    </entity>
+    <entity name="SettingsEntity" representedClassName="SettingsEntity" syncable="YES">
+        <attribute name="baselineServiceYearMinutes" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="baselineServiceYearStart" optional="YES" attributeType="String"/>
+        <attribute name="creditLabelEnglish" optional="YES" attributeType="String"/>
+        <attribute name="creditLabelRussian" optional="YES" attributeType="String"/>
+        <attribute name="creditLabelUkrainian" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="ledgerStartMonth" optional="YES" attributeType="String"/>
+        <attribute name="onboardingComplete" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="openingCreditCarryMinutes" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="openingServiceCarryMinutes" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="reportLanguage" optional="YES" attributeType="String"/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+    </entity>
+    <elements>
+        <element name="EntryEntity" positionX="-63" positionY="-18" width="128" height="149"/>
+        <element name="PolicyRevisionEntity" positionX="117" positionY="-18" width="128" height="119"/>
+        <element name="ReminderEntity" positionX="297" positionY="-18" width="128" height="104"/>
+        <element name="ReportReceiptEntity" positionX="477" positionY="-18" width="128" height="179"/>
+        <element name="SettingsEntity" positionX="657" positionY="-18" width="128" height="224"/>
+    </elements>
+</model>
