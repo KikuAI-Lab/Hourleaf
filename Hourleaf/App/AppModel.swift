@@ -87,12 +87,15 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func deleteEntry(_ entry: TimeEntry) {
+    @discardableResult
+    func deleteEntry(_ entry: TimeEntry) -> Bool {
         do {
             try repository.deleteEntry(id: entry.id)
             reload()
+            return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
     }
 

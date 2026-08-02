@@ -39,10 +39,13 @@ MVP is accepted.
   opens that confirmation, including when sharing was cancelled.
 - Report navigation stops at the configured ledger start, so Hourleaf never
   presents or snapshots invented months before the user's opening balances.
+- A zero-duration history edit is treated as an intent to remove an accidental
+  entry. Hourleaf asks for confirmation and deletes it instead of storing a
+  meaningless zero-minute record or showing a validation dead end.
 
 ## Verification snapshot — 2026-08-02
 
-- `xcodebuild ... test`: 15 unit/integration and 12 UI tests passed on iPhone 17
+- `xcodebuild ... test`: 15 unit/integration and 13 UI tests passed on iPhone 17
   Pro Simulator (iOS 26.5). UI coverage includes past-date entry, editing,
   deletion, reminders, ledger-start report navigation, and share cancellation.
 - Unsigned generic-device Release build and Xcode Analyze passed with Xcode

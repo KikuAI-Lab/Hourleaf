@@ -85,6 +85,11 @@ struct HistoryScreen: View {
     }
 }
 
+private enum EntryEditorConfirmation {
+    case editReportedEntry
+    case deleteEntry
+}
+
 private struct EntryEditorView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -95,7 +100,7 @@ private struct EntryEditorView: View {
     @State private var hours: Int
     @State private var minutes: Int
     @State private var note: String
-    @State private var showWarning = false
+    @State private var confirmation: EntryEditorConfirmation?
 
     init(entry: TimeEntry) {
         self.entry = entry
@@ -123,6 +128,14 @@ private struct EntryEditorView: View {
                 TimeWheelPicker(hours: $hours, minutes: $minutes)
                 TextField("entry.note_placeholder", text: $note, axis: .vertical)
                     .accessibilityIdentifier("editEntryNoteField")
+                Section {
+                    Button(role: .destructive) {
+                        confirmation = .deleteEntry
+                    } label: {
+                        Label("common.delete", systemImage: "trash")
+                    }
+                    .accessibilityIdentifier("deleteEditedEntryButton")
+                }
             }
             .navigationTitle("history.edit_short")
             .navigationBarTitleDisplayMode(.inline)
@@ -133,26 +146,78 @@ private struct EntryEditorView: View {
                         .accessibilityIdentifier("saveEditedEntryButton")
                 }
             }
-            .alert("history.edit.report_title", isPresented: $showWarning) {
+            .alert(confirmationTitle, isPresented: confirmationBinding) {
                 Button("common.cancel", role: .cancel) {}
-                Button("history.edit_anyway") { performSave() }
+                if confirmation == .deleteEntry {
+                    Button("common.delete", role: .destructive) { performDelete() }
+                } else {
+                    Button("history.edit_anyway") { performSave() }
+                }
             } message: {
-                Text("history.change_report_warning")
+                Text(confirmationMessage)
             }
         }
     }
 
     private func attemptSave() {
+        guard hours > 0 || minutes > 0 else {
+            confirmation = .deleteEntry
+            return
+        }
         let earliest = min(entry.day.monthKey, MonthKey(date, calendar: .hourleaf))
         if model.changeAffectsConfirmedReport(from: earliest) {
-            showWarning = true
+            confirmation = .editReportedEntry
         } else {
             performSave()
         }
     }
 
     private func performSave() {
+        confirmation = nil
         if model.updateEntry(entry, kind: kind, date: date, hours: hours, minutes: minutes, note: note) {
+            dismiss()
+        }
+    }
+
+    private var confirmationBinding: Binding<Bool> {
+        Binding(
+            get: { confirmation != nil },
+            set: { if !$0 { confirmation = nil } }
+        )
+    }
+
+    private var confirmationTitle: String {
+        switch confirmation {
+        case .editReportedEntry:
+            String(localized: "history.edit.report_title")
+        case .deleteEntry:
+            deleteTitle
+        case nil:
+            ""
+        }
+    }
+
+    private var confirmationMessage: String {
+        confirmation == .deleteEntry
+            ? deleteMessage
+            : String(localized: "history.change_report_warning")
+    }
+
+    private var deleteTitle: String {
+        model.changeAffectsConfirmedReport(from: entry.day.monthKey)
+            ? String(localized: "history.delete.report_title")
+            : String(localized: "history.delete.title")
+    }
+
+    private var deleteMessage: String {
+        model.changeAffectsConfirmedReport(from: entry.day.monthKey)
+            ? String(localized: "history.change_report_warning")
+            : String(localized: "history.delete.message")
+    }
+
+    private func performDelete() {
+        confirmation = nil
+        if model.deleteEntry(entry) {
             dismiss()
         }
     }

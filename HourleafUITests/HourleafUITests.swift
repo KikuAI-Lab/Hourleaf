@@ -116,6 +116,25 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["No entries yet"].waitForExistence(timeout: 5))
     }
 
+    func testZeroDurationEditOffersDeletion() {
+        let app = launchApp()
+        addEntry(in: app, hours: "1", minutes: "15")
+        app.tabBars.buttons["History"].tap()
+
+        let entry = firstHistoryEntry(in: app)
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        entry.tap()
+        XCTAssertTrue(app.navigationBars["Entry"].waitForExistence(timeout: 5))
+        app.pickerWheels.element(boundBy: 0).adjust(toPickerWheelValue: "0")
+        app.pickerWheels.element(boundBy: 1).adjust(toPickerWheelValue: "0")
+        app.buttons["saveEditedEntryButton"].tap()
+
+        let alert = app.alerts["Delete this entry?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons["Delete"].tap()
+        XCTAssertTrue(app.staticTexts["No entries yet"].waitForExistence(timeout: 5))
+    }
+
     func testReminderCanBeScheduledWithoutCreatingTime() {
         let app = launchApp()
         app.tabBars.buttons["Settings"].tap()
