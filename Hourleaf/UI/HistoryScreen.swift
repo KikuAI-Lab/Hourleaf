@@ -2,35 +2,35 @@ import SwiftUI
 
 struct HistoryScreen: View {
     @EnvironmentObject private var model: AppModel
-    @State private var editingEntry: TimeEntry?
-    @State private var entryToDelete: TimeEntry?
+    @State private var editingEntry: LedgerEntryRecord?
+    @State private var entryToDelete: LedgerEntryRecord?
 
     var body: some View {
         NavigationStack {
             Group {
-                if model.entries.isEmpty {
+                if model.entryRecords.isEmpty {
                     ContentUnavailableView(
                         "history.empty.title",
                         systemImage: "leaf",
                         description: Text("history.empty.message")
                     )
                 } else {
-                    List(model.entries) { entry in
-                        Button { editingEntry = entry } label: { entryRow(entry) }
+                    List(model.entryRecords) { record in
+                        Button { editingEntry = record } label: { entryRow(record.entry) }
                             .buttonStyle(.plain)
                             .swipeActions {
-                                Button(role: .destructive) { entryToDelete = entry } label: {
+                                Button(role: .destructive) { entryToDelete = record } label: {
                                     Label("common.delete", systemImage: "trash")
                                 }
                             }
-                            .accessibilityIdentifier("historyEntry_\(entry.id.uuidString)")
+                            .accessibilityIdentifier("historyEntry_\(record.id.uuidString)")
                     }
                     .listStyle(.insetGrouped)
                 }
             }
             .navigationTitle("history.title")
             .sheet(item: $editingEntry) { entry in
-                EntryEditorView(entry: entry)
+                EntryEditorView(record: entry)
                     .environmentObject(model)
             }
             .alert(deleteTitle, isPresented: deleteBinding, presenting: entryToDelete) { entry in
@@ -40,6 +40,17 @@ struct HistoryScreen: View {
                     entryToDelete = nil
                 }
             } message: { _ in Text(deleteMessage) }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        RecentlyDeletedScreen()
+                            .environmentObject(model)
+                    } label: {
+                        Label("history.recently_deleted", systemImage: "trash")
+                    }
+                    .accessibilityIdentifier("recentlyDeletedButton")
+                }
+            }
         }
     }
 
@@ -71,17 +82,17 @@ struct HistoryScreen: View {
     }
 
     private var deleteTitle: String {
-        guard let entryToDelete, model.changeAffectsConfirmedReport(from: entryToDelete.day.monthKey) else {
+        guard let entryToDelete, model.changeAffectsConfirmedReport(from: entryToDelete.entry.day.monthKey) else {
             return String(localized: "history.delete.title")
         }
         return String(localized: "history.delete.report_title")
     }
 
     private var deleteMessage: String {
-        guard let entryToDelete, model.changeAffectsConfirmedReport(from: entryToDelete.day.monthKey) else {
+        guard let entryToDelete, model.changeAffectsConfirmedReport(from: entryToDelete.entry.day.monthKey) else {
             return String(localized: "history.delete.message")
         }
-        return String(localized: "history.change_report_warning")
+        return String(localized: "history.delete.report_message")
     }
 }
 
@@ -93,7 +104,8 @@ private enum EntryEditorConfirmation {
 private struct EntryEditorView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    let entry: TimeEntry
+    let record: LedgerEntryRecord
+    private var entry: TimeEntry { record.entry }
 
     @State private var kind: EntryKind
     @State private var date: Date
@@ -102,8 +114,9 @@ private struct EntryEditorView: View {
     @State private var note: String
     @State private var confirmation: EntryEditorConfirmation?
 
-    init(entry: TimeEntry) {
-        self.entry = entry
+    init(record: LedgerEntryRecord) {
+        self.record = record
+        let entry = record.entry
         _kind = State(initialValue: entry.kind)
         _date = State(initialValue: entry.day.date(calendar: .hourleaf))
         _hours = State(initialValue: entry.minutes / 60)
@@ -175,7 +188,7 @@ private struct EntryEditorView: View {
     private func performSave() {
         confirmation = nil
         Task {
-            if await model.updateEntry(entry, kind: kind, date: date, hours: hours, minutes: minutes, note: note) {
+            if await model.updateEntry(record, kind: kind, date: date, hours: hours, minutes: minutes, note: note) {
                 dismiss()
             }
         }
@@ -213,14 +226,14 @@ private struct EntryEditorView: View {
 
     private var deleteMessage: String {
         model.changeAffectsConfirmedReport(from: entry.day.monthKey)
-            ? String(localized: "history.change_report_warning")
+            ? String(localized: "history.delete.report_message")
             : String(localized: "history.delete.message")
     }
 
     private func performDelete() {
         confirmation = nil
         Task {
-            if await model.deleteEntry(entry) {
+            if await model.deleteEntry(record) {
                 dismiss()
             }
         }

@@ -11,15 +11,20 @@ final class AppModel: ObservableObject {
     }
 
     @Published private(set) var entries: [TimeEntry] = []
+    @Published private(set) var entryRecords: [LedgerEntryRecord] = []
+    @Published private(set) var deletedEntryRecords: [LedgerEntryRecord] = []
     @Published private(set) var policies: [ReportingPolicy] = []
     @Published private(set) var reminders: [ReminderSchedule] = []
     @Published private(set) var receipts: [ReportReceipt] = []
+    @Published private(set) var reportSnapshots: [ReportSnapshotMetadata] = []
     @Published var settings = AppSettings()
     @Published var selectedTab: Tab = .add
     @Published var errorMessage: String?
     @Published private(set) var startupState: StartupState = .loading
     @Published private(set) var startupDiagnostic: String?
     @Published private(set) var lastErrorDiagnostic: String?
+    @Published private(set) var undoCandidate: EntryUndoCandidate?
+    @Published private(set) var visibleUndoCandidate: EntryUndoCandidate?
 
     let repository: any LedgerRepository
     private let reminderScheduler: ReminderScheduling
@@ -27,6 +32,12 @@ final class AppModel: ObservableObject {
     private var settingsSaveGeneration = 0
     private var settingsSaveTask: Task<Void, Never>?
     private var reportPreparationsInFlight = Set<MonthKey>()
+    private var restoringEntryIDs = Set<UUID>()
+    private var isUndoing = false
+    private var undoBannerTask: Task<Void, Never>?
+    /// Only user-visible undo state changes invalidate an in-flight presentation.
+    /// A passive store reload must not prevent a just-confirmed mutation from showing Undo.
+    private var undoStateGeneration = 0
 
     init(repository: any LedgerRepository, reminderScheduler: ReminderScheduling) {
         self.repository = repository
@@ -39,6 +50,7 @@ final class AppModel: ObservableObject {
         initialSnapshotLoaded = false
         do {
             try await loadSnapshot()
+            await refreshUndoCandidate(showBanner: true)
             initialSnapshotLoaded = true
             if markReady { startupState = .ready }
         } catch {
@@ -55,6 +67,7 @@ final class AppModel: ObservableObject {
     func reload() async {
         do {
             try await loadSnapshot()
+            await refreshUndoCandidate(showBanner: false)
         } catch {
             present(error)
         }
@@ -86,11 +99,16 @@ final class AppModel: ObservableObject {
     }
 
     private func apply(_ snapshot: LedgerSnapshot) {
-        entries = snapshot.activeEntries
+        entryRecords = snapshot.entries.filter { !$0.isDeleted }
+        deletedEntryRecords = snapshot.deletedEntries.sorted {
+            ($0.deletedAt ?? .distantPast, $0.id.uuidString) > ($1.deletedAt ?? .distantPast, $1.id.uuidString)
+        }
+        entries = entryRecords.map(\.entry)
         settings = snapshot.settings
         policies = snapshot.policies
         reminders = snapshot.reminderSchedules
         receipts = snapshot.receipts
+        reportSnapshots = snapshot.reportSnapshots
     }
 
     func addEntry(kind: EntryKind, date: Date, hours: Int, minutes: Int, note: String?) async -> Bool {
@@ -100,9 +118,9 @@ final class AppModel: ObservableObject {
             return false
         }
         do {
-            _ = try await AddTimeEntryCommand(repository: repository)
+            let receipt = try await AddTimeEntryCommand(repository: repository)
                 .execute(kind: kind, date: date, hours: hours, minutes: minutes, note: note)
-            await reload()
+            await refreshAfterEntryMutation(receipt, showUndoBanner: true)
             return true
         } catch {
             present(error)
@@ -111,25 +129,23 @@ final class AppModel: ObservableObject {
     }
 
     func updateEntry(
-        _ entry: TimeEntry,
+        _ record: LedgerEntryRecord,
         kind: EntryKind,
         date: Date,
         hours: Int,
         minutes: Int,
         note: String?
     ) async -> Bool {
-        let total = hours * 60 + minutes
+        let total: Int
+        do {
+            total = try EntryDuration.totalMinutes(hours: hours, minutes: minutes)
+        } catch {
+            present(error)
+            return false
+        }
         let updatedMonth = MonthKey(date, calendar: .hourleaf)
         guard updatedMonth >= settings.ledgerStartMonth else {
             errorMessage = String(localized: "error.before_ledger_start")
-            return false
-        }
-        guard total > 0 else {
-            errorMessage = EntryValidationError.emptyDuration.localizedDescription
-            return false
-        }
-        guard total < 6_000 else {
-            errorMessage = EntryValidationError.durationTooLarge.localizedDescription
             return false
         }
         guard (note ?? "").count <= 280 else {
@@ -137,15 +153,21 @@ final class AppModel: ObservableObject {
             return false
         }
         do {
-            var updated = entry
-            updated.kind = kind
-            updated.day = LocalDay(date, calendar: .hourleaf)
-            updated.minutes = total
-            let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
-            updated.note = trimmedNote?.isEmpty == false ? trimmedNote : nil
-            updated.updatedAt = .now
-            try await repository.saveEntry(updated)
-            await reload()
+            let receipt = try await repository.apply(
+                EntryMutationCommand(
+                    entryID: record.id,
+                    expectedRevision: record.revision,
+                    operation: .update,
+                    values: EntryMutationValues(
+                        kind: kind,
+                        day: LocalDay(date, calendar: .hourleaf),
+                        minutes: total,
+                        note: note
+                    ),
+                    source: .appHistory
+                )
+            )
+            await refreshAfterEntryMutation(receipt, showUndoBanner: true)
             return true
         } catch {
             present(error)
@@ -154,14 +176,134 @@ final class AppModel: ObservableObject {
     }
 
     @discardableResult
-    func deleteEntry(_ entry: TimeEntry) async -> Bool {
+    func deleteEntry(_ record: LedgerEntryRecord) async -> Bool {
         do {
-            try await repository.deleteEntry(id: entry.id)
-            await reload()
+            let receipt = try await repository.apply(
+                EntryMutationCommand(
+                    entryID: record.id,
+                    expectedRevision: record.revision,
+                    operation: .delete,
+                    source: .appHistory
+                )
+            )
+            await refreshAfterEntryMutation(receipt, showUndoBanner: true)
             return true
         } catch {
             present(error)
             return false
+        }
+    }
+
+    @discardableResult
+    func restoreEntry(_ record: LedgerEntryRecord) async -> Bool {
+        guard restoringEntryIDs.insert(record.id).inserted else { return false }
+        defer { restoringEntryIDs.remove(record.id) }
+        do {
+            let receipt = try await repository.apply(
+                EntryMutationCommand(
+                    entryID: record.id,
+                    expectedRevision: record.revision,
+                    operation: .restore,
+                    source: .restore
+                )
+            )
+            await refreshAfterEntryMutation(receipt, showUndoBanner: true)
+            return true
+        } catch {
+            present(error)
+            return false
+        }
+    }
+
+    func undoLatestMutation() async {
+        guard !isUndoing else { return }
+        guard let candidate = undoCandidate else {
+            present(EntryMutationError.undoUnavailable)
+            return
+        }
+        isUndoing = true
+        defer { isUndoing = false }
+        undoStateGeneration += 1
+        visibleUndoCandidate = nil
+        undoBannerTask?.cancel()
+        do {
+            let receipt = try await repository.apply(
+                EntryMutationCommand(
+                    entryID: candidate.entryID,
+                    expectedRevision: candidate.expectedRevision,
+                    operation: .undo,
+                    revertedMutationID: candidate.mutationID,
+                    source: .undo
+                )
+            )
+            await refreshAfterEntryMutation(receipt, showUndoBanner: false)
+        } catch {
+            visibleUndoCandidate = nil
+            undoBannerTask?.cancel()
+            present(error)
+            await refreshUndoCandidate(showBanner: false)
+        }
+    }
+
+    func resumeUndoAvailability() async {
+        await refreshUndoCandidate(showBanner: true)
+    }
+
+    func dismissUndoBanner() {
+        undoStateGeneration += 1
+        visibleUndoCandidate = nil
+        undoBannerTask?.cancel()
+    }
+
+    private func refreshAfterEntryMutation(
+        _ receipt: EntryMutationReceipt,
+        showUndoBanner shouldShowUndoBanner: Bool
+    ) async {
+        undoStateGeneration += 1
+        let generation = undoStateGeneration
+        do {
+            try await loadSnapshot()
+            let candidate = try await repository.latestUndoCandidate(asOf: .now)
+            guard generation == undoStateGeneration else { return }
+            undoCandidate = candidate
+            guard
+                shouldShowUndoBanner,
+                let candidate,
+                candidate.mutationID == receipt.mutationID
+            else {
+                if candidate == nil { visibleUndoCandidate = nil }
+                return
+            }
+            showUndoBanner(for: candidate)
+        } catch {
+            presentMutationRefreshFailure(error)
+        }
+    }
+
+    private func refreshUndoCandidate(showBanner: Bool) async {
+        let generation = undoStateGeneration
+        do {
+            let candidate = try await repository.latestUndoCandidate(asOf: .now)
+            guard generation == undoStateGeneration else { return }
+            undoCandidate = candidate
+            if let candidate, showBanner {
+                showUndoBanner(for: candidate)
+            } else if candidate == nil {
+                visibleUndoCandidate = nil
+                undoBannerTask?.cancel()
+            }
+        } catch {
+            present(error)
+        }
+    }
+
+    private func showUndoBanner(for candidate: EntryUndoCandidate) {
+        undoBannerTask?.cancel()
+        visibleUndoCandidate = candidate
+        undoBannerTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            guard !Task.isCancelled, self?.visibleUndoCandidate?.mutationID == candidate.mutationID else { return }
+            self?.visibleUndoCandidate = nil
         }
     }
 
@@ -409,7 +551,7 @@ final class AppModel: ObservableObject {
                 )
             )
             try await repository.saveReceipt(receipt, details: details)
-            receipts = try await repository.fetchReceipts()
+            try await loadSnapshot()
             return receipt
         } catch {
             present(error)
@@ -438,6 +580,27 @@ final class AppModel: ObservableObject {
 
     func isStale(_ receipt: ReportReceipt) -> Bool {
         let current = report(for: receipt.month)
+        if let snapshot = reportSnapshots.first(where: { $0.id == receipt.id }),
+           !snapshot.legacyCalculationUnavailable,
+           let storedCalculationFingerprint = snapshot.calculationFingerprint,
+           let storedPresentationFingerprint = snapshot.presentationFingerprint,
+           let templateID = snapshot.templateID {
+            let calculationFingerprint = ReportFingerprint.calculation(
+                report: current,
+                entries: entries,
+                settings: settings,
+                policies: policies
+            )
+            let presentationFingerprint = ReportFingerprint.presentation(
+                calculationFingerprint: calculationFingerprint,
+                language: settings.reportLanguage,
+                creditLabel: settings.creditLabel(for: settings.reportLanguage),
+                templateID: templateID,
+                text: ReportFormatter.format(current, settings: settings)
+            )
+            return calculationFingerprint != storedCalculationFingerprint
+                || presentationFingerprint != storedPresentationFingerprint
+        }
         return current.serviceHours != receipt.serviceHours
             || current.creditHours != receipt.creditHours
             || current.serviceCarryOut != receipt.serviceCarryOut
@@ -449,10 +612,17 @@ final class AppModel: ObservableObject {
         lastErrorDiagnostic = error.localizedDescription
         if let validationError = error as? EntryValidationError {
             errorMessage = validationError.localizedDescription
+        } else if let mutationError = error as? EntryMutationError {
+            errorMessage = mutationError.localizedDescription
         } else if error is LedgerRepositoryError || error is PersistenceStartupError {
             errorMessage = String(localized: "error.local_data")
         } else {
             errorMessage = String(localized: "error.action_failed")
         }
+    }
+
+    private func presentMutationRefreshFailure(_ error: Error) {
+        lastErrorDiagnostic = error.localizedDescription
+        errorMessage = String(localized: "error.mutation_saved_refresh_failed")
     }
 }

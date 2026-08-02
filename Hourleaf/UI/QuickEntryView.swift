@@ -8,7 +8,6 @@ struct QuickEntryView: View {
     @State private var hours = 0
     @State private var minutes = 0
     @State private var note = ""
-    @State private var didSave = false
     @State private var isSaving = false
     @FocusState private var noteFocused: Bool
 
@@ -88,7 +87,7 @@ struct QuickEntryView: View {
                         ProgressView()
                             .tint(.white)
                     } else {
-                        Label(didSave ? "entry.saved" : "entry.save", systemImage: didSave ? "checkmark" : "plus")
+                        Label("entry.save", systemImage: "plus")
                     }
                 }
                 .font(.headline)
@@ -161,9 +160,6 @@ struct QuickEntryView: View {
             hours = 0
             minutes = 0
             note = ""
-            didSave = true
-            try? await Task.sleep(for: .seconds(1.2))
-            didSave = false
         }
     }
 }

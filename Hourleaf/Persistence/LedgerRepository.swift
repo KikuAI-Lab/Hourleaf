@@ -5,8 +5,8 @@ protocol LedgerRepository: Sendable {
     func ledgerSnapshot() async throws -> LedgerSnapshot
     func fetchEntries() async throws -> [TimeEntry]
     func fetchAllEntries() async throws -> [LedgerEntryRecord]
-    func saveEntry(_ entry: TimeEntry) async throws
-    func deleteEntry(id: UUID) async throws
+    func apply(_ command: EntryMutationCommand) async throws -> EntryMutationReceipt
+    func latestUndoCandidate(asOf: Date) async throws -> EntryUndoCandidate?
     func loadSettings() async throws -> AppSettings
     func saveSettings(_ settings: AppSettings) async throws
     func fetchPolicies() async throws -> [ReportingPolicy]
@@ -23,14 +23,20 @@ actor CoreDataLedgerRepository: LedgerRepository {
     private static let dataRevision = 2
     private static let appSource = "appQuickEntry"
     private static let migrationSource = "migration"
+    private static let undoWindow: TimeInterval = 10 * 60
     private static let normalizationLock = NSLock()
 
     private let persistence: PersistenceController
+    private let clock: @Sendable () -> Date
     private var normalizationComplete = false
     private var normalizationFailure: LedgerRepositoryError?
 
-    init(persistence: PersistenceController) {
+    init(
+        persistence: PersistenceController,
+        clock: @escaping @Sendable () -> Date = { .now }
+    ) {
         self.persistence = persistence
+        self.clock = clock
     }
 
     func ledgerSnapshot() async throws -> LedgerSnapshot {
@@ -48,81 +54,84 @@ actor CoreDataLedgerRepository: LedgerRepository {
         try await ledgerSnapshot().entries
     }
 
-    func saveEntry(_ entry: TimeEntry) async throws {
+    func apply(_ command: EntryMutationCommand) async throws -> EntryMutationReceipt {
         try ensureNormalized()
-        _ = try perform { context in
-            let request: NSFetchRequest<EntryEntity> = EntryEntity.request()
-            request.fetchLimit = 1
-            request.predicate = NSPredicate(format: "id == %@", entry.id as CVarArg)
-            let existing = try context.fetch(request).first
-            let object = existing ?? context.insert(EntryEntity.self)
-            let parentMutationID = object.lastMutationID
-            let mutationID = UUID()
-            let revision = existing.map { max($0.revision + 1, 1) } ?? 1
-
-            object.id = entry.id
-            object.kind = entry.kind.rawValue
-            object.localDay = entry.day.key
-            object.minutes = Int32(entry.minutes)
-            object.note = entry.note
-            object.createdAt = entry.createdAt
-            object.updatedAt = entry.updatedAt
-            object.deletedAt = nil
-            object.source = Self.appSource
-            object.revision = revision
-            object.lastMutationID = mutationID
-            Self.appendRevision(
-                for: object,
-                in: context,
-                mutationID: mutationID,
-                parentMutationID: parentMutationID,
-                operation: existing == nil ? "create" : "update",
-                source: Self.appSource,
-                occurredAt: entry.updatedAt
-            )
-            try Self.saveIfNeeded(context)
-
-            guard
-                let saved = try context.fetch(request).first,
-                let record = Self.entryRecord(from: saved)
-            else {
-                throw LedgerRepositoryError.invalidManagedObject("Hourleaf could not read the time entry it just saved.")
+        let authorizationTime = clock()
+        do {
+            return try applyOnce(command, authorizationTime: authorizationTime)
+        } catch EntryMutationRetry.required {
+            // The write may have committed before a verification read failed. Retrying
+            // this exact command in a fresh context resolves that case as a replay;
+            // when it did not commit, the same mutation ID can still apply only once.
+            do {
+                return try applyOnce(command, authorizationTime: authorizationTime)
+            } catch EntryMutationRetry.required {
+                throw LedgerRepositoryError.invalidManagedObject(
+                    "Hourleaf could not verify the time entry after saving it."
+                )
             }
-            return record
         }
     }
 
-    func deleteEntry(id: UUID) async throws {
-        try ensureNormalized()
-        _ = try perform { context in
-            let request: NSFetchRequest<EntryEntity> = EntryEntity.request()
-            request.fetchLimit = 1
-            request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
-            guard let object = try context.fetch(request).first else { return false }
-
-            let now = Date()
-            let mutationID = UUID()
-            let parentMutationID = object.lastMutationID
-            object.deletedAt = now
-            object.updatedAt = now
-            object.source = Self.appSource
-            object.revision = max(object.revision + 1, 1)
-            object.lastMutationID = mutationID
-            Self.appendRevision(
-                for: object,
-                in: context,
-                mutationID: mutationID,
-                parentMutationID: parentMutationID,
-                operation: "delete",
-                source: Self.appSource,
-                occurredAt: now
-            )
-            try Self.saveIfNeeded(context)
-
-            guard let saved = try context.fetch(request).first, saved.deletedAt != nil else {
-                throw LedgerRepositoryError.invalidManagedObject("Hourleaf could not move the time entry out of the active ledger.")
+    private func applyOnce(
+        _ command: EntryMutationCommand,
+        authorizationTime: Date
+    ) throws -> EntryMutationReceipt {
+        return try performMutation { context in
+            try Self.validate(command)
+            if let existing = try Self.revision(in: context, mutationID: command.mutationID) {
+                return try Self.replayReceipt(for: existing, command: command)
             }
-            return true
+            guard command.occurredAt <= authorizationTime else {
+                throw EntryMutationError.invalidCommand
+            }
+
+            let written = try Self.applyNew(
+                command,
+                in: context,
+                authorizationTime: authorizationTime
+            )
+            let record: LedgerEntryRecord
+            do {
+                try Self.saveIfNeeded(context)
+                context.refreshAllObjects()
+
+                guard
+                    let saved = try Self.entry(in: context, id: command.entryID),
+                    let verifiedRecord = Self.entryRecord(from: saved),
+                    verifiedRecord.revision == written.appliedRevision,
+                    verifiedRecord.lastMutationID == command.mutationID,
+                    let savedRevision = try Self.revision(in: context, mutationID: command.mutationID),
+                    savedRevision.entryID == command.entryID,
+                    savedRevision.revision == written.appliedRevision
+                else {
+                    throw LedgerRepositoryError.invalidManagedObject(
+                        "Hourleaf could not verify the time entry it just changed."
+                    )
+                }
+                record = verifiedRecord
+            } catch {
+                throw EntryMutationRetry.required
+            }
+
+            return EntryMutationReceipt(
+                mutationID: command.mutationID,
+                entry: record,
+                operation: written.operation,
+                appliedRevision: written.appliedRevision,
+                occurredAt: command.occurredAt,
+                undoExpiresAt: written.operation.isUndoable
+                    ? command.occurredAt.addingTimeInterval(Self.undoWindow)
+                    : nil,
+                wasReplay: false
+            )
+        }
+    }
+
+    func latestUndoCandidate(asOf: Date = .now) async throws -> EntryUndoCandidate? {
+        try ensureNormalized()
+        return try perform { context in
+            try Self.latestUndoCandidate(in: context, asOf: asOf)
         }
     }
 
@@ -363,9 +372,472 @@ actor CoreDataLedgerRepository: LedgerRepository {
             try work(context)
         }
     }
+
+    private func performMutation<T: Sendable>(
+        _ work: @escaping @Sendable (NSManagedObjectContext) throws -> T
+    ) throws -> T {
+        let context = persistence.container.newBackgroundContext()
+        context.mergePolicy = NSMergePolicy(merge: .errorMergePolicyType)
+        context.undoManager = nil
+        return try context.performAndWait {
+            try work(context)
+        }
+    }
+}
+
+private struct EntryMutationWrite: Sendable {
+    let operation: EntryMutationOperation
+    let appliedRevision: Int64
+}
+
+private enum EntryMutationRetry: Error {
+    case required
 }
 
 private extension CoreDataLedgerRepository {
+    static func applyNew(
+        _ command: EntryMutationCommand,
+        in context: NSManagedObjectContext,
+        authorizationTime: Date
+    ) throws -> EntryMutationWrite {
+        try validate(command)
+        let existing = try entry(in: context, id: command.entryID)
+
+        switch command.operation {
+        case .create:
+            guard existing == nil, let values = try validatedValues(
+                command.values,
+                in: context,
+                authorizationTime: authorizationTime
+            ) else {
+                throw EntryMutationError.entryStateChanged
+            }
+            let object = context.insert(EntryEntity.self)
+            object.id = command.entryID
+            write(values, to: object)
+            object.createdAt = command.occurredAt
+            object.updatedAt = command.occurredAt
+            object.deletedAt = nil
+            object.source = command.source.rawValue
+            object.revision = 1
+            object.lastMutationID = command.mutationID
+            appendRevision(
+                for: object,
+                in: context,
+                mutationID: command.mutationID,
+                parentMutationID: nil,
+                operation: command.operation.rawValue,
+                source: command.source.rawValue,
+                occurredAt: command.occurredAt
+            )
+            return EntryMutationWrite(operation: .create, appliedRevision: object.revision)
+
+        case .update:
+            guard let object = existing else { throw EntryMutationError.entryNotFound }
+            try requireExpectedRevision(command.expectedRevision, for: object)
+            guard object.deletedAt == nil else { throw EntryMutationError.entryStateChanged }
+            guard let values = try validatedValues(
+                command.values,
+                in: context,
+                authorizationTime: authorizationTime
+            ) else {
+                throw EntryMutationError.invalidCommand
+            }
+            let parentMutationID = object.lastMutationID
+            let nextRevision = try nextRevision(after: object.revision)
+            write(values, to: object)
+            object.updatedAt = command.occurredAt
+            object.source = command.source.rawValue
+            object.revision = nextRevision
+            object.lastMutationID = command.mutationID
+            appendRevision(
+                for: object,
+                in: context,
+                mutationID: command.mutationID,
+                parentMutationID: parentMutationID,
+                operation: command.operation.rawValue,
+                source: command.source.rawValue,
+                occurredAt: command.occurredAt
+            )
+            return EntryMutationWrite(operation: .update, appliedRevision: object.revision)
+
+        case .delete:
+            guard let object = existing else { throw EntryMutationError.entryNotFound }
+            try requireExpectedRevision(command.expectedRevision, for: object)
+            guard object.deletedAt == nil else { throw EntryMutationError.entryStateChanged }
+            let parentMutationID = object.lastMutationID
+            let nextRevision = try nextRevision(after: object.revision)
+            object.deletedAt = command.occurredAt
+            object.updatedAt = command.occurredAt
+            object.source = command.source.rawValue
+            object.revision = nextRevision
+            object.lastMutationID = command.mutationID
+            appendRevision(
+                for: object,
+                in: context,
+                mutationID: command.mutationID,
+                parentMutationID: parentMutationID,
+                operation: command.operation.rawValue,
+                source: command.source.rawValue,
+                occurredAt: command.occurredAt
+            )
+            return EntryMutationWrite(operation: .delete, appliedRevision: object.revision)
+
+        case .restore:
+            guard let object = existing else { throw EntryMutationError.entryNotFound }
+            try requireExpectedRevision(command.expectedRevision, for: object)
+            guard object.deletedAt != nil else { throw EntryMutationError.entryStateChanged }
+            let parentMutationID = object.lastMutationID
+            let nextRevision = try nextRevision(after: object.revision)
+            object.deletedAt = nil
+            object.updatedAt = command.occurredAt
+            object.source = command.source.rawValue
+            object.revision = nextRevision
+            object.lastMutationID = command.mutationID
+            appendRevision(
+                for: object,
+                in: context,
+                mutationID: command.mutationID,
+                parentMutationID: parentMutationID,
+                operation: command.operation.rawValue,
+                source: command.source.rawValue,
+                occurredAt: command.occurredAt
+            )
+            return EntryMutationWrite(operation: .restore, appliedRevision: object.revision)
+
+        case .undo:
+            guard let object = existing else { throw EntryMutationError.entryNotFound }
+            return try applyUndo(
+                command,
+                to: object,
+                in: context,
+                authorizationTime: authorizationTime
+            )
+        }
+    }
+
+    static func validate(_ command: EntryMutationCommand) throws {
+        guard
+            command.source != .migration,
+            command.operation == .undo || command.source != .undo
+        else { throw EntryMutationError.invalidCommand }
+        switch command.operation {
+        case .create:
+            guard
+                command.expectedRevision == nil,
+                command.values != nil,
+                command.revertedMutationID == nil,
+                [
+                    EntryMutationSource.appQuickEntry,
+                    .appOneTap,
+                    .shortcut,
+                    .widget,
+                    .watch,
+                    .timer
+                ].contains(command.source)
+            else { throw EntryMutationError.invalidCommand }
+        case .update:
+            guard
+                command.expectedRevision != nil,
+                command.values != nil,
+                command.revertedMutationID == nil,
+                command.source == .appHistory
+            else { throw EntryMutationError.invalidCommand }
+        case .delete:
+            guard
+                command.expectedRevision != nil,
+                command.values == nil,
+                command.revertedMutationID == nil,
+                command.source == .appHistory
+            else { throw EntryMutationError.invalidCommand }
+        case .restore:
+            guard
+                command.expectedRevision != nil,
+                command.values == nil,
+                command.revertedMutationID == nil,
+                command.source == .restore
+            else { throw EntryMutationError.invalidCommand }
+        case .undo:
+            guard
+                command.expectedRevision != nil,
+                command.values == nil,
+                command.revertedMutationID != nil,
+                command.source == .undo
+            else { throw EntryMutationError.invalidCommand }
+        }
+    }
+
+    static func validatedValues(
+        _ values: EntryMutationValues?,
+        in context: NSManagedObjectContext,
+        authorizationTime: Date
+    ) throws -> EntryMutationValues? {
+        guard let values else { return nil }
+        let normalized = EntryMutationValues(
+            kind: values.kind,
+            day: values.day,
+            minutes: values.minutes,
+            note: values.note
+        )
+        guard let canonicalDay = LocalDay(key: normalized.day.key), canonicalDay == normalized.day else {
+            throw EntryMutationError.invalidLocalDay
+        }
+        guard (1...5_999).contains(normalized.minutes) else {
+            throw normalized.minutes == 0 ? EntryValidationError.emptyDuration : EntryValidationError.durationTooLarge
+        }
+        guard (normalized.note ?? "").count <= 280 else { throw EntryValidationError.noteTooLong }
+        guard normalized.day <= LocalDay(authorizationTime, calendar: .hourleaf) else {
+            throw EntryMutationError.dateInFuture
+        }
+        let settingsRequest: NSFetchRequest<SettingsEntity> = SettingsEntity.request()
+        guard
+            let settingsObject = preferredSettingsObject(in: try context.fetch(settingsRequest)),
+            let settings = domainSettings(from: settingsObject)
+        else {
+            throw LedgerRepositoryError.invalidManagedObject("Hourleaf settings are unavailable.")
+        }
+        guard normalized.day.monthKey >= settings.ledgerStartMonth else {
+            throw EntryMutationError.beforeLedgerStart
+        }
+        return normalized
+    }
+
+    static func requireExpectedRevision(_ expectedRevision: Int64?, for object: EntryEntity) throws {
+        guard let expectedRevision else { throw EntryMutationError.invalidCommand }
+        guard object.revision == expectedRevision else { throw EntryMutationError.staleRevision }
+    }
+
+    static func nextRevision(after currentRevision: Int64) throws -> Int64 {
+        guard currentRevision < Int64.max else { throw EntryMutationError.revisionExhausted }
+        return currentRevision + 1
+    }
+
+    static func applyUndo(
+        _ command: EntryMutationCommand,
+        to object: EntryEntity,
+        in context: NSManagedObjectContext,
+        authorizationTime: Date
+    ) throws -> EntryMutationWrite {
+        guard let revertedMutationID = command.revertedMutationID else {
+            throw EntryMutationError.invalidCommand
+        }
+        try requireExpectedRevision(command.expectedRevision, for: object)
+        guard object.lastMutationID == revertedMutationID else {
+            throw EntryMutationError.undoSuperseded
+        }
+        guard let target = try revision(in: context, mutationID: revertedMutationID) else {
+            throw EntryMutationError.undoUnavailable
+        }
+        guard
+            target.entryID == command.entryID,
+            let targetOperation = EntryMutationOperation(rawValue: target.operation),
+            targetOperation.isUndoable
+        else { throw EntryMutationError.undoUnavailable }
+
+        let now = authorizationTime
+        let commandAge = command.occurredAt.timeIntervalSince(target.occurredAt)
+        let wallClockAge = now.timeIntervalSince(target.occurredAt)
+        guard
+            commandAge >= 0,
+            commandAge < undoWindow,
+            wallClockAge >= 0,
+            wallClockAge < undoWindow
+        else { throw EntryMutationError.undoExpired }
+        guard let latest = try latestUndoCandidate(in: context, asOf: now), latest.mutationID == revertedMutationID else {
+            throw EntryMutationError.undoSuperseded
+        }
+
+        let nextRevision = try nextRevision(after: object.revision)
+
+        switch targetOperation {
+        case .create:
+            guard object.deletedAt == nil else { throw EntryMutationError.undoSuperseded }
+            object.deletedAt = command.occurredAt
+        case .update:
+            guard let parentMutationID = target.parentMutationID,
+                  let parent = try revision(in: context, mutationID: parentMutationID),
+                  parent.entryID == object.id,
+                  parent.entryDeletedAt == nil
+            else { throw EntryMutationError.undoUnavailable }
+            write(parent, to: object)
+            object.deletedAt = nil
+        case .delete:
+            guard object.deletedAt != nil else { throw EntryMutationError.undoSuperseded }
+            object.deletedAt = nil
+        case .restore:
+            guard let parentMutationID = target.parentMutationID,
+                  let parent = try revision(in: context, mutationID: parentMutationID),
+                  parent.entryID == object.id,
+                  let deletedAt = parent.entryDeletedAt,
+                  object.deletedAt == nil
+            else { throw EntryMutationError.undoUnavailable }
+            object.deletedAt = deletedAt
+        case .undo:
+            throw EntryMutationError.undoUnavailable
+        }
+
+        let parentMutationID = object.lastMutationID
+        object.updatedAt = command.occurredAt
+        object.source = command.source.rawValue
+        object.revision = nextRevision
+        object.lastMutationID = command.mutationID
+        appendRevision(
+            for: object,
+            in: context,
+            mutationID: command.mutationID,
+            parentMutationID: parentMutationID,
+            revertedMutationID: revertedMutationID,
+            operation: EntryMutationOperation.undo.rawValue,
+            source: command.source.rawValue,
+            occurredAt: command.occurredAt
+        )
+        return EntryMutationWrite(operation: .undo, appliedRevision: object.revision)
+    }
+
+    static func latestUndoCandidate(
+        in context: NSManagedObjectContext,
+        asOf: Date
+    ) throws -> EntryUndoCandidate? {
+        let request: NSFetchRequest<EntryRevisionEntity> = EntryRevisionEntity.request()
+        request.predicate = NSPredicate(format: "source != %@", EntryMutationSource.migration.rawValue)
+        request.sortDescriptors = [
+            NSSortDescriptor(key: "occurredAt", ascending: false),
+            NSSortDescriptor(key: "mutationID", ascending: false)
+        ]
+        request.fetchLimit = 1
+        guard let object = try context.fetch(request).first else { return nil }
+        guard let revision = entryRevisionRecord(from: object) else {
+            throw LedgerRepositoryError.invalidManagedObject("The newest saved entry revision is incomplete or invalid.")
+        }
+        guard let operation = EntryMutationOperation(rawValue: revision.operation), operation.isUndoable else {
+            return nil
+        }
+        let age = asOf.timeIntervalSince(revision.occurredAt)
+        guard age >= 0, age < undoWindow else { return nil }
+        guard
+            let entry = try entry(in: context, id: revision.entryID),
+            let record = entryRecord(from: entry),
+            record.lastMutationID == revision.mutationID,
+            record.revision == revision.revision
+        else { return nil }
+        return EntryUndoCandidate(
+            mutationID: revision.mutationID,
+            entryID: revision.entryID,
+            expectedRevision: revision.revision,
+            operation: operation,
+            entry: record,
+            occurredAt: revision.occurredAt,
+            expiresAt: revision.occurredAt.addingTimeInterval(undoWindow)
+        )
+    }
+
+    static func entry(in context: NSManagedObjectContext, id: UUID) throws -> EntryEntity? {
+        let request: NSFetchRequest<EntryEntity> = EntryEntity.request()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        let objects = try context.fetch(request)
+        guard objects.count <= 1 else {
+            throw LedgerRepositoryError.invalidManagedObject("Saved time entries contain a duplicate identifier.")
+        }
+        return objects.first
+    }
+
+    static func revision(in context: NSManagedObjectContext, mutationID: UUID) throws -> EntryRevisionRecord? {
+        let request: NSFetchRequest<EntryRevisionEntity> = EntryRevisionEntity.request()
+        request.predicate = NSPredicate(format: "mutationID == %@", mutationID as CVarArg)
+        let objects = try context.fetch(request)
+        guard objects.count <= 1 else {
+            throw LedgerRepositoryError.invalidManagedObject("Saved entry revisions contain a duplicate mutation identifier.")
+        }
+        guard let object = objects.first else { return nil }
+        guard let record = entryRevisionRecord(from: object) else {
+            throw LedgerRepositoryError.invalidManagedObject("A saved entry revision contains incomplete or invalid data.")
+        }
+        return record
+    }
+
+    static func replayReceipt(
+        for revision: EntryRevisionRecord,
+        command: EntryMutationCommand
+    ) throws -> EntryMutationReceipt {
+        guard commandMatches(command, revision: revision),
+              let operation = EntryMutationOperation(rawValue: revision.operation),
+              let entry = entryRecord(from: revision)
+        else { throw EntryMutationError.mutationIDCollision }
+        return EntryMutationReceipt(
+            mutationID: revision.mutationID,
+            entry: entry,
+            operation: operation,
+            appliedRevision: revision.revision,
+            occurredAt: revision.occurredAt,
+            undoExpiresAt: operation.isUndoable
+                ? revision.occurredAt.addingTimeInterval(undoWindow)
+                : nil,
+            wasReplay: true
+        )
+    }
+
+    static func commandMatches(_ command: EntryMutationCommand, revision: EntryRevisionRecord) -> Bool {
+        guard
+            command.entryID == revision.entryID,
+            command.operation.rawValue == revision.operation,
+            command.source.rawValue == revision.source,
+            command.occurredAt == revision.occurredAt,
+            command.revertedMutationID == revision.revertedMutationID
+        else { return false }
+        let expectedRevision: Int64? = command.operation == .create ? nil : revision.revision - 1
+        guard command.expectedRevision == expectedRevision else { return false }
+        switch command.operation {
+        case .create, .update:
+            guard let values = command.values else { return false }
+            return values.kind.rawValue == revision.kind
+                && values.day.key == revision.localDay
+                && values.minutes == revision.minutes
+                && values.note == revision.note
+        case .delete, .restore:
+            return command.values == nil && command.revertedMutationID == nil
+        case .undo:
+            return command.values == nil && command.revertedMutationID != nil
+        }
+    }
+
+    static func entryRecord(from revision: EntryRevisionRecord) -> LedgerEntryRecord? {
+        guard
+            let kind = EntryKind(rawValue: revision.kind),
+            let day = LocalDay(key: revision.localDay),
+            (1...5_999).contains(revision.minutes)
+        else { return nil }
+        return LedgerEntryRecord(
+            entry: TimeEntry(
+                id: revision.entryID,
+                kind: kind,
+                day: day,
+                minutes: revision.minutes,
+                note: revision.note,
+                createdAt: revision.entryCreatedAt,
+                updatedAt: revision.entryUpdatedAt
+            ),
+            deletedAt: revision.entryDeletedAt,
+            source: revision.source,
+            revision: revision.revision,
+            lastMutationID: revision.mutationID
+        )
+    }
+
+    static func write(_ values: EntryMutationValues, to object: EntryEntity) {
+        object.kind = values.kind.rawValue
+        object.localDay = values.day.key
+        object.minutes = Int32(values.minutes)
+        object.note = values.note
+    }
+
+    static func write(_ revision: EntryRevisionRecord, to object: EntryEntity) {
+        object.kind = revision.kind
+        object.localDay = revision.localDay
+        object.minutes = Int32(revision.minutes)
+        object.note = revision.note
+        object.createdAt = revision.entryCreatedAt
+    }
+
     static func requiresNormalization(in context: NSManagedObjectContext) throws -> Bool {
         let request: NSFetchRequest<SettingsEntity> = SettingsEntity.request()
         let settings = try context.fetch(request)
@@ -1078,6 +1550,7 @@ private extension CoreDataLedgerRepository {
         in context: NSManagedObjectContext,
         mutationID: UUID,
         parentMutationID: UUID?,
+        revertedMutationID: UUID? = nil,
         operation: String,
         source: String,
         occurredAt: Date
@@ -1087,6 +1560,7 @@ private extension CoreDataLedgerRepository {
         revision.entryID = entry.id
         revision.mutationID = mutationID
         revision.parentMutationID = parentMutationID
+        revision.revertedMutationID = revertedMutationID
         revision.revision = max(entry.revision, 1)
         revision.operation = operation
         revision.kind = entry.kind
@@ -1142,5 +1616,14 @@ private extension CoreDataLedgerRepository {
 
     static func saveIfNeeded(_ context: NSManagedObjectContext) throws {
         if context.hasChanges { try context.save() }
+    }
+}
+
+private extension EntryMutationOperation {
+    var isUndoable: Bool {
+        switch self {
+        case .create, .update, .delete, .restore: true
+        case .undo: false
+        }
     }
 }

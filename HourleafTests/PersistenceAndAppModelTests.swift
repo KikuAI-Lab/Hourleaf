@@ -6,13 +6,19 @@ import XCTest
 final class PersistenceAndAppModelTests: XCTestCase {
     func testRepositoryRoundTripsEntrySettingsPolicyReminderAndReceipt() async throws {
         let repository = makeRepository()
+        var initialSettings = try await repository.loadSettings()
+        initialSettings.ledgerStartMonth = MonthKey(year: 2026, month: 7)
+        try await repository.saveSettings(initialSettings)
+        let timestamp = Date(timeIntervalSince1970: 1_780_000_000)
         let entry = TimeEntry(
             kind: .service,
             day: LocalDay(year: 2026, month: 7, day: 12),
             minutes: 75,
-            note: "Morning"
+            note: "Morning",
+            createdAt: timestamp,
+            updatedAt: timestamp
         )
-        try await repository.saveEntry(entry)
+        _ = try await repository.apply(createCommand(for: entry))
         let savedEntries = try await repository.fetchEntries()
         XCTAssertEqual(savedEntries, [entry])
 
@@ -83,7 +89,17 @@ final class PersistenceAndAppModelTests: XCTestCase {
         XCTAssertEqual(snapshotMetadata.calculationFingerprint, calculationFingerprint)
         XCTAssertFalse(snapshotMetadata.legacyCalculationUnavailable)
 
-        try await repository.deleteEntry(id: entry.id)
+        let allRecords = try await repository.fetchAllEntries()
+        let entryRecord = try XCTUnwrap(allRecords.first)
+        _ = try await repository.apply(
+            EntryMutationCommand(
+                entryID: entry.id,
+                expectedRevision: entryRecord.revision,
+                operation: .delete,
+                occurredAt: timestamp.addingTimeInterval(1),
+                source: .appHistory
+            )
+        )
         let activeEntriesAfterDelete = try await repository.fetchEntries()
         XCTAssertTrue(activeEntriesAfterDelete.isEmpty)
         let allEntriesAfterDelete = try await repository.fetchAllEntries()
@@ -98,7 +114,7 @@ final class PersistenceAndAppModelTests: XCTestCase {
         await model.loadInitialSnapshot()
         XCTAssertEqual(model.startupState, .ready)
         let month = MonthKey(Date(), calendar: .hourleaf)
-        let date = LocalDay(year: month.year, month: month.month, day: 10).date(calendar: .hourleaf)
+        let date = Date()
         let added = await model.addEntry(kind: .service, date: date, hours: 1, minutes: 15, note: nil)
         XCTAssertTrue(added)
 
@@ -107,7 +123,7 @@ final class PersistenceAndAppModelTests: XCTestCase {
         let createdReceipt = await model.createReceipt(for: report, text: text)
         let receipt = try XCTUnwrap(createdReceipt)
         await model.markReceiptSent(receipt)
-        let entry = try XCTUnwrap(model.entries.first)
+        let entry = try XCTUnwrap(model.entryRecords.first)
 
         let updated = await model.updateEntry(entry, kind: .service, date: date, hours: 2, minutes: 0, note: nil)
         XCTAssertTrue(updated)
@@ -116,12 +132,79 @@ final class PersistenceAndAppModelTests: XCTestCase {
         XCTAssertTrue(model.changeAffectsConfirmedReport(from: month))
     }
 
+    func testFingerprintsExposeDiscardedMinuteChangesAndPresentationChanges() async throws {
+        let repository = makeRepository()
+        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler())
+        await model.loadInitialSnapshot()
+        let month = MonthKey(Date(), calendar: .hourleaf)
+        await model.updateReportingPolicy(mode: .discard)
+
+        let added = await model.addEntry(kind: .service, date: Date(), hours: 1, minutes: 5, note: nil)
+        XCTAssertTrue(added)
+        let originalReport = model.report(for: month)
+        let originalText = ReportFormatter.format(originalReport, settings: model.settings)
+        let createdReceipt = await model.createReceipt(for: originalReport, text: originalText)
+        let receipt = try XCTUnwrap(createdReceipt)
+        XCTAssertEqual(model.reportSnapshots.first(where: { $0.id == receipt.id })?.calculationFingerprint?.isEmpty, false)
+
+        let record = try XCTUnwrap(model.entryRecords.first)
+        let updated = await model.updateEntry(
+            record,
+            kind: .service,
+            date: Date(),
+            hours: 1,
+            minutes: 15,
+            note: nil
+        )
+        XCTAssertTrue(updated)
+        let changedReport = model.report(for: month)
+        XCTAssertEqual(changedReport.serviceHours, originalReport.serviceHours)
+        XCTAssertEqual(changedReport.serviceCarryOut, originalReport.serviceCarryOut)
+        XCTAssertEqual(ReportFormatter.format(changedReport, settings: model.settings), receipt.text)
+        XCTAssertTrue(model.isStale(receipt))
+
+        await model.undoLatestMutation()
+        XCTAssertFalse(model.isStale(receipt))
+
+        await model.updateReportLanguage(.ukrainian)
+        XCTAssertTrue(model.isStale(receipt))
+    }
+
+    func testFingerprintsTrackDeleteRestoreAndUndo() async throws {
+        let repository = makeRepository()
+        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler())
+        await model.loadInitialSnapshot()
+        let month = MonthKey(Date(), calendar: .hourleaf)
+        await model.updateReportingPolicy(mode: .discard)
+        let added = await model.addEntry(kind: .service, date: Date(), hours: 1, minutes: 5, note: nil)
+        XCTAssertTrue(added)
+
+        let report = model.report(for: month)
+        let createdReceipt = await model.createReceipt(
+            for: report,
+            text: ReportFormatter.format(report, settings: model.settings)
+        )
+        let receipt = try XCTUnwrap(createdReceipt)
+        let record = try XCTUnwrap(model.entryRecords.first)
+        let deletedSuccessfully = await model.deleteEntry(record)
+        XCTAssertTrue(deletedSuccessfully)
+        XCTAssertTrue(model.isStale(receipt))
+
+        let deleted = try XCTUnwrap(model.deletedEntryRecords.first)
+        let restoredSuccessfully = await model.restoreEntry(deleted)
+        XCTAssertTrue(restoredSuccessfully)
+        XCTAssertFalse(model.isStale(receipt))
+
+        await model.undoLatestMutation()
+        XCTAssertTrue(model.isStale(receipt))
+    }
+
     func testReportPreparationRejectsMixedStaleInputs() async throws {
         let repository = makeRepository()
         let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler())
         await model.loadInitialSnapshot()
         let month = MonthKey(Date(), calendar: .hourleaf)
-        let date = LocalDay(year: month.year, month: month.month, day: 10).date(calendar: .hourleaf)
+        let date = Date()
         let firstAdded = await model.addEntry(kind: .service, date: date, hours: 1, minutes: 15, note: nil)
         XCTAssertTrue(firstAdded)
         let capturedReport = model.report(for: month)
@@ -548,6 +631,9 @@ final class PersistenceAndAppModelTests: XCTestCase {
 
     func testActorSerializesConcurrentEntryWritesAndReadback() async throws {
         let repository = makeRepository()
+        var settings = try await repository.loadSettings()
+        settings.ledgerStartMonth = MonthKey(year: 2026, month: 7)
+        try await repository.saveSettings(settings)
         let first = TimeEntry(
             id: UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!,
             kind: .service,
@@ -567,9 +653,11 @@ final class PersistenceAndAppModelTests: XCTestCase {
             updatedAt: Date(timeIntervalSince1970: 1_700_000_001)
         )
 
+        let firstCommand = createCommand(for: first)
+        let secondCommand = createCommand(for: second)
         try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask { try await repository.saveEntry(first) }
-            group.addTask { try await repository.saveEntry(second) }
+            group.addTask { _ = try await repository.apply(firstCommand) }
+            group.addTask { _ = try await repository.apply(secondCommand) }
             try await group.waitForAll()
         }
 
@@ -618,6 +706,27 @@ final class PersistenceAndAppModelTests: XCTestCase {
     private func makeRepository() -> CoreDataLedgerRepository {
         let persistence = PersistenceController(inMemory: true, cloudSyncEnabled: false)
         return CoreDataLedgerRepository(persistence: persistence)
+    }
+
+    private func createCommand(
+        for entry: TimeEntry,
+        mutationID: UUID = UUID(),
+        source: EntryMutationSource = .appQuickEntry
+    ) -> EntryMutationCommand {
+        EntryMutationCommand(
+            mutationID: mutationID,
+            entryID: entry.id,
+            expectedRevision: nil,
+            operation: .create,
+            values: EntryMutationValues(
+                kind: entry.kind,
+                day: entry.day,
+                minutes: entry.minutes,
+                note: entry.note
+            ),
+            occurredAt: entry.updatedAt,
+            source: source
+        )
     }
 
     private func reportDetails(

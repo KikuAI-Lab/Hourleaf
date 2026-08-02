@@ -4,6 +4,7 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -28,9 +29,35 @@ struct RootView: View {
         } message: {
             Text(model.errorMessage ?? "")
         }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await model.resumeUndoAvailability() }
+        }
     }
 
     private var readyContent: some View {
+        GeometryReader { geometry in
+            tabs
+                .overlay(alignment: .bottom) {
+                    if let candidate = model.visibleUndoCandidate {
+                        MutationBannerView(
+                            candidate: candidate,
+                            undo: { Task { await model.undoLatestMutation() } },
+                            dismiss: model.dismissUndoBanner
+                        )
+                        .padding(.horizontal)
+                        .padding(.bottom, tabBarClearance(in: geometry))
+                    }
+                }
+        }
+    }
+
+    private func tabBarClearance(in geometry: GeometryProxy) -> CGFloat {
+        // A bottom TabView reserves its standard 49 pt bar above the device's safe area.
+        geometry.safeAreaInsets.bottom + 57
+    }
+
+    private var tabs: some View {
         TabView(selection: $model.selectedTab) {
             QuickEntryView()
                 .tabItem { Label("tab.add", systemImage: "plus.circle.fill") }

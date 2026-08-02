@@ -117,6 +117,70 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["No entries yet"].waitForExistence(timeout: 5))
     }
 
+    func testUndoBannerRevertsTheLatestQuickEntry() {
+        let app = launchApp()
+        addEntry(in: app, hours: "1", minutes: "15")
+
+        let banner = app.descendants(matching: .any)["mutationBanner"]
+        XCTAssertTrue(banner.waitForExistence(timeout: 5))
+        XCTAssertLessThanOrEqual(
+            banner.frame.maxY,
+            app.tabBars.firstMatch.frame.minY,
+            "The Undo banner must remain above the tab bar."
+        )
+        let undo = app.buttons["undoMutationButton"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 2))
+        undo.tap()
+
+        app.tabBars.buttons["History"].tap()
+        XCTAssertTrue(app.staticTexts["No entries yet"].waitForExistence(timeout: 5))
+    }
+
+    func testUndoBannerRemainsUsableAtAccessibilityTextSize() {
+        let app = launchApp(
+            additionalArguments: [
+                "-UIPreferredContentSizeCategoryName",
+                "UICTContentSizeCategoryAccessibilityXXXL"
+            ]
+        )
+        addEntry(in: app, hours: "1", minutes: "15")
+
+        let banner = app.descendants(matching: .any)["mutationBanner"]
+        XCTAssertTrue(banner.waitForExistence(timeout: 5))
+        XCTAssertLessThanOrEqual(
+            banner.frame.maxY,
+            app.tabBars.firstMatch.frame.minY,
+            "The expanded Undo banner must remain above the tab bar."
+        )
+        XCTAssertTrue(app.buttons["undoMutationButton"].isHittable)
+        XCTAssertTrue(app.buttons["dismissUndoBannerButton"].isHittable)
+    }
+
+    func testRecentlyDeletedCanRestoreAnEntry() {
+        let app = launchApp()
+        addEntry(in: app, hours: "1", minutes: "15")
+        app.tabBars.buttons["History"].tap()
+
+        let entry = firstHistoryEntry(in: app)
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        entry.swipeLeft()
+        app.buttons["Delete"].tap()
+        let alert = app.alerts["Delete this entry?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons["Delete"].tap()
+
+        app.buttons["recentlyDeletedButton"].tap()
+        XCTAssertTrue(app.navigationBars["Recently Deleted"].waitForExistence(timeout: 5))
+        let restore = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH 'restoreEntry_'")
+        ).firstMatch
+        XCTAssertTrue(restore.waitForExistence(timeout: 5))
+        restore.tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        XCTAssertTrue(app.staticTexts["Service"].waitForExistence(timeout: 5))
+    }
+
     func testZeroDurationEditOffersDeletion() {
         let app = launchApp()
         addEntry(in: app, hours: "1", minutes: "15")

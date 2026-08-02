@@ -1,7 +1,7 @@
 # Hourleaf implementation notes
 
 Class: temporary task artifact. The canonical task surface is
-KikuAI-Lab/Hourleaf#1. Delete or reduce this file to durable follow-ups when the
+KikuAI-Lab/Hourleaf#3. Delete or reduce this file to durable follow-ups when the
 MVP is accepted.
 
 ## Decisions
@@ -31,6 +31,16 @@ MVP is accepted.
 - Settings use plain-language examples for reporting rules, clearly identify
   editable report wording, and present storage as status rather than a choice.
   Developer links replace internal App Store metadata.
+- App, Shortcuts, and future quick surfaces share one validated mutation
+  contract. Stable mutation IDs make exact retries idempotent, while captured
+  revisions prevent an older screen from overwriting a newer edit.
+- Deleting a time entry is reversible: it moves to Recently Deleted, immediately
+  leaves totals, and can be restored. Until verified backup and restore ship,
+  Hourleaf keeps every deleted entry accessible instead of promising or running
+  a 30-day purge.
+- Every entry change appends an immutable revision. Foreground changes expose a
+  short Undo banner, and the latest eligible change remains undoable for ten
+  minutes when it has not been superseded.
 
 ## Delivery gates
 
@@ -60,3 +70,19 @@ MVP is accepted.
   history, progress, and settings were read back through iPhone Mirroring.
 - CloudKit mirroring and TestFlight remain deferred by the owner's decision to
   test locally without an Apple Developer Program membership.
+
+## Verification snapshot — 2026-08-03 (roadmap Slice 2)
+
+- 58 unit/integration tests and 16 UI tests passed on the iOS 26.5 simulator.
+  Coverage includes strict dates and duration bounds, idempotent replay,
+  optimistic revisions, all four Undo inverses, the exact ten-minute boundary,
+  soft delete/restore, report fingerprints, zero-duration deletion, VoiceOver,
+  and accessibility text size.
+- Unsigned Debug and Release builds passed; `git diff --check` is clean.
+- The V1/V2 model files, current-version marker, managed-object declarations,
+  entitlements, privacy manifest, and Xcode project remain unchanged.
+- A Sol Max adversarial re-review returned GO with no P0 or P1 findings. Full
+  revision-graph validation and a two-repository concurrency harness remain
+  mandatory before multi-process or CloudKit writers are enabled.
+- This slice was not installed on the physical iPhone. Device data remains
+  untouched until portable backup and verified restore are complete.
