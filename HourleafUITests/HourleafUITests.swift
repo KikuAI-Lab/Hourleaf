@@ -182,7 +182,29 @@ final class HourleafUITests: XCTestCase {
         app.tabBars.buttons["Settings"].tap()
 
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["creditLabelField"].exists)
+        XCTAssertTrue(app.staticTexts["minutePolicyExample"].exists)
+        XCTAssertEqual(
+            app.staticTexts["minutePolicyExample"].label,
+            "Example: 3 hr 20 min in July becomes 3 hr in the report; 20 min is added to August. After August, the remainder resets to zero."
+        )
         XCTAssertFalse(app.switches["Carry August remainder into September"].exists)
+        XCTAssertFalse(app.staticTexts["App Store name"].exists)
+
+        let existingTime = app.buttons["existingTimeButton"]
+        XCTAssertTrue(existingTime.exists)
+        existingTime.tap()
+        XCTAssertTrue(app.navigationBars["Time already recorded"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["You only need this screen when moving an existing record into Hourleaf. It does not create entries for past days."].exists)
+
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        let settings = app.collectionViews.firstMatch
+        settings.swipeUp()
+        settings.swipeUp()
+        XCTAssertTrue(app.staticTexts["storageStatus"].exists)
+        XCTAssertTrue(app.buttons["developerWebsiteLink"].exists)
+        XCTAssertTrue(app.buttons["developerTelegramLink"].exists)
+        XCTAssertTrue(app.buttons["developerGitHubLink"].exists)
     }
 
     private func launchApp(additionalArguments: [String] = []) -> XCUIApplication {

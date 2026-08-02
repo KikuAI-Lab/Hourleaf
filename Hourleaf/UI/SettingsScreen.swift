@@ -15,11 +15,27 @@ struct SettingsScreen: View {
                     Picker("settings.report_language", selection: reportLanguageBinding) {
                         ForEach(ReportLanguage.allCases) { Text($0.localizedName).tag($0) }
                     }
-                    TextField("settings.credit_label", text: creditLabelBinding)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("settings.credit_label")
+                            .font(.subheadline.weight(.semibold))
+                        TextField("settings.credit_label_placeholder", text: creditLabelBinding)
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(String(localized: "settings.credit_label"))
+                            .accessibilityIdentifier("creditLabelField")
+                        Text("settings.credit_label_help")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 4)
+
                     Picker("settings.minutes_policy", selection: remainderModeBinding) {
                         ForEach(RemainderMode.allCases) { Text($0.localizedName).tag($0) }
                     }
-                    Text("settings.policy_footer").font(.caption).foregroundStyle(.secondary)
+                    Text(policyExampleKey)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("minutePolicyExample")
                 }
 
                 Section {
@@ -36,10 +52,18 @@ struct SettingsScreen: View {
                     Text("settings.reminders_footer")
                 }
 
-                Section("settings.data") {
+                Section {
                     NavigationLink("settings.opening_balances") { StartingBalancesView() }
+                        .accessibilityIdentifier("existingTimeButton")
                     LabeledContent("settings.storage", value: String(localized: "settings.storage_value"))
-                    LabeledContent("settings.sync", value: syncValue)
+                        .accessibilityIdentifier("storageStatus")
+                } header: {
+                    Text("settings.data")
+                } footer: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("settings.opening_balances_help")
+                        Text("settings.sync_planned")
+                    }
                 }
 
                 Section("settings.privacy") {
@@ -49,7 +73,19 @@ struct SettingsScreen: View {
 
                 Section {
                     LabeledContent("settings.version", value: "0.1.0")
-                    LabeledContent("settings.app_store_name", value: "Hourleaf: Ministry Hours")
+                    LabeledContent("settings.developer", value: "KikuAI")
+                    Link(destination: URL(string: "https://kikuai.dev")!) {
+                        Label("settings.developer_website", systemImage: "safari")
+                    }
+                    .accessibilityIdentifier("developerWebsiteLink")
+                    Link(destination: URL(string: "https://t.me/kiku_ai")!) {
+                        Label("settings.developer_telegram", systemImage: "paperplane")
+                    }
+                    .accessibilityIdentifier("developerTelegramLink")
+                    Link(destination: URL(string: "https://github.com/kiku-jw")!) {
+                        Label("settings.developer_github", systemImage: "chevron.left.forwardslash.chevron.right")
+                    }
+                    .accessibilityIdentifier("developerGitHubLink")
                 } header: { Text("settings.about") }
             }
             .navigationTitle("settings.title")
@@ -60,12 +96,12 @@ struct SettingsScreen: View {
         }
     }
 
-    private var syncValue: String {
-        #if HOURLEAF_LOCAL_DEVICE
-        String(localized: "settings.sync_local_value")
-        #else
-        String(localized: "settings.sync_value")
-        #endif
+    private var policyExampleKey: LocalizedStringKey {
+        switch currentPolicy.mode {
+        case .carry: "settings.policy_example_carry"
+        case .roundNearest: "settings.policy_example_round"
+        case .discard: "settings.policy_example_discard"
+        }
     }
 
     private var privacyDetail: String {
@@ -165,6 +201,10 @@ private struct StartingBalancesView: View {
 
     var body: some View {
         Form {
+            Section {
+                Text("balances.intro")
+                    .foregroundStyle(.secondary)
+            }
             Section("balances.ledger") {
                 DatePicker(
                     "balances.ledger_start",
@@ -173,12 +213,20 @@ private struct StartingBalancesView: View {
                     displayedComponents: .date
                 )
             }
-            Section("balances.year_progress") {
+            Section {
                 TimeWheelPicker(hours: $serviceHours, minutes: $serviceMinutes, usesDirectHourEntry: true)
+            } header: {
+                Text("balances.year_progress")
+            } footer: {
+                Text("balances.year_progress_help")
             }
-            Section("balances.carry") {
+            Section {
                 Stepper(String(format: String(localized: "balances.service_carry_format"), serviceCarry), value: $serviceCarry, in: 0...59)
                 Stepper(String(format: String(localized: "balances.credit_carry_format"), creditCarry), value: $creditCarry, in: 0...59)
+            } header: {
+                Text("balances.carry")
+            } footer: {
+                Text("balances.carry_help")
             }
             Section {
                 Button("common.save") { save() }

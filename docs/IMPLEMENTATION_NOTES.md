@@ -28,6 +28,9 @@ MVP is accepted.
   Store bundle ID and does not pretend to verify CloudKit sync. Records created
   under this local bundle ID will not migrate automatically to the future App
   Store sandbox.
+- Settings use plain-language examples for reporting rules, clearly identify
+  editable report wording, and present storage as status rather than a choice.
+  Developer links replace internal App Store metadata.
 
 ## Delivery gates
 
