@@ -27,6 +27,7 @@ final class HourleafUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-uiTesting", "-seedUITestData", "-AppleLanguages", "(en)"]
         app.launch()
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         app.tabBars.buttons["Progress"].tap()
 
         let preview = app.staticTexts["reportPreview"]
@@ -211,6 +212,7 @@ final class HourleafUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-uiTesting", "-AppleLanguages", "(en)"] + additionalArguments
         app.launch()
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         return app
     }
 

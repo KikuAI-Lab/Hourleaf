@@ -24,6 +24,12 @@
 "duration.hours_format" = "%d год";
 "duration.hours_minutes_format" = "%d год %d хв";
 "error.title" = "Щось пішло не так";
+"error.action_failed" = "Не вдалося завершити дію. Спробуйте ще раз.";
+"error.local_data" = "Не вдалося відкрити або зберегти дані Hourleaf на цьому пристрої.";
+"error.report_changed" = "Звіт змінився до підготовки. Перевірте його й спробуйте знову.";
+"startup.loading" = "Завантажуємо години…";
+"startup.failed.title" = "Не вдалося відкрити години";
+"startup.failed.message" = "Закрийте Hourleaf і відкрийте його знову.";
 "error.empty_duration" = "Виберіть принаймні одну хвилину.";
 "error.duration_too_large" = "Надто велика тривалість для одного запису.";
 "error.note_too_long" = "Нотатка має бути коротшою за 280 символів.";

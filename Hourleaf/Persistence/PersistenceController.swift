@@ -1,51 +1,77 @@
-import CoreData
+@preconcurrency import CoreData
 import Foundation
 
-@MainActor
-final class PersistenceController {
+enum PersistenceStartupError: LocalizedError, Equatable, Sendable {
+    case missingStoreDescription
+    case loadFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingStoreDescription:
+            "Hourleaf could not prepare its local data store."
+        case let .loadFailed(message):
+            "Hourleaf could not open its local data: \(message)"
+        }
+    }
+}
+
+final class PersistenceController: @unchecked Sendable {
     static let shared = PersistenceController()
 
     let container: NSPersistentCloudKitContainer
+    let startupError: PersistenceStartupError?
 
-    init(inMemory: Bool = false, cloudSyncEnabled: Bool? = nil) {
+    init(
+        inMemory: Bool = false,
+        cloudSyncEnabled: Bool? = nil,
+        storeURL: URL? = nil
+    ) {
         container = NSPersistentCloudKitContainer(name: "HourleafModel")
-        guard let description = container.persistentStoreDescriptions.first else {
-            preconditionFailure("Hourleaf persistent store description is missing")
-        }
+        var result: PersistenceStartupError?
 
-        let shouldUseCloud: Bool
-        if let cloudSyncEnabled {
-            shouldUseCloud = cloudSyncEnabled && !inMemory
+        if let description = container.persistentStoreDescriptions.first {
+            let shouldUseCloud: Bool
+            if let cloudSyncEnabled {
+                shouldUseCloud = cloudSyncEnabled && !inMemory
+            } else {
+                #if HOURLEAF_LOCAL_DEVICE || targetEnvironment(simulator)
+                shouldUseCloud = false
+                #else
+                shouldUseCloud = !inMemory
+                #endif
+            }
+
+            if inMemory {
+                description.type = NSInMemoryStoreType
+                description.url = nil
+            } else if let storeURL {
+                description.url = storeURL
+            }
+            if shouldUseCloud {
+                description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
+                    containerIdentifier: "iCloud.com.kikuai.hourleaf"
+                )
+            } else {
+                description.cloudKitContainerOptions = nil
+            }
+            description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+            description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+            description.shouldMigrateStoreAutomatically = true
+            description.shouldInferMappingModelAutomatically = true
+            description.shouldAddStoreAsynchronously = false
+
+            var loadFailure: Error?
+            container.loadPersistentStores { _, error in
+                loadFailure = error
+            }
+            if let loadFailure {
+                result = .loadFailed(loadFailure.localizedDescription)
+            }
         } else {
-            #if HOURLEAF_LOCAL_DEVICE || targetEnvironment(simulator)
-            shouldUseCloud = false
-            #else
-            shouldUseCloud = !inMemory
-            #endif
+            result = .missingStoreDescription
         }
 
-        if inMemory {
-            description.url = URL(fileURLWithPath: "/dev/null")
-        }
-        if shouldUseCloud {
-            description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
-                containerIdentifier: "iCloud.com.kikuai.hourleaf"
-            )
-        } else {
-            description.cloudKitContainerOptions = nil
-        }
-        description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
-        description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
-        description.shouldMigrateStoreAutomatically = true
-        description.shouldInferMappingModelAutomatically = true
-        description.shouldAddStoreAsynchronously = false
-
-        var loadError: Error?
-        container.loadPersistentStores { _, error in loadError = error }
-        if let loadError {
-            preconditionFailure("Unable to load Hourleaf data: \(loadError.localizedDescription)")
-        }
-
+        startupError = result
         container.viewContext.automaticallyMergesChangesFromParent = true
         container.viewContext.mergePolicy = NSMergePolicy(merge: .mergeByPropertyObjectTrumpMergePolicyType)
         container.viewContext.undoManager = nil

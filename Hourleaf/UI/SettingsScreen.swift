@@ -3,6 +3,9 @@ import SwiftUI
 struct SettingsScreen: View {
     @EnvironmentObject private var model: AppModel
     @State private var showAddReminder = false
+    @State private var creditLabelDraft = ""
+    @State private var creditLabelLanguage: ReportLanguage = .preferredForCurrentLocale
+    @FocusState private var creditLabelIsFocused: Bool
 
     private var currentPolicy: ReportingPolicy {
         ReportCalculator.policy(for: MonthKey(Date(), calendar: .hourleaf), revisions: model.policies)
@@ -19,8 +22,11 @@ struct SettingsScreen: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("settings.credit_label")
                             .font(.subheadline.weight(.semibold))
-                        TextField("settings.credit_label_placeholder", text: creditLabelBinding)
+                        TextField("settings.credit_label_placeholder", text: $creditLabelDraft)
                             .textFieldStyle(.roundedBorder)
+                            .focused($creditLabelIsFocused)
+                            .submitLabel(.done)
+                            .onSubmit { saveCreditLabelDraft() }
                             .accessibilityLabel(String(localized: "settings.credit_label"))
                             .accessibilityIdentifier("creditLabelField")
                         Text("settings.credit_label_help")
@@ -89,6 +95,10 @@ struct SettingsScreen: View {
                 } header: { Text("settings.about") }
             }
             .navigationTitle("settings.title")
+            .onAppear { synchronizeCreditLabelDraft() }
+            .onChange(of: creditLabelIsFocused) { _, isFocused in
+                if !isFocused { saveCreditLabelDraft() }
+            }
             .sheet(isPresented: $showAddReminder) {
                 AddReminderView()
                     .environmentObject(model)
@@ -136,26 +146,34 @@ struct SettingsScreen: View {
 
     private var reportLanguageBinding: Binding<ReportLanguage> {
         Binding(get: { model.settings.reportLanguage }, set: { value in
-            var settings = model.settings
-            settings.reportLanguage = value
-            model.saveSettings(settings)
+            let previousLanguage = creditLabelLanguage
+            let previousLabel = creditLabelDraft
+            creditLabelLanguage = value
+            creditLabelDraft = model.settings.creditLabel(for: value)
+            model.queueReportLanguageChange(
+                value,
+                savingCreditLabel: previousLabel,
+                for: previousLanguage
+            )
         })
     }
 
-    private var creditLabelBinding: Binding<String> {
-        Binding(get: { model.settings.creditLabel(for: model.settings.reportLanguage) }, set: { value in
-            var settings = model.settings
-            switch settings.reportLanguage {
-            case .english: settings.creditLabelEnglish = value
-            case .russian: settings.creditLabelRussian = value
-            case .ukrainian: settings.creditLabelUkrainian = value
-            }
-            model.saveSettings(settings)
-        })
+    private func synchronizeCreditLabelDraft() {
+        creditLabelLanguage = model.settings.reportLanguage
+        creditLabelDraft = model.settings.creditLabel(for: creditLabelLanguage)
+    }
+
+    private func saveCreditLabelDraft() {
+        let language = creditLabelLanguage
+        let label = creditLabelDraft
+        guard model.settings.creditLabel(for: language) != label else { return }
+        model.queueCreditLabelChange(label, for: language)
     }
 
     private var remainderModeBinding: Binding<RemainderMode> {
-        Binding(get: { currentPolicy.mode }, set: { model.updateReportingPolicy(mode: $0) })
+        Binding(get: { currentPolicy.mode }, set: { value in
+            Task { await model.updateReportingPolicy(mode: value) }
+        })
     }
 }
 
@@ -254,7 +272,7 @@ private struct StartingBalancesView: View {
         ).monthKey
         settings.openingServiceCarryMinutes = serviceCarry
         settings.openingCreditCarryMinutes = creditCarry
-        model.saveSettings(settings)
+        Task { await model.saveSettings(settings) }
     }
 
     private var maximumLedgerStartDate: Date {

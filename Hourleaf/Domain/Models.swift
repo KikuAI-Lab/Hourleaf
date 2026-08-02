@@ -112,6 +112,161 @@ struct AppSettings: Equatable, Sendable {
     }
 }
 
+struct LedgerEntryRecord: Identifiable, Equatable, Sendable {
+    let entry: TimeEntry
+    let deletedAt: Date?
+    let source: String?
+    let revision: Int64
+    let lastMutationID: UUID?
+
+    var id: UUID { entry.id }
+    var isDeleted: Bool { deletedAt != nil }
+}
+
+struct EntryRevisionRecord: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let entryID: UUID
+    let mutationID: UUID
+    let parentMutationID: UUID?
+    let revertedMutationID: UUID?
+    let revision: Int64
+    let operation: String
+    let kind: String
+    let localDay: String
+    let minutes: Int
+    let note: String?
+    let entryCreatedAt: Date
+    let entryUpdatedAt: Date
+    let entryDeletedAt: Date?
+    let source: String
+    let occurredAt: Date
+}
+
+struct ReminderRecord: Identifiable, Equatable, Sendable {
+    let reminder: ReminderSchedule
+    let createdAt: Date?
+    let updatedAt: Date?
+
+    var id: UUID { reminder.id }
+}
+
+struct ReportSnapshotMetadata: Identifiable, Equatable, Sendable {
+    let receipt: ReportReceipt
+    let schemaVersion: Int
+    let version: Int
+    let supersedesID: UUID?
+    let rawServiceMinutes: Int
+    let rawCreditMinutes: Int
+    let serviceCarryIn: Int
+    let creditCarryIn: Int
+    let reportingMode: String?
+    let reportLanguage: String?
+    let creditLabel: String?
+    let templateID: String?
+    let calculationFingerprint: String?
+    let presentationFingerprint: String?
+    let createdBySource: String?
+    let legacyCalculationUnavailable: Bool
+
+    var id: UUID { receipt.id }
+}
+
+struct ReportSnapshotDetails: Equatable, Sendable {
+    let report: MonthlyReport
+    let reportingMode: RemainderMode
+    let reportLanguage: ReportLanguage
+    let creditLabel: String
+    let templateID: String
+    let calculationFingerprint: String
+    let presentationFingerprint: String
+}
+
+struct ReportStateRecord: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let month: MonthKey
+    let state: String
+    let lastStableState: String?
+    let currentSnapshotID: UUID?
+    let reviewedCalculationFingerprint: String?
+    let reviewedPresentationFingerprint: String?
+    let updatedAt: Date
+    let changedAt: Date?
+}
+
+struct PresetRecord: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let kind: EntryKind
+    let minutes: Int
+    let position: Int
+    let createdAt: Date
+    let updatedAt: Date
+    let deletedAt: Date?
+}
+
+struct DayAcknowledgementRecord: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let day: LocalDay
+    let status: String
+    let source: String
+    let createdAt: Date
+    let updatedAt: Date
+}
+
+struct ServiceYearArchiveRecord: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let startMonth: MonthKey
+    let endMonth: MonthKey
+    let actualServiceMinutes: Int
+    let baselineServiceMinutes: Int
+    let targetMinutes: Int
+    let calculationFingerprint: String
+    let version: Int
+    let supersedesID: UUID?
+    let createdAt: Date
+}
+
+struct LedgerSettingsMetadata: Equatable, Sendable {
+    let id: UUID
+    let dataRevision: Int
+    let planningVisible: Bool
+    let quietGapCheckEnabled: Bool
+    let quietGapDays: Int
+    let timerVisible: Bool
+    let syncMode: String
+    let widgetPrivacyMode: String
+    let lastPurgeAt: Date?
+}
+
+struct LedgerSnapshot: Equatable, Sendable {
+    let entries: [LedgerEntryRecord]
+    let settings: AppSettings
+    let settingsMetadata: LedgerSettingsMetadata
+    let policies: [ReportingPolicy]
+    let reminders: [ReminderRecord]
+    let reportSnapshots: [ReportSnapshotMetadata]
+    let reportStates: [ReportStateRecord]
+    let entryRevisions: [EntryRevisionRecord]
+    let presets: [PresetRecord]
+    let dayAcknowledgements: [DayAcknowledgementRecord]
+    let serviceYearArchives: [ServiceYearArchiveRecord]
+
+    var activeEntries: [TimeEntry] {
+        entries.filter { !$0.isDeleted }.map(\.entry)
+    }
+
+    var deletedEntries: [LedgerEntryRecord] {
+        entries.filter(\.isDeleted)
+    }
+
+    var reminderSchedules: [ReminderSchedule] {
+        reminders.map(\.reminder)
+    }
+
+    var receipts: [ReportReceipt] {
+        reportSnapshots.map(\.receipt)
+    }
+}
+
 enum ReportLanguage: String, CaseIterable, Identifiable, Sendable {
     case english = "en"
     case russian = "ru"

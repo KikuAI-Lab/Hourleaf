@@ -24,6 +24,12 @@
 "duration.hours_format" = "%d ч";
 "duration.hours_minutes_format" = "%d ч %d мин";
 "error.title" = "Что-то пошло не так";
+"error.action_failed" = "Не удалось завершить действие. Попробуйте ещё раз.";
+"error.local_data" = "Не удалось открыть или сохранить данные Hourleaf на этом устройстве.";
+"error.report_changed" = "Отчёт изменился до подготовки. Проверьте его и попробуйте снова.";
+"startup.loading" = "Загружаем часы…";
+"startup.failed.title" = "Не удалось открыть часы";
+"startup.failed.message" = "Закройте Hourleaf и откройте его снова.";
 "error.empty_duration" = "Выберите хотя бы одну минуту.";
 "error.duration_too_large" = "Слишком большое время для одной записи.";
 "error.note_too_long" = "Заметка должна быть короче 280 символов.";

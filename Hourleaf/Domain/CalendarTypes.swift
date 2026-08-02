@@ -17,9 +17,26 @@ struct LocalDay: Hashable, Codable, Comparable, Sendable {
     }
 
     init?(key: String) {
-        let parts = key.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3 else { return nil }
-        self.init(year: parts[0], month: parts[1], day: parts[2])
+        let components = key.split(separator: "-", omittingEmptySubsequences: false)
+        guard
+            components.count == 3,
+            let year = Int(components[0]),
+            let month = Int(components[1]),
+            let day = Int(components[2]),
+            key == String(format: "%04d-%02d-%02d", year, month, day),
+            (1...9_999).contains(year),
+            (1...12).contains(month),
+            let date = Calendar.hourleaf.date(
+                from: DateComponents(year: year, month: month, day: day, hour: 12)
+            )
+        else { return nil }
+        let validated = Calendar.hourleaf.dateComponents([.year, .month, .day], from: date)
+        guard
+            validated.year == year,
+            validated.month == month,
+            validated.day == day
+        else { return nil }
+        self.init(year: year, month: month, day: day)
     }
 
     var key: String { String(format: "%04d-%02d-%02d", year, month, day) }
@@ -46,9 +63,16 @@ struct MonthKey: Hashable, Codable, Comparable, Sendable {
     }
 
     init?(key: String) {
-        let parts = key.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 2 else { return nil }
-        self.init(year: parts[0], month: parts[1])
+        let components = key.split(separator: "-", omittingEmptySubsequences: false)
+        guard
+            components.count == 2,
+            let year = Int(components[0]),
+            let month = Int(components[1]),
+            key == String(format: "%04d-%02d", year, month),
+            (1...9_999).contains(year),
+            (1...12).contains(month)
+        else { return nil }
+        self.init(year: year, month: month)
     }
 
     var key: String { String(format: "%04d-%02d", year, month) }

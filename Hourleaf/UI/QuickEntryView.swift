@@ -9,6 +9,7 @@ struct QuickEntryView: View {
     @State private var minutes = 0
     @State private var note = ""
     @State private var didSave = false
+    @State private var isSaving = false
     @FocusState private var noteFocused: Bool
 
     private var previousMonth: MonthKey {
@@ -82,14 +83,21 @@ struct QuickEntryView: View {
                 .accessibilityIdentifier("entryNoteField")
 
             Button(action: save) {
-                Label(didSave ? "entry.saved" : "entry.save", systemImage: didSave ? "checkmark" : "plus")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
+                Group {
+                    if isSaving {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Label(didSave ? "entry.saved" : "entry.save", systemImage: didSave ? "checkmark" : "plus")
+                    }
+                }
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
             }
             .buttonStyle(.borderedProminent)
             .tint(.green)
-            .disabled(hours == 0 && minutes == 0)
+            .disabled(isSaving || (hours == 0 && minutes == 0))
             .accessibilityIdentifier("saveEntryButton")
         }
         .padding()
@@ -144,15 +152,18 @@ struct QuickEntryView: View {
     }
 
     private func save() {
+        guard !isSaving, (hours != 0 || minutes != 0) else { return }
+        isSaving = true
         noteFocused = false
-        guard model.addEntry(kind: kind, date: date, hours: hours, minutes: minutes, note: note) else { return }
-        hours = 0
-        minutes = 0
-        note = ""
-        didSave = true
         Task {
+            defer { isSaving = false }
+            guard await model.addEntry(kind: kind, date: date, hours: hours, minutes: minutes, note: note) else { return }
+            hours = 0
+            minutes = 0
+            note = ""
+            didSave = true
             try? await Task.sleep(for: .seconds(1.2))
-            await MainActor.run { didSave = false }
+            didSave = false
         }
     }
 }

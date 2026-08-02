@@ -11,6 +11,7 @@ struct ProgressScreen: View {
     @State private var sharePayload: SharePayload?
     @State private var receiptToConfirm: ReportReceipt?
     @State private var showSentConfirmation = false
+    @State private var isPreparingReport = false
 
     private var report: MonthlyReport { model.report(for: selectedMonth) }
     private var reportText: String { ReportFormatter.format(report, settings: model.settings) }
@@ -46,7 +47,9 @@ struct ProgressScreen: View {
             .alert("report.mark_sent.title", isPresented: $showSentConfirmation) {
                 Button("report.not_sent", role: .cancel) { receiptToConfirm = nil }
                 Button("report.mark_sent") {
-                    if let receiptToConfirm { model.markReceiptSent(receiptToConfirm) }
+                    if let receiptToConfirm {
+                        Task { await model.markReceiptSent(receiptToConfirm) }
+                    }
                     receiptToConfirm = nil
                 }
             } message: {
@@ -137,7 +140,7 @@ struct ProgressScreen: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.green)
-            .disabled(selectedMonth < earliestMonth)
+            .disabled(selectedMonth < earliestMonth || isPreparingReport)
             .accessibilityIdentifier("shareReportButton")
         }
         .hourleafCard()
@@ -177,10 +180,16 @@ struct ProgressScreen: View {
     }
 
     private func share() {
-        guard selectedMonth >= earliestMonth else { return }
-        guard let receipt = model.createReceipt(for: report, text: reportText) else { return }
-        receiptToConfirm = receipt
-        sharePayload = SharePayload(text: reportText)
+        guard selectedMonth >= earliestMonth, !isPreparingReport else { return }
+        isPreparingReport = true
+        let selectedReport = report
+        let selectedText = reportText
+        Task { @MainActor in
+            defer { isPreparingReport = false }
+            guard let receipt = await model.createReceipt(for: selectedReport, text: selectedText) else { return }
+            receiptToConfirm = receipt
+            sharePayload = SharePayload(text: selectedText)
+        }
     }
 
     private func normalizeSelectedMonth() {

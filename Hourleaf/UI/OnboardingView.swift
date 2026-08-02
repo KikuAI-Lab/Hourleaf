@@ -58,7 +58,7 @@ struct OnboardingView: View {
         settings.openingServiceCarryMinutes = serviceCarry
         settings.openingCreditCarryMinutes = creditCarry
         settings.onboardingComplete = true
-        model.saveSettings(settings)
+        Task { await model.saveSettings(settings) }
     }
 }
 

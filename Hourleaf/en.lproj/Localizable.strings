@@ -24,6 +24,12 @@
 "duration.hours_format" = "%d hr";
 "duration.hours_minutes_format" = "%d hr %d min";
 "error.title" = "Something went wrong";
+"error.action_failed" = "This action could not be completed. Please try again.";
+"error.local_data" = "Hourleaf could not open or save your data on this device.";
+"error.report_changed" = "The report changed before it was prepared. Review it and try again.";
+"startup.loading" = "Loading your hours…";
+"startup.failed.title" = "Your hours could not be opened";
+"startup.failed.message" = "Close Hourleaf and open it again.";
 "error.empty_duration" = "Choose at least one minute.";
 "error.duration_too_large" = "The duration is too large for one entry.";
 "error.note_too_long" = "Keep the note under 280 characters.";

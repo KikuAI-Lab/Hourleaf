@@ -36,7 +36,7 @@ struct HistoryScreen: View {
             .alert(deleteTitle, isPresented: deleteBinding, presenting: entryToDelete) { entry in
                 Button("common.cancel", role: .cancel) { entryToDelete = nil }
                 Button("common.delete", role: .destructive) {
-                    model.deleteEntry(entry)
+                    Task { _ = await model.deleteEntry(entry) }
                     entryToDelete = nil
                 }
             } message: { _ in Text(deleteMessage) }
@@ -174,8 +174,10 @@ private struct EntryEditorView: View {
 
     private func performSave() {
         confirmation = nil
-        if model.updateEntry(entry, kind: kind, date: date, hours: hours, minutes: minutes, note: note) {
-            dismiss()
+        Task {
+            if await model.updateEntry(entry, kind: kind, date: date, hours: hours, minutes: minutes, note: note) {
+                dismiss()
+            }
         }
     }
 
@@ -217,8 +219,10 @@ private struct EntryEditorView: View {
 
     private func performDelete() {
         confirmation = nil
-        if model.deleteEntry(entry) {
-            dismiss()
+        Task {
+            if await model.deleteEntry(entry) {
+                dismiss()
+            }
         }
     }
 }

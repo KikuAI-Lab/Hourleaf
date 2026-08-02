@@ -52,6 +52,31 @@ enum ReportCalculator {
             ?? ReportingPolicy(effectiveMonth: month)
     }
 
+    static func isConsistent(_ report: MonthlyReport, mode: RemainderMode) -> Bool {
+        guard
+            report.rawServiceMinutes >= 0,
+            report.rawCreditMinutes >= 0,
+            (0...59).contains(report.serviceCarryIn),
+            (0...59).contains(report.creditCarryIn)
+        else { return false }
+
+        let policy = ReportingPolicy(effectiveMonth: report.month, mode: mode)
+        let service = self.report(
+            totalMinutes: report.rawServiceMinutes + report.serviceCarryIn,
+            month: report.month,
+            policy: policy
+        )
+        let credit = self.report(
+            totalMinutes: report.rawCreditMinutes + report.creditCarryIn,
+            month: report.month,
+            policy: policy
+        )
+        return report.serviceHours == service.hours
+            && report.serviceCarryOut == service.carry
+            && report.creditHours == credit.hours
+            && report.creditCarryOut == credit.carry
+    }
+
     private static func report(
         totalMinutes: Int,
         month: MonthKey,
