@@ -22,3 +22,21 @@ xcodebuild -project Hourleaf.xcodeproj \
 
 CloudKit is intentionally disabled in simulator and UI-test stores. A signed
 device build uses the private `iCloud.com.kikuai.hourleaf` container.
+
+## Personal Team device testing
+
+An Apple Developer Program membership is not required for local testing on a
+connected iPhone. The installer builds a temporary project copy with a separate
+local bundle identifier, no CloudKit entitlements, and the
+`HOURLEAF_LOCAL_DEVICE` compilation condition. The production target is not
+modified:
+
+```sh
+./scripts/install-local-device.sh <PERSONAL_TEAM_ID> <DEVICE_ID>
+```
+
+This variant keeps all data locally on the iPhone. CloudKit mirroring and
+TestFlight still require an active Apple Developer Program membership. Personal
+Team provisioning is temporary, so the app must be rebuilt periodically. Its
+data lives in a separate app sandbox and will not automatically move into the
+future App Store build.

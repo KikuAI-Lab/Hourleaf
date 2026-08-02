@@ -8,7 +8,6 @@
 "common.cancel" = "Cancel";
 "common.delete" = "Delete";
 "quick.title" = "Add time";
-"quick.subtitle" = "A calm record of your ministry";
 "quick.report_ready" = "Last month’s report is ready";
 "quick.month_service" = "Service this month";
 "quick.month_credit" = "Credit this month";
@@ -62,8 +61,7 @@
 "settings.report_language" = "Report language";
 "settings.credit_label" = "Credit label";
 "settings.minutes_policy" = "Minute handling";
-"settings.carry_service_year" = "Carry August remainder into September";
-"settings.policy_footer" = "Carry keeps only leftover minutes. Round uses the nearest full hour; 30 minutes rounds up. Discard drops leftover minutes.";
+"settings.policy_footer" = "Carry keeps only leftover minutes within a service year; August remainder never moves into September. Round uses the nearest full hour; 30 minutes rounds up. Discard drops leftover minutes.";
 "settings.reminders" = "Reminders";
 "settings.add_reminder" = "Add reminder";
 "settings.reminders_footer" = "You can add several reminder times on the same day. Hourleaf never records time automatically.";
@@ -73,9 +71,11 @@
 "settings.storage_value" = "On this iPhone";
 "settings.sync" = "Sync";
 "settings.sync_value" = "Private iCloud";
+"settings.sync_local_value" = "Off (local only)";
 "settings.privacy" = "Privacy";
 "settings.no_tracking" = "No tracking or advertising";
 "settings.privacy_detail" = "Your ledger stays on your devices and in your private iCloud database. Hourleaf has no product analytics or third-party SDKs.";
+"settings.privacy_local_detail" = "Your ledger stays only on this iPhone. Hourleaf has no product analytics or third-party SDKs.";
 "settings.about" = "About";
 "settings.version" = "Version";
 "settings.app_store_name" = "App Store name";

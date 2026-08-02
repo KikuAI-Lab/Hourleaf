@@ -60,8 +60,7 @@ enum ReportCalculator {
         let safeTotal = max(0, totalMinutes)
         switch policy.mode {
         case .carry:
-            let crossesServiceYear = month.month == 8
-            return (safeTotal / 60, crossesServiceYear && !policy.carryAcrossServiceYear ? 0 : safeTotal % 60)
+            return (safeTotal / 60, month.month == 8 ? 0 : safeTotal % 60)
         case .roundNearest:
             return ((safeTotal + 30) / 60, 0)
         case .discard:

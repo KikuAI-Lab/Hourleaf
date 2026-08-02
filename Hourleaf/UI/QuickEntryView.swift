@@ -21,7 +21,6 @@ struct QuickEntryView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 18) {
-                    brandHeader
                     if reportNeedsAttention { reportBanner }
                     entryCard
                     monthSummary
@@ -33,39 +32,6 @@ struct QuickEntryView: View {
             .navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
         }
-    }
-
-    private var brandHeader: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 12) {
-                        brandIcon
-                        Text("Hourleaf").font(.title2.bold())
-                    }
-                    Text("quick.subtitle").font(.subheadline).foregroundStyle(.secondary)
-                }
-            } else {
-                HStack(spacing: 14) {
-                    brandIcon
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Hourleaf").font(.title2.bold())
-                        Text("quick.subtitle").font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-            }
-        }
-        .dynamicTypeSize(.xSmall ... .xxxLarge)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var brandIcon: some View {
-        Image(systemName: "leaf.fill")
-            .font(.title2.weight(.semibold))
-            .foregroundStyle(.white)
-            .frame(width: 48, height: 48)
-            .background(.green.gradient, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
     }
 
     private var reportNeedsAttention: Bool {

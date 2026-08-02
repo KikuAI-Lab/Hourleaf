@@ -19,6 +19,18 @@ final class ServiceYearAndFormatterTests: XCTestCase {
         XCTAssertEqual(result, 360)
     }
 
+    func testServiceYearProgressCanExceedGoal() {
+        let baseline = 650 * 60 + 15
+        let result = ServiceYearCalculator.progressMinutes(
+            entries: [],
+            containing: LocalDay(year: 2026, month: 8, day: 1),
+            baselineMinutes: baseline
+        )
+
+        XCTAssertEqual(result, baseline)
+        XCTAssertGreaterThan(result, GoalPolicy.regularPioneer.targetMinutes)
+    }
+
     func testReportFormatterSupportsAllLanguagesAndOmitsZeroCredit() {
         let report = MonthlyReport(
             month: MonthKey(year: 2026, month: 7),

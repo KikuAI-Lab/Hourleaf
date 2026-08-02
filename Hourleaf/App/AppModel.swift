@@ -144,14 +144,13 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func updateReportingPolicy(mode: RemainderMode, carryAcrossServiceYear: Bool) {
+    func updateReportingPolicy(mode: RemainderMode) {
         let current = MonthKey(Date(), calendar: .hourleaf)
         let effective = hasConfirmedReceipt(in: current) ? current.advanced(by: 1, calendar: .hourleaf) : current
         do {
             try repository.savePolicy(ReportingPolicy(
                 effectiveMonth: effective,
-                mode: mode,
-                carryAcrossServiceYear: carryAcrossServiceYear
+                mode: mode
             ))
             reload()
         } catch {

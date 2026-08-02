@@ -11,6 +11,7 @@ final class HourleafUITests: XCTestCase {
         app.launchArguments = ["-uiTesting", "-AppleLanguages", "(en)"]
         app.launch()
 
+        XCTAssertFalse(app.staticTexts["A calm record of your ministry"].exists)
         let wheels = app.pickerWheels
         XCTAssertTrue(wheels.element(boundBy: 0).waitForExistence(timeout: 5))
         wheels.element(boundBy: 0).adjust(toPickerWheelValue: "1")
@@ -61,5 +62,17 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Welcome to Hourleaf"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["finishOnboardingButton"].exists)
         XCTAssertTrue(app.staticTexts["Already served this service year?"].exists)
+
+        XCTAssertTrue(app.textFields["baselineHoursField"].exists)
+    }
+
+    func testSettingsDoesNotOfferServiceYearCarry() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-AppleLanguages", "(en)"]
+        app.launch()
+        app.tabBars.buttons["Settings"].tap()
+
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.switches["Carry August remainder into September"].exists)
     }
 }

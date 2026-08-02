@@ -113,7 +113,6 @@ final class CoreDataLedgerRepository: LedgerRepository {
                 id: object.id ?? UUID(),
                 effectiveMonth: month,
                 mode: mode,
-                carryAcrossServiceYear: object.carryAcrossServiceYear,
                 createdAt: object.createdAt ?? .distantPast
             )
         }
@@ -127,7 +126,7 @@ final class CoreDataLedgerRepository: LedgerRepository {
         object.id = policy.id
         object.effectiveMonth = policy.effectiveMonth.key
         object.mode = policy.mode.rawValue
-        object.carryAcrossServiceYear = policy.carryAcrossServiceYear
+        object.carryAcrossServiceYear = false
         object.createdAt = policy.createdAt
         try saveIfNeeded()
     }

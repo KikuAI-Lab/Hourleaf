@@ -8,7 +8,6 @@
 "common.cancel" = "Скасувати";
 "common.delete" = "Видалити";
 "quick.title" = "Додати час";
-"quick.subtitle" = "Спокійний облік вашого служіння";
 "quick.report_ready" = "Звіт за минулий місяць готовий";
 "quick.month_service" = "Служіння цього місяця";
 "quick.month_credit" = "Кредит цього місяця";
@@ -62,8 +61,7 @@
 "settings.report_language" = "Мова звіту";
 "settings.credit_label" = "Назва кредиту";
 "settings.minutes_policy" = "Обробка хвилин";
-"settings.carry_service_year" = "Переносити залишок серпня у вересень";
-"settings.policy_footer" = "Перенесення зберігає лише залишок хвилин. Округлення використовує найближчу повну годину: 30 хвилин округлюються вгору. Списання видаляє залишок.";
+"settings.policy_footer" = "Перенесення зберігає залишок хвилин лише в межах службового року; залишок серпня ніколи не переходить у вересень. Округлення використовує найближчу повну годину: 30 хвилин округлюються вгору. Списання видаляє залишок.";
 "settings.reminders" = "Нагадування";
 "settings.add_reminder" = "Додати нагадування";
 "settings.reminders_footer" = "Можна додати кілька нагадувань на один день. Hourleaf ніколи не записує час автоматично.";
@@ -73,9 +71,11 @@
 "settings.storage_value" = "На цьому iPhone";
 "settings.sync" = "Синхронізація";
 "settings.sync_value" = "Особистий iCloud";
+"settings.sync_local_value" = "Вимкнена (лише локально)";
 "settings.privacy" = "Приватність";
 "settings.no_tracking" = "Без стеження та реклами";
 "settings.privacy_detail" = "Ваш журнал залишається на ваших пристроях і в приватній базі iCloud. У Hourleaf немає продуктової аналітики чи сторонніх SDK.";
+"settings.privacy_local_detail" = "Ваш журнал зберігається лише на цьому iPhone. У Hourleaf немає продуктової аналітики чи сторонніх SDK.";
 "settings.about" = "Про застосунок";
 "settings.version" = "Версія";
 "settings.app_store_name" = "Назва в App Store";

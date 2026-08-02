@@ -19,9 +19,6 @@ struct SettingsScreen: View {
                     Picker("settings.minutes_policy", selection: remainderModeBinding) {
                         ForEach(RemainderMode.allCases) { Text($0.localizedName).tag($0) }
                     }
-                    if currentPolicy.mode == .carry {
-                        Toggle("settings.carry_service_year", isOn: carryAcrossYearBinding)
-                    }
                     Text("settings.policy_footer").font(.caption).foregroundStyle(.secondary)
                 }
 
@@ -41,12 +38,12 @@ struct SettingsScreen: View {
                 Section("settings.data") {
                     NavigationLink("settings.opening_balances") { StartingBalancesView() }
                     LabeledContent("settings.storage", value: String(localized: "settings.storage_value"))
-                    LabeledContent("settings.sync", value: String(localized: "settings.sync_value"))
+                    LabeledContent("settings.sync", value: syncValue)
                 }
 
                 Section("settings.privacy") {
                     Label("settings.no_tracking", systemImage: "hand.raised.fill")
-                    Text("settings.privacy_detail").font(.caption).foregroundStyle(.secondary)
+                    Text(privacyDetail).font(.caption).foregroundStyle(.secondary)
                 }
 
                 Section {
@@ -60,6 +57,22 @@ struct SettingsScreen: View {
                     .environmentObject(model)
             }
         }
+    }
+
+    private var syncValue: String {
+        #if HOURLEAF_LOCAL_DEVICE
+        String(localized: "settings.sync_local_value")
+        #else
+        String(localized: "settings.sync_value")
+        #endif
+    }
+
+    private var privacyDetail: String {
+        #if HOURLEAF_LOCAL_DEVICE
+        String(localized: "settings.privacy_local_detail")
+        #else
+        String(localized: "settings.privacy_detail")
+        #endif
     }
 
     private func reminderRow(_ reminder: ReminderSchedule) -> some View {
@@ -104,11 +117,7 @@ struct SettingsScreen: View {
     }
 
     private var remainderModeBinding: Binding<RemainderMode> {
-        Binding(get: { currentPolicy.mode }, set: { model.updateReportingPolicy(mode: $0, carryAcrossServiceYear: currentPolicy.carryAcrossServiceYear) })
-    }
-
-    private var carryAcrossYearBinding: Binding<Bool> {
-        Binding(get: { currentPolicy.carryAcrossServiceYear }, set: { model.updateReportingPolicy(mode: currentPolicy.mode, carryAcrossServiceYear: $0) })
+        Binding(get: { currentPolicy.mode }, set: { model.updateReportingPolicy(mode: $0) })
     }
 }
 
@@ -162,7 +171,7 @@ private struct StartingBalancesView: View {
                 )
             }
             Section("balances.year_progress") {
-                TimeWheelPicker(hours: $serviceHours, minutes: $serviceMinutes, maximumHours: 600)
+                TimeWheelPicker(hours: $serviceHours, minutes: $serviceMinutes, usesDirectHourEntry: true)
             }
             Section("balances.carry") {
                 Stepper(String(format: String(localized: "balances.service_carry_format"), serviceCarry), value: $serviceCarry, in: 0...59)

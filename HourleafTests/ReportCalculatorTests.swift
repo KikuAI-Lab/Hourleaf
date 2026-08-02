@@ -84,30 +84,27 @@ final class ReportCalculatorTests: XCTestCase {
         XCTAssertEqual(reports[0].serviceCarryOut, 0)
     }
 
-    func testAugustBoundaryRespectsConscienceSetting() {
+    func testAugustRemaindersNeverCrossIntoNewServiceYear() {
         let august = MonthKey(year: 2026, month: 8)
         let september = MonthKey(year: 2026, month: 9)
-        let entries = [entry(.service, month: august, minutes: 40)]
+        let entries = [
+            entry(.service, month: august, minutes: 40),
+            entry(.credit, month: august, minutes: 20)
+        ]
 
-        let noCarry = ReportCalculator.timeline(
+        let reports = ReportCalculator.timeline(
             entries: entries,
             from: august,
             through: september,
             openingServiceCarry: 0,
             openingCreditCarry: 0,
-            policies: [ReportingPolicy(effectiveMonth: august, mode: .carry, carryAcrossServiceYear: false)]
-        )
-        let carry = ReportCalculator.timeline(
-            entries: entries,
-            from: august,
-            through: september,
-            openingServiceCarry: 0,
-            openingCreditCarry: 0,
-            policies: [ReportingPolicy(effectiveMonth: august, mode: .carry, carryAcrossServiceYear: true)]
+            policies: [ReportingPolicy(effectiveMonth: august, mode: .carry)]
         )
 
-        XCTAssertEqual(noCarry[1].serviceCarryIn, 0)
-        XCTAssertEqual(carry[1].serviceCarryIn, 40)
+        XCTAssertEqual(reports[0].serviceCarryOut, 0)
+        XCTAssertEqual(reports[0].creditCarryOut, 0)
+        XCTAssertEqual(reports[1].serviceCarryIn, 0)
+        XCTAssertEqual(reports[1].creditCarryIn, 0)
     }
 
     func testPolicyRevisionsApplyFromTheirEffectiveMonth() {

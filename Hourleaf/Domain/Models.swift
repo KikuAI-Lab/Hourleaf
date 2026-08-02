@@ -47,20 +47,17 @@ struct ReportingPolicy: Identifiable, Equatable, Sendable {
     let id: UUID
     var effectiveMonth: MonthKey
     var mode: RemainderMode
-    var carryAcrossServiceYear: Bool
     let createdAt: Date
 
     init(
         id: UUID = UUID(),
         effectiveMonth: MonthKey,
         mode: RemainderMode = .carry,
-        carryAcrossServiceYear: Bool = true,
         createdAt: Date = .now
     ) {
         self.id = id
         self.effectiveMonth = effectiveMonth
         self.mode = mode
-        self.carryAcrossServiceYear = carryAcrossServiceYear
         self.createdAt = createdAt
     }
 }

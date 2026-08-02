@@ -22,7 +22,7 @@ struct OnboardingView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("onboarding.progress_title").font(.headline)
                         Text("onboarding.progress_detail").font(.subheadline).foregroundStyle(.secondary)
-                        TimeWheelPicker(hours: $baselineHours, minutes: $baselineMinutes, maximumHours: 600)
+                        TimeWheelPicker(hours: $baselineHours, minutes: $baselineMinutes, usesDirectHourEntry: true)
                     }
                     .hourleafOnboardingCard()
                     VStack(alignment: .leading, spacing: 12) {

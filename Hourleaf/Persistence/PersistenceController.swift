@@ -17,7 +17,7 @@ final class PersistenceController {
         if let cloudSyncEnabled {
             shouldUseCloud = cloudSyncEnabled && !inMemory
         } else {
-            #if targetEnvironment(simulator)
+            #if HOURLEAF_LOCAL_DEVICE || targetEnvironment(simulator)
             shouldUseCloud = false
             #else
             shouldUseCloud = !inMemory
