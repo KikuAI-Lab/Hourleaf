@@ -33,6 +33,7 @@
 "history.empty.title" = "No entries yet";
 "history.empty.message" = "Saved service and credit time will appear here.";
 "history.edit" = "Edit entry";
+"history.edit_short" = "Entry";
 "history.edit.report_title" = "This changes a report";
 "history.edit_anyway" = "Edit anyway";
 "history.delete.title" = "Delete this entry?";

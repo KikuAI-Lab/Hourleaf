@@ -3,7 +3,6 @@ import SwiftUI
 private struct SharePayload: Identifiable {
     let id = UUID()
     let text: String
-    let receipt: ReportReceipt
 }
 
 struct ProgressScreen: View {
@@ -16,6 +15,8 @@ struct ProgressScreen: View {
     private var report: MonthlyReport { model.report(for: selectedMonth) }
     private var reportText: String { ReportFormatter.format(report, settings: model.settings) }
     private var currentMonth: MonthKey { MonthKey(Date(), calendar: .hourleaf) }
+    private var earliestMonth: MonthKey { model.settings.ledgerStartMonth }
+    private var goalMinutes: Int { GoalPolicy.regularPioneer.targetMinutes }
 
     var body: some View {
         NavigationStack {
@@ -31,14 +32,14 @@ struct ProgressScreen: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("progress.title")
-            .sheet(item: $sharePayload) { payload in
-                ActivityView(text: payload.text) { completed in
+            .sheet(item: $sharePayload, onDismiss: {
+                if receiptToConfirm != nil {
+                    showSentConfirmation = true
+                }
+            }) { payload in
+                ActivityView(text: payload.text) { _ in
                     Task { @MainActor in
                         sharePayload = nil
-                        if completed {
-                            receiptToConfirm = payload.receipt
-                            showSentConfirmation = true
-                        }
                     }
                 }
             }
@@ -51,6 +52,8 @@ struct ProgressScreen: View {
             } message: {
                 Text("report.mark_sent.message")
             }
+            .onAppear(perform: normalizeSelectedMonth)
+            .onChange(of: model.settings.ledgerStartMonth) { _, _ in normalizeSelectedMonth() }
         }
     }
 
@@ -59,13 +62,17 @@ struct ProgressScreen: View {
             Button { selectedMonth = selectedMonth.advanced(by: -1, calendar: .hourleaf) } label: {
                 Image(systemName: "chevron.left").frame(width: 44, height: 44)
             }
+            .disabled(selectedMonth <= earliestMonth)
+            .accessibilityIdentifier("previousReportMonthButton")
             Spacer()
             Text(AppDateText.month(selectedMonth)).font(.title3.bold())
+                .accessibilityIdentifier("selectedReportMonth")
             Spacer()
             Button { selectedMonth = selectedMonth.advanced(by: 1, calendar: .hourleaf) } label: {
                 Image(systemName: "chevron.right").frame(width: 44, height: 44)
             }
             .disabled(selectedMonth >= currentMonth)
+            .accessibilityIdentifier("nextReportMonthButton")
         }
         .accessibilityElement(children: .contain)
     }
@@ -92,9 +99,9 @@ struct ProgressScreen: View {
             HStack {
                 Text("progress.service_year").font(.headline)
                 Spacer()
-                Text("\(progress / 60) / 600").font(.headline.monospacedDigit())
+                Text("\(progress / 60) / \(goalMinutes / 60)").font(.headline.monospacedDigit())
             }
-            ProgressView(value: min(Double(progress), 36_000), total: 36_000)
+            ProgressView(value: min(Double(progress), Double(goalMinutes)), total: Double(goalMinutes))
                 .tint(.green)
             Text(String(format: String(localized: "progress.minutes_detail_format"), progress % 60))
                 .font(.caption).foregroundStyle(.secondary)
@@ -130,6 +137,7 @@ struct ProgressScreen: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.green)
+            .disabled(selectedMonth < earliestMonth)
             .accessibilityIdentifier("shareReportButton")
         }
         .hourleafCard()
@@ -169,8 +177,18 @@ struct ProgressScreen: View {
     }
 
     private func share() {
+        guard selectedMonth >= earliestMonth else { return }
         guard let receipt = model.createReceipt(for: report, text: reportText) else { return }
-        sharePayload = SharePayload(text: reportText, receipt: receipt)
+        receiptToConfirm = receipt
+        sharePayload = SharePayload(text: reportText)
+    }
+
+    private func normalizeSelectedMonth() {
+        if selectedMonth < earliestMonth {
+            selectedMonth = earliestMonth
+        } else if selectedMonth > currentMonth {
+            selectedMonth = currentMonth
+        }
     }
 }
 

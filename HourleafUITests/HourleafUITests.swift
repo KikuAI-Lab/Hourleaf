@@ -36,6 +36,98 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.buttons["shareReportButton"].isEnabled)
     }
 
+    func testProgressDoesNotNavigateBeforeLedgerStart() {
+        let app = launchApp()
+        app.tabBars.buttons["Progress"].tap()
+
+        let month = app.staticTexts["selectedReportMonth"]
+        XCTAssertTrue(month.waitForExistence(timeout: 5))
+        XCTAssertEqual(month.label, Self.monthFormatter.string(from: Date()))
+        XCTAssertFalse(app.buttons["previousReportMonthButton"].isEnabled)
+        XCTAssertTrue(app.buttons["shareReportButton"].isEnabled)
+    }
+
+    func testShareCancellationStillAsksForManualSentConfirmation() {
+        let app = launchApp(additionalArguments: ["-seedUITestData"])
+        app.tabBars.buttons["Progress"].tap()
+        app.buttons["shareReportButton"].tap()
+
+        let close = app.buttons["Close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 8))
+        close.tap()
+
+        let confirmation = app.alerts["Was the report sent?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        confirmation.buttons["Not sent"].tap()
+    }
+
+    func testPastDateCanBeRecorded() {
+        let app = launchApp(additionalArguments: ["-pastDateUITest"])
+        let pastDate = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+
+        app.datePickers["entryDatePicker"].tap()
+        let day = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", Self.dayButtonFormatter.string(from: pastDate))
+        ).firstMatch
+        XCTAssertTrue(day.waitForExistence(timeout: 5))
+        day.tap()
+        app.navigationBars["Add time"].tap()
+
+        app.pickerWheels.element(boundBy: 1).adjust(toPickerWheelValue: "20")
+        app.textFields["entryNoteField"].tap()
+        app.textFields["entryNoteField"].typeText("Past date")
+        app.buttons["saveEntryButton"].tap()
+        app.tabBars.buttons["History"].tap()
+
+        XCTAssertTrue(app.staticTexts["Past date"].waitForExistence(timeout: 5))
+        let components = Calendar.current.dateComponents([.year, .month, .day], from: pastDate)
+        let dateIdentifier = "historyEntryDate_\(components.year!)_\(components.month!)_\(components.day!)"
+        XCTAssertTrue(app.staticTexts[dateIdentifier].exists)
+    }
+
+    func testEntryCanBeEdited() {
+        let app = launchApp()
+        addEntry(in: app, hours: "1", minutes: "15")
+        app.tabBars.buttons["History"].tap()
+
+        let entry = firstHistoryEntry(in: app)
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        entry.tap()
+        XCTAssertTrue(app.navigationBars["Entry"].waitForExistence(timeout: 5))
+        app.pickerWheels.element(boundBy: 1).adjust(toPickerWheelValue: "30")
+        app.buttons["saveEditedEntryButton"].tap()
+
+        XCTAssertTrue(app.staticTexts["1 hr 30 min"].waitForExistence(timeout: 5))
+    }
+
+    func testEntryCanBeDeleted() {
+        let app = launchApp()
+        addEntry(in: app, hours: "1", minutes: "15")
+        app.tabBars.buttons["History"].tap()
+
+        let entry = firstHistoryEntry(in: app)
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        entry.swipeLeft()
+        app.buttons["Delete"].tap()
+        let alert = app.alerts["Delete this entry?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.buttons["Delete"].tap()
+
+        XCTAssertTrue(app.staticTexts["No entries yet"].waitForExistence(timeout: 5))
+    }
+
+    func testReminderCanBeScheduledWithoutCreatingTime() {
+        let app = launchApp()
+        app.tabBars.buttons["Settings"].tap()
+        app.buttons["addReminderButton"].tap()
+        XCTAssertTrue(app.navigationBars["New reminder"].waitForExistence(timeout: 5))
+        app.buttons["confirmAddReminderButton"].tap()
+
+        XCTAssertTrue(app.staticTexts["Monday"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["History"].tap()
+        XCTAssertTrue(app.staticTexts["No entries yet"].waitForExistence(timeout: 5))
+    }
+
     func testRussianInterfaceLaunches() {
         let app = XCUIApplication()
         app.launchArguments = ["-uiTesting", "-AppleLanguages", "(ru)"]
@@ -67,12 +159,44 @@ final class HourleafUITests: XCTestCase {
     }
 
     func testSettingsDoesNotOfferServiceYearCarry() {
-        let app = XCUIApplication()
-        app.launchArguments = ["-uiTesting", "-AppleLanguages", "(en)"]
-        app.launch()
+        let app = launchApp()
         app.tabBars.buttons["Settings"].tap()
 
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.switches["Carry August remainder into September"].exists)
     }
+
+    private func launchApp(additionalArguments: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-AppleLanguages", "(en)"] + additionalArguments
+        app.launch()
+        return app
+    }
+
+    private func addEntry(in app: XCUIApplication, hours: String, minutes: String) {
+        let wheels = app.pickerWheels
+        XCTAssertTrue(wheels.element(boundBy: 0).waitForExistence(timeout: 5))
+        wheels.element(boundBy: 0).adjust(toPickerWheelValue: hours)
+        wheels.element(boundBy: 1).adjust(toPickerWheelValue: minutes)
+        app.buttons["saveEntryButton"].tap()
+    }
+
+    private func firstHistoryEntry(in app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'historyEntry_'")).firstMatch
+    }
+
+    private static let monthFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.dateFormat = "MMMM yyyy"
+        return formatter
+    }()
+
+    private static let dayButtonFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.dateFormat = "d MMMM"
+        return formatter
+    }()
+
 }

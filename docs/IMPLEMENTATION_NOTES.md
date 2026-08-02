@@ -35,16 +35,22 @@ MVP is accepted.
   production-schema promotion, App Store Connect creation, and 2FA require the
   repository owner's Apple account.
 - Opening a share sheet is not proof of delivery. A report is recorded as sent
-  only after an explicit user confirmation.
+  only after an explicit user confirmation. Closing the share sheet always
+  opens that confirmation, including when sharing was cancelled.
+- Report navigation stops at the configured ledger start, so Hourleaf never
+  presents or snapshots invented months before the user's opening balances.
 
 ## Verification snapshot — 2026-08-02
 
-- `xcodebuild ... test`: 15 unit/integration and 6 UI tests passed on iPhone 17
-  Pro Simulator (iOS 26.5).
-- Unsigned generic-device Release build passed with Xcode 26.6 and Swift 6.3.3.
+- `xcodebuild ... test`: 15 unit/integration and 12 UI tests passed on iPhone 17
+  Pro Simulator (iOS 26.5). UI coverage includes past-date entry, editing,
+  deletion, reminders, ledger-start report navigation, and share cancellation.
+- Unsigned generic-device Release build and Xcode Analyze passed with Xcode
+  26.6 and Swift 6.3.3.
 - Manual visual smoke passed in light, dark, and accessibility text sizes.
 - The Personal Team installer built, signed, installed, and launched the
-  local-only app on a physical iPhone. An in-place update also reopened the
-  existing store successfully.
+  local-only app on a physical iPhone. The latest in-place update reopened the
+  existing store with its service and credit entries intact; quick entry,
+  history, progress, and settings were read back through iPhone Mirroring.
 - CloudKit mirroring and TestFlight remain deferred by the owner's decision to
   test locally without an Apple Developer Program membership.

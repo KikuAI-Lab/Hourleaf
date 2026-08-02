@@ -33,6 +33,7 @@
 "history.empty.title" = "Записей пока нет";
 "history.empty.message" = "Здесь появятся сохранённые часы служения и кредита.";
 "history.edit" = "Изменить запись";
+"history.edit_short" = "Запись";
 "history.edit.report_title" = "Это изменит отчёт";
 "history.edit_anyway" = "Всё равно изменить";
 "history.delete.title" = "Удалить эту запись?";

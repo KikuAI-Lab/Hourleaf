@@ -1,3 +1,4 @@
+import Combine
 import CoreData
 import SwiftUI
 
@@ -20,10 +21,16 @@ struct RootView: View {
                 .tag(AppModel.Tab.settings)
         }
         .tint(Color(red: 0.16, green: 0.46, blue: 0.27))
-        .onReceive(NotificationCenter.default.publisher(for: .openQuickEntry)) { _ in
+        .onReceive(
+            NotificationCenter.default.publisher(for: .openQuickEntry)
+                .receive(on: DispatchQueue.main)
+        ) { _ in
             model.selectedTab = .add
         }
-        .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
+        .onReceive(
+            NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)
+                .receive(on: DispatchQueue.main)
+        ) { _ in
             model.reload()
             Task { await model.rescheduleReminders() }
         }

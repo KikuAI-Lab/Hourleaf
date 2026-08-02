@@ -33,6 +33,7 @@
 "history.empty.title" = "Записів поки немає";
 "history.empty.message" = "Тут з’явиться збережений час служіння та кредиту.";
 "history.edit" = "Змінити запис";
+"history.edit_short" = "Запис";
 "history.edit.report_title" = "Це змінить звіт";
 "history.edit_anyway" = "Усе одно змінити";
 "history.delete.title" = "Видалити цей запис?";

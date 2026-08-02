@@ -29,6 +29,7 @@ struct SettingsScreen: View {
                     Button { showAddReminder = true } label: {
                         Label("settings.add_reminder", systemImage: "plus")
                     }
+                    .accessibilityIdentifier("addReminderButton")
                 } header: {
                     Text("settings.reminders")
                 } footer: {
@@ -89,6 +90,7 @@ struct SettingsScreen: View {
             ))
             .labelsHidden()
         }
+        .accessibilityIdentifier("reminderRow_\(reminder.id.uuidString)")
         .swipeActions {
             Button(role: .destructive) {
                 Task { await model.deleteReminder(reminder) }
@@ -146,6 +148,7 @@ private struct AddReminderView: View {
                             if model.errorMessage == nil { dismiss() }
                         }
                     }
+                    .accessibilityIdentifier("confirmAddReminderButton")
                 }
             }
         }

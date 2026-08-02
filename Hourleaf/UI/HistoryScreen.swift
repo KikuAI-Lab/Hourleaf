@@ -51,7 +51,10 @@ struct HistoryScreen: View {
                 .background((entry.kind == .service ? Color.green : Color.orange).opacity(0.12), in: Circle())
             VStack(alignment: .leading, spacing: 3) {
                 Text(entry.kind.localizedName).font(.headline)
-                Text(AppDateText.day(entry.day)).font(.subheadline).foregroundStyle(.secondary)
+                Text(AppDateText.day(entry.day))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("historyEntryDate_\(entry.day.year)_\(entry.day.month)_\(entry.day.day)")
                 if let note = entry.note, !note.isEmpty {
                     Text(note).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
@@ -116,14 +119,19 @@ private struct EntryEditorView: View {
                     in: model.settings.ledgerStartMonth.date(calendar: .hourleaf)...Date(),
                     displayedComponents: .date
                 )
+                .accessibilityIdentifier("editEntryDatePicker")
                 TimeWheelPicker(hours: $hours, minutes: $minutes)
                 TextField("entry.note_placeholder", text: $note, axis: .vertical)
+                    .accessibilityIdentifier("editEntryNoteField")
             }
-            .navigationTitle("history.edit")
+            .navigationTitle("history.edit_short")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("common.cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("common.save") { attemptSave() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("common.save") { attemptSave() }
+                        .accessibilityIdentifier("saveEditedEntryButton")
+                }
             }
             .alert("history.edit.report_title", isPresented: $showWarning) {
                 Button("common.cancel", role: .cancel) {}
