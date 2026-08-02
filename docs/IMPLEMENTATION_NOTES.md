@@ -46,7 +46,7 @@ MVP is accepted.
 ## Verification snapshot — 2026-08-02
 
 - `xcodebuild ... test`: 15 unit/integration and 13 UI tests passed on iPhone 17
-  Pro Simulator (iOS 26.5). UI coverage includes past-date entry, editing,
+  Simulator (iOS 26.5). UI coverage includes past-date entry, editing,
   deletion, reminders, ledger-start report navigation, and share cancellation.
 - Unsigned generic-device Release build and Xcode Analyze passed with Xcode
   26.6 and Swift 6.3.3.
