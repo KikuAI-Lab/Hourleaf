@@ -5,12 +5,20 @@ import UniformTypeIdentifiers
 struct DataManagementView: View {
     let actions: DataManagementActions
 
+    @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var backupStatus: BackupConfidenceStatusModel
+
     @State private var busyOperation: BusyOperation?
     @State private var restoreState = DataManagementRestoreState()
     @State private var includeNotes = false
     @State private var sharePayload: FileSharePayload?
     @State private var isRestoreImporterPresented = false
     @State private var errorMessage: String?
+
+    init(actions: DataManagementActions) {
+        self.actions = actions
+        _backupStatus = ObservedObject(wrappedValue: actions.backupStatus)
+    }
 
     var body: some View {
         Form {
@@ -35,12 +43,36 @@ struct DataManagementView: View {
         } message: {
             Text(errorMessage ?? "")
         }
-        .onAppear { restoreState.appear() }
+        .onAppear {
+            restoreState.appear()
+            backupStatus.requestRefresh()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            backupStatus.requestRefresh()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
+            backupStatus.requestRefresh()
+        }
         .onDisappear(perform: discardRestorePreviewOnDisappear)
     }
 
     private var backupSection: some View {
         Section("data_management.backup") {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("backup_status.title")
+                    .font(.subheadline.weight(.semibold))
+                if let state = backupStatus.state {
+                    Text(state.localizedStatusText)
+                        .accessibilityIdentifier("backupConfidenceStatus")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text("backup_status.limitation")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Button {
                 startBackup()
             } label: {

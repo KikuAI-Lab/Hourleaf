@@ -73,6 +73,7 @@ struct DataManagementRestoreState: Equatable {
 @MainActor
 struct DataManagementActions {
     let restoreAvailability: DataManagementRestoreAvailability
+    let backupStatus: BackupConfidenceStatusModel
     let createBackup: () async throws -> FileSharePayload
     let previewRestore: (URL) async throws -> DataManagementRestorePreview
     let restore: (DataManagementRestorePreview) async throws -> Void
@@ -82,15 +83,25 @@ struct DataManagementActions {
     static func live(
         repository: CoreDataLedgerRepository,
         restoreCoordinator: HourleafRestoreCoordinator,
-        appModel: AppModel
+        appModel: AppModel,
+        backupEvidenceStore: VerifiedExportEvidenceStore = VerifiedExportEvidenceStore()
     ) -> Self {
-        Self(
+        let backupStatus = BackupConfidenceStatusModel(
+            evaluator: BackupConfidenceEvaluator(
+                evidenceStore: backupEvidenceStore,
+                snapshot: { try await repository.portableBackupRecords() }
+            )
+        )
+        return Self(
             restoreAvailability: .available,
+            backupStatus: backupStatus,
             createBackup: {
                 let directory = try makeShareDirectory()
                 do {
                     let artifact = try await HourleafBackupExporter(source: repository)
                         .createVerifiedBackup(in: directory)
+                    try await backupEvidenceStore.recordVerifiedExport(for: artifact)
+                    backupStatus.requestRefresh()
                     return sharePayload(for: artifact.url, cleaning: directory)
                 } catch {
                     try? FileManager.default.removeItem(at: directory)
@@ -110,6 +121,7 @@ struct DataManagementActions {
                 }
                 await appModel.prepareForWholeStoreRestore()
                 _ = try await restoreCoordinator.confirm(candidateID)
+                backupStatus.requestRefresh()
                 do {
                     try await appModel.refreshAfterRestore()
                 } catch {

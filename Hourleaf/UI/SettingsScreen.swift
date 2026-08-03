@@ -5,10 +5,17 @@ struct SettingsScreen: View {
     let dataManagementActions: DataManagementActions
 
     @EnvironmentObject private var model: AppModel
+    @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var backupStatus: BackupConfidenceStatusModel
     @State private var showAddReminder = false
     @State private var creditLabelDraft = ""
     @State private var creditLabelLanguage: ReportLanguage = .preferredForCurrentLocale
     @FocusState private var creditLabelIsFocused: Bool
+
+    init(dataManagementActions: DataManagementActions) {
+        self.dataManagementActions = dataManagementActions
+        _backupStatus = ObservedObject(wrappedValue: dataManagementActions.backupStatus)
+    }
 
     private var currentPolicy: ReportingPolicy {
         ReportCalculator.policy(for: model.currentMonth, revisions: model.policies)
@@ -95,7 +102,19 @@ struct SettingsScreen: View {
                     NavigationLink {
                         DataManagementView(actions: dataManagementActions)
                     } label: {
-                        Label("data_management.title", systemImage: "externaldrive")
+                        HStack(spacing: 12) {
+                            Image(systemName: "externaldrive")
+                                .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("data_management.title")
+                                if let state = backupStatus.state {
+                                    Text(state.localizedStatusText)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
                     }
                     .accessibilityIdentifier("dataManagementButton")
 
@@ -130,9 +149,19 @@ struct SettingsScreen: View {
                 } header: { Text("settings.about") }
             }
             .navigationTitle("settings.title")
-            .onAppear { synchronizeCreditLabelDraft() }
+            .onAppear {
+                synchronizeCreditLabelDraft()
+                backupStatus.requestRefresh()
+            }
             .onChange(of: creditLabelIsFocused) { _, isFocused in
                 if !isFocused { saveCreditLabelDraft() }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                backupStatus.requestRefresh()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
+                backupStatus.requestRefresh()
             }
             .sheet(isPresented: $showAddReminder) {
                 AddReminderView()
