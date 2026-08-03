@@ -109,6 +109,7 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
                 throw EntryMutationError.invalidCommand
             }
 
+            let before = try Self.snapshot(in: context)
             let written = try Self.applyNew(
                 command,
                 in: context,
@@ -116,6 +117,11 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
             )
             let record: LedgerEntryRecord
             do {
+                try Self.reconcileReportLifecycleAfterChange(
+                    in: context,
+                    before: before,
+                    asOf: authorizationTime
+                )
                 try Self.saveIfNeeded(context)
                 context.refreshAllObjects()
 
@@ -167,17 +173,30 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
     func saveSettings(_ settings: AppSettings) async throws {
         try requireAvailable()
         try ensureNormalized()
-        try perform { context in
+        let now = clock()
+        try performMutation { context in
+            let before = try Self.snapshot(in: context)
             let request: NSFetchRequest<SettingsEntity> = SettingsEntity.request()
             let objects = try context.fetch(request)
             let object = Self.preferredSettingsObject(in: objects) ?? context.insert(SettingsEntity.self)
             if object.id == nil { object.id = Self.settingsID }
             Self.write(settings, to: object)
+            object.updatedAt = now
             objects.filter { $0 !== object }.forEach(context.delete)
+            try Self.reconcileReportLifecycleAfterChange(
+                in: context,
+                before: before,
+                asOf: now
+            )
             try Self.saveIfNeeded(context)
+            context.refreshAllObjects()
 
             let reread = try context.fetch(request)
-            guard reread.count == 1, Self.domainSettings(from: object) == settings else {
+            guard
+                reread.count == 1,
+                let persisted = Self.preferredSettingsObject(in: reread),
+                Self.domainSettings(from: persisted) == settings
+            else {
                 throw LedgerRepositoryError.invalidManagedObject("Hourleaf could not verify saved settings.")
             }
         }
@@ -191,7 +210,9 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
     func savePolicy(_ policy: ReportingPolicy) async throws {
         try requireAvailable()
         try ensureNormalized()
-        try perform { context in
+        let now = clock()
+        try performMutation { context in
+            let before = try Self.snapshot(in: context)
             let request: NSFetchRequest<PolicyRevisionEntity> = PolicyRevisionEntity.request()
             request.fetchLimit = 1
             request.predicate = NSPredicate(format: "id == %@", policy.id as CVarArg)
@@ -201,7 +222,20 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
             object.mode = policy.mode.rawValue
             object.carryAcrossServiceYear = false
             object.createdAt = policy.createdAt
+            try Self.reconcileReportLifecycleAfterChange(
+                in: context,
+                before: before,
+                asOf: now
+            )
             try Self.saveIfNeeded(context)
+            context.refreshAllObjects()
+
+            let reread = try context.fetch(request)
+            guard reread.count == 1, let persisted = reread.first, Self.domainPolicy(from: persisted) == policy else {
+                throw LedgerRepositoryError.invalidManagedObject(
+                    "Hourleaf could not verify the saved reporting policy."
+                )
+            }
         }
     }
 
@@ -560,9 +594,8 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
             target.confirmedSentAt = request.confirmedAt
             if let state = try Self.reportState(in: context, monthKey: month.key),
                state.currentSnapshotID == request.snapshotID {
-                if let draft = ReportReadiness.draft(for: month, in: preSaveSnapshot),
-                   let current = preSaveSnapshot.reportSnapshots.first(where: { $0.id == request.snapshotID }),
-                   ReportReadiness.snapshotMatchesDraft(current, draft: draft, ledger: preSaveSnapshot) {
+                if let current = preSaveSnapshot.reportSnapshots.first(where: { $0.id == request.snapshotID }),
+                   Self.snapshotReferenceMatchesCurrentDraft(current, month: month, in: preSaveSnapshot) {
                     state.state = ReportLifecycleState.sent.rawValue
                     state.lastStableState = nil
                     state.changedAt = nil
@@ -895,6 +928,52 @@ private struct EntryMutationWrite: Sendable {
 
 private enum EntryMutationRetry: Error {
     case required
+}
+
+private struct DraftIdentity: Equatable, Sendable {
+    let calculationFingerprint: String
+    let presentationFingerprint: String
+}
+
+private enum StableReportReference: Sendable {
+    case reviewed(calculationFingerprint: String?, presentationFingerprint: String?)
+    case snapshot(ReportSnapshotMetadata)
+
+    var allowsAutoRestore: Bool {
+        switch self {
+        case .reviewed:
+            true
+        case let .snapshot(snapshot):
+            !snapshot.legacyCalculationUnavailable
+        }
+    }
+
+    var requiresExplicitMutationInvalidation: Bool {
+        switch self {
+        case .reviewed:
+            false
+        case let .snapshot(snapshot):
+            snapshot.legacyCalculationUnavailable
+        }
+    }
+
+    func matches(
+        month: MonthKey,
+        in snapshot: LedgerSnapshot
+    ) -> Bool {
+        switch self {
+        case let .reviewed(calculationFingerprint, presentationFingerprint):
+            guard let draft = ReportReadiness.draft(for: month, in: snapshot) else { return false }
+            return draft.calculationFingerprint == calculationFingerprint
+                && draft.presentationFingerprint == presentationFingerprint
+        case let .snapshot(metadata):
+            return CoreDataLedgerRepository.snapshotReferenceMatchesCurrentDraft(
+                metadata,
+                month: month,
+                in: snapshot
+            )
+        }
+    }
 }
 
 private extension CoreDataLedgerRepository {
@@ -2125,6 +2204,157 @@ private extension CoreDataLedgerRepository {
         in snapshot: LedgerSnapshot
     ) -> ReportStateRecord? {
         snapshot.reportStates.first { $0.month == month }
+    }
+
+    static func reconcileReportLifecycleAfterChange(
+        in context: NSManagedObjectContext,
+        before: LedgerSnapshot,
+        asOf now: Date
+    ) throws {
+        let afterChange = try snapshot(in: context)
+        try reconcileLifecycleStateEntities(in: context, snapshot: afterChange, asOf: now)
+        let reconciled = try snapshot(in: context)
+        let months = Set(before.reportStates.map(\.month)).union(reconciled.reportStates.map(\.month))
+        let changedDraftMonths = reportDraftChangedMonths(months: months, before: before, after: reconciled)
+
+        for month in months where month >= reconciled.settings.ledgerStartMonth {
+            guard let record = stateRecord(for: month, in: reconciled) else { continue }
+            guard let state = try reportState(in: context, monthKey: month.key) else { continue }
+            applyLifecycleReferenceIfNeeded(
+                to: state,
+                record: record,
+                month: month,
+                in: reconciled,
+                changedDraftMonths: changedDraftMonths,
+                asOf: now
+            )
+        }
+    }
+
+    static func reportDraftChangedMonths(
+        months: Set<MonthKey>,
+        before: LedgerSnapshot,
+        after: LedgerSnapshot
+    ) -> Set<MonthKey> {
+        Set(months.filter { month in
+            reportDraftIdentity(for: month, in: before) != reportDraftIdentity(for: month, in: after)
+        })
+    }
+
+    static func reportDraftIdentity(
+        for month: MonthKey,
+        in snapshot: LedgerSnapshot
+    ) -> DraftIdentity? {
+        guard let draft = ReportReadiness.draft(for: month, in: snapshot) else { return nil }
+        return DraftIdentity(
+            calculationFingerprint: draft.calculationFingerprint,
+            presentationFingerprint: draft.presentationFingerprint
+        )
+    }
+
+    static func applyLifecycleReferenceIfNeeded(
+        to state: ReportStateEntity,
+        record: ReportStateRecord,
+        month: MonthKey,
+        in snapshot: LedgerSnapshot,
+        changedDraftMonths: Set<MonthKey>,
+        asOf now: Date
+    ) {
+        guard month < ReportReadiness.currentMonth(asOf: now) else { return }
+
+        let reference: StableReportReference?
+        switch record.state {
+        case .draft, .ready:
+            return
+        case .reviewed:
+            reference = .reviewed(
+                calculationFingerprint: record.reviewedCalculationFingerprint,
+                presentationFingerprint: record.reviewedPresentationFingerprint
+            )
+        case .prepared, .sent:
+            reference = stableSnapshotReference(for: record, in: snapshot)
+        case .changed:
+            switch record.lastStableState {
+            case .reviewed?:
+                reference = .reviewed(
+                    calculationFingerprint: record.reviewedCalculationFingerprint,
+                    presentationFingerprint: record.reviewedPresentationFingerprint
+                )
+            case .prepared?, .sent?:
+                reference = stableSnapshotReference(for: record, in: snapshot)
+            case .draft?, .ready?, .changed?, nil:
+                reference = nil
+            }
+        }
+
+        guard let reference else { return }
+        let matchesCurrentDraft = reference.matches(month: month, in: snapshot)
+        let explicitLegacyChange = reference.requiresExplicitMutationInvalidation
+            && changedDraftMonths.contains(month)
+
+        if record.state == .changed {
+            guard matchesCurrentDraft, reference.allowsAutoRestore else { return }
+            restoreLifecycleState(state, from: record, at: now)
+            return
+        }
+
+        guard !matchesCurrentDraft || explicitLegacyChange else { return }
+        transitionLifecycleStateToChanged(state, from: record, at: now)
+    }
+
+    static func stableSnapshotReference(
+        for record: ReportStateRecord,
+        in snapshot: LedgerSnapshot
+    ) -> StableReportReference? {
+        guard let snapshotID = record.currentSnapshotID,
+              let metadata = snapshot.reportSnapshots.first(where: { $0.id == snapshotID }) else {
+            return nil
+        }
+        return .snapshot(metadata)
+    }
+
+    static func snapshotReferenceMatchesCurrentDraft(
+        _ metadata: ReportSnapshotMetadata,
+        month: MonthKey,
+        in ledger: LedgerSnapshot
+    ) -> Bool {
+        guard let draft = ReportReadiness.draft(for: month, in: ledger) else { return false }
+        guard metadata.receipt.month == draft.month else { return false }
+
+        if let storedCalculation = metadata.calculationFingerprint,
+           storedCalculation.hasPrefix("v2:") {
+            return metadata.schemaVersion == 2
+                && metadata.createdBySource == ReportReadiness.reportSnapshotSource
+                && !metadata.legacyCalculationUnavailable
+                && metadata.calculationFingerprint == draft.calculationFingerprint
+                && metadata.presentationFingerprint == draft.presentationFingerprint
+        }
+
+        return ReportReadiness.snapshotMatchesDraft(metadata, draft: draft, ledger: ledger)
+    }
+
+    static func restoreLifecycleState(
+        _ state: ReportStateEntity,
+        from record: ReportStateRecord,
+        at timestamp: Date
+    ) {
+        guard let restored = record.lastStableState else { return }
+        state.state = restored.rawValue
+        state.lastStableState = nil
+        state.changedAt = nil
+        state.updatedAt = timestamp
+    }
+
+    static func transitionLifecycleStateToChanged(
+        _ state: ReportStateEntity,
+        from record: ReportStateRecord,
+        at timestamp: Date
+    ) {
+        guard record.state != .changed else { return }
+        state.state = ReportLifecycleState.changed.rawValue
+        state.lastStableState = record.state.rawValue
+        state.changedAt = timestamp
+        state.updatedAt = timestamp
     }
 
     static func effectiveLifecycleState(

@@ -864,6 +864,405 @@ final class EntryMutationTests: XCTestCase {
         XCTAssertEqual(model.deletedEntryRecords.map(\.id), [entry.id])
     }
 
+    func testRelevantMutationsMoveReviewedAndSentCheckpointsToChangedAndExactReversalRestoresStableState() async throws {
+        let june = MonthKey(year: 2026, month: 6)
+        let july = MonthKey(year: 2026, month: 7)
+        let authorizationTime = makeDate(year: 2026, month: 8, day: 1, hour: 13, minute: 8)
+        let repository = CoreDataLedgerRepository(
+            persistence: PersistenceController(inMemory: true, cloudSyncEnabled: false),
+            clock: { authorizationTime }
+        )
+        try await configureLedgerStart(repository, month: june)
+        let baseDay = LocalDay(year: 2026, month: 7, day: 5)
+        let secondDay = LocalDay(year: 2026, month: 7, day: 6)
+        let baseEntry = makeFixedEntry(
+            id: "50000000-0000-0000-0000-000000000001",
+            day: baseDay,
+            minutes: 120,
+            createdAt: makeDate(year: 2026, month: 7, day: 5, hour: 9)
+        )
+        let baseCreate = try await repository.apply(
+            createCommand(for: baseEntry, occurredAt: baseEntry.updatedAt)
+        )
+        let reviewedDraft = try await reportDraft(from: repository, month: july)
+        let reviewedAt = makeDate(year: 2026, month: 8, day: 1, hour: 8)
+        let reviewedLedger = try await repository.reviewReport(
+            ReviewReportRequest(
+                month: july,
+                expectedCalculationFingerprint: reviewedDraft.calculationFingerprint,
+                expectedPresentationFingerprint: reviewedDraft.presentationFingerprint,
+                reviewedAt: reviewedAt
+            )
+        )
+        let reviewedState = try reportState(for: july, in: reviewedLedger)
+        XCTAssertEqual(reviewedState.state, .reviewed)
+        XCTAssertNil(reviewedState.currentSnapshotID)
+
+        let extraEntry = makeFixedEntry(
+            id: "50000000-0000-0000-0000-000000000002",
+            day: secondDay,
+            minutes: 30,
+            createdAt: makeDate(year: 2026, month: 8, day: 1, hour: 9)
+        )
+        let extraCreate = try await repository.apply(
+            createCommand(for: extraEntry, occurredAt: extraEntry.updatedAt)
+        )
+        let afterRelevantCreate = try await repository.ledgerSnapshot()
+        let changedReviewedState = try reportState(for: july, in: afterRelevantCreate)
+        XCTAssertEqual(changedReviewedState.state, .changed)
+        XCTAssertEqual(changedReviewedState.lastStableState, .reviewed)
+        XCTAssertNil(changedReviewedState.currentSnapshotID)
+        XCTAssertEqual(changedReviewedState.reviewedCalculationFingerprint, reviewedState.reviewedCalculationFingerprint)
+        XCTAssertEqual(changedReviewedState.reviewedPresentationFingerprint, reviewedState.reviewedPresentationFingerprint)
+
+        _ = try await repository.apply(
+            EntryMutationCommand(
+                mutationID: UUID(uuidString: "50000000-0000-0000-0000-000000000003")!,
+                entryID: extraEntry.id,
+                expectedRevision: extraCreate.appliedRevision,
+                operation: .delete,
+                occurredAt: makeDate(year: 2026, month: 8, day: 1, hour: 10),
+                source: .appHistory
+            )
+        )
+        let afterExactDelete = try await repository.ledgerSnapshot()
+        let restoredReviewedState = try reportState(for: july, in: afterExactDelete)
+        XCTAssertEqual(restoredReviewedState.state, .reviewed)
+        XCTAssertNil(restoredReviewedState.lastStableState)
+        XCTAssertNil(restoredReviewedState.changedAt)
+        XCTAssertEqual(restoredReviewedState.currentSnapshotID, reviewedState.currentSnapshotID)
+        XCTAssertEqual(restoredReviewedState.reviewedCalculationFingerprint, reviewedState.reviewedCalculationFingerprint)
+        XCTAssertEqual(restoredReviewedState.reviewedPresentationFingerprint, reviewedState.reviewedPresentationFingerprint)
+
+        let sentDraft = try await reportDraft(from: repository, month: july)
+        let prepared = try await repository.prepareReport(
+            PrepareReportRequest(
+                month: july,
+                expectedCalculationFingerprint: sentDraft.calculationFingerprint,
+                expectedPresentationFingerprint: sentDraft.presentationFingerprint,
+                snapshotID: UUID(uuidString: "50000000-0000-0000-0000-000000000010")!,
+                preparedAt: makeDate(year: 2026, month: 8, day: 1, hour: 11)
+            )
+        )
+        let sentLedger = try await repository.markReportSent(
+            MarkReportSentRequest(
+                snapshotID: prepared.snapshot.id,
+                confirmedAt: makeDate(year: 2026, month: 8, day: 1, hour: 12)
+            )
+        )
+        let sentState = try reportState(for: july, in: sentLedger)
+        let immutableSnapshot = try reportSnapshot(id: prepared.snapshot.id, in: sentLedger)
+        XCTAssertEqual(sentState.state, .sent)
+        XCTAssertEqual(sentState.currentSnapshotID, prepared.snapshot.id)
+
+        let updateReceipt = try await repository.apply(
+            updateCommand(
+                entryID: baseEntry.id,
+                expectedRevision: baseCreate.appliedRevision,
+                kind: .service,
+                day: baseDay,
+                minutes: 180,
+                note: nil,
+                occurredAt: makeDate(year: 2026, month: 8, day: 1, hour: 13),
+                mutationID: UUID(uuidString: "50000000-0000-0000-0000-000000000011")!
+            )
+        )
+        let afterSentUpdate = try await repository.ledgerSnapshot()
+        let changedSentState = try reportState(for: july, in: afterSentUpdate)
+        XCTAssertEqual(changedSentState.state, .changed)
+        XCTAssertEqual(changedSentState.lastStableState, .sent)
+        XCTAssertEqual(changedSentState.currentSnapshotID, prepared.snapshot.id)
+        XCTAssertEqual(try reportSnapshot(id: prepared.snapshot.id, in: afterSentUpdate), immutableSnapshot)
+
+        _ = try await repository.apply(
+            EntryMutationCommand(
+                mutationID: UUID(uuidString: "50000000-0000-0000-0000-000000000012")!,
+                entryID: baseEntry.id,
+                expectedRevision: updateReceipt.appliedRevision,
+                operation: .undo,
+                revertedMutationID: updateReceipt.mutationID,
+                occurredAt: makeDate(year: 2026, month: 8, day: 1, hour: 13, minute: 5),
+                source: .undo
+            )
+        )
+        let afterExactUndo = try await repository.ledgerSnapshot()
+        let restoredSentAfterUndo = try reportState(for: july, in: afterExactUndo)
+        XCTAssertEqual(restoredSentAfterUndo.state, .sent)
+        XCTAssertNil(restoredSentAfterUndo.lastStableState)
+        XCTAssertNil(restoredSentAfterUndo.changedAt)
+        XCTAssertEqual(restoredSentAfterUndo.currentSnapshotID, prepared.snapshot.id)
+        XCTAssertEqual(try reportSnapshot(id: prepared.snapshot.id, in: afterExactUndo), immutableSnapshot)
+
+        let currentBaseRecord = try ledgerRecord(id: baseEntry.id, in: afterExactUndo)
+        let deleteReceipt = try await repository.apply(
+            EntryMutationCommand(
+                mutationID: UUID(uuidString: "50000000-0000-0000-0000-000000000013")!,
+                entryID: baseEntry.id,
+                expectedRevision: currentBaseRecord.revision,
+                operation: .delete,
+                occurredAt: makeDate(year: 2026, month: 8, day: 1, hour: 13, minute: 6),
+                source: .appHistory
+            )
+        )
+        let afterSentDelete = try await repository.ledgerSnapshot()
+        let changedSentAfterDelete = try reportState(for: july, in: afterSentDelete)
+        XCTAssertEqual(changedSentAfterDelete.state, .changed)
+        XCTAssertEqual(changedSentAfterDelete.lastStableState, .sent)
+        XCTAssertEqual(changedSentAfterDelete.currentSnapshotID, prepared.snapshot.id)
+        XCTAssertEqual(try reportSnapshot(id: prepared.snapshot.id, in: afterSentDelete), immutableSnapshot)
+
+        _ = try await repository.apply(
+            EntryMutationCommand(
+                mutationID: UUID(uuidString: "50000000-0000-0000-0000-000000000014")!,
+                entryID: baseEntry.id,
+                expectedRevision: deleteReceipt.appliedRevision,
+                operation: .restore,
+                occurredAt: makeDate(year: 2026, month: 8, day: 1, hour: 13, minute: 7),
+                source: .restore
+            )
+        )
+        let afterExactRestore = try await repository.ledgerSnapshot()
+        let restoredSentAfterRestore = try reportState(for: july, in: afterExactRestore)
+        XCTAssertEqual(restoredSentAfterRestore.state, .sent)
+        XCTAssertNil(restoredSentAfterRestore.lastStableState)
+        XCTAssertNil(restoredSentAfterRestore.changedAt)
+        XCTAssertEqual(restoredSentAfterRestore.currentSnapshotID, prepared.snapshot.id)
+        XCTAssertEqual(try reportSnapshot(id: prepared.snapshot.id, in: afterExactRestore), immutableSnapshot)
+    }
+
+    func testNoteOnlyEditLeavesPreparedCheckpointAndImmutableSnapshotUnchanged() async throws {
+        let june = MonthKey(year: 2026, month: 6)
+        let july = MonthKey(year: 2026, month: 7)
+        let repository = try await makeRepository(ledgerStartMonth: june)
+        let entry = makeFixedEntry(
+            id: "60000000-0000-0000-0000-000000000001",
+            day: LocalDay(year: 2026, month: 7, day: 8),
+            minutes: 75,
+            note: "Initial note",
+            createdAt: makeDate(year: 2026, month: 7, day: 8, hour: 9)
+        )
+        let created = try await repository.apply(createCommand(for: entry, occurredAt: entry.updatedAt))
+        let draft = try await reportDraft(from: repository, month: july)
+        _ = try await repository.reviewReport(
+            ReviewReportRequest(
+                month: july,
+                expectedCalculationFingerprint: draft.calculationFingerprint,
+                expectedPresentationFingerprint: draft.presentationFingerprint,
+                reviewedAt: makeDate(year: 2026, month: 8, day: 1, hour: 8)
+            )
+        )
+        let prepared = try await repository.prepareReport(
+            PrepareReportRequest(
+                month: july,
+                expectedCalculationFingerprint: draft.calculationFingerprint,
+                expectedPresentationFingerprint: draft.presentationFingerprint,
+                snapshotID: UUID(uuidString: "60000000-0000-0000-0000-000000000010")!,
+                preparedAt: makeDate(year: 2026, month: 8, day: 1, hour: 9)
+            )
+        )
+        let beforeEdit = prepared.ledger
+        let preparedState = try reportState(for: july, in: beforeEdit)
+        let immutableSnapshot = try reportSnapshot(id: prepared.snapshot.id, in: beforeEdit)
+
+        _ = try await repository.apply(
+            updateCommand(
+                entryID: entry.id,
+                expectedRevision: created.appliedRevision,
+                kind: .service,
+                day: entry.day,
+                minutes: entry.minutes,
+                note: "Edited note only",
+                occurredAt: makeDate(year: 2026, month: 8, day: 1, hour: 10),
+                mutationID: UUID(uuidString: "60000000-0000-0000-0000-000000000011")!
+            )
+        )
+        let afterEdit = try await repository.ledgerSnapshot()
+        XCTAssertEqual(try reportState(for: july, in: afterEdit), preparedState)
+        XCTAssertEqual(try reportSnapshot(id: prepared.snapshot.id, in: afterEdit), immutableSnapshot)
+        XCTAssertEqual(try ledgerRecord(id: entry.id, in: afterEdit).entry.note, "Edited note only")
+    }
+
+    func testCrossMonthMoveUnderDiscardMarksBothPreparedMonthsChangedWithoutReplacingSnapshots() async throws {
+        let june = MonthKey(year: 2026, month: 6)
+        let july = MonthKey(year: 2026, month: 7)
+        let repository = try await makeRepository(ledgerStartMonth: june)
+        try await repository.savePolicy(
+            ReportingPolicy(
+                id: UUID(uuidString: "70000000-0000-0000-0000-000000000001")!,
+                effectiveMonth: june,
+                mode: .discard,
+                createdAt: makeDate(year: 2026, month: 6, day: 1, hour: 0)
+            )
+        )
+
+        let juneEntry = makeFixedEntry(
+            id: "70000000-0000-0000-0000-000000000010",
+            day: LocalDay(year: 2026, month: 6, day: 30),
+            minutes: 60,
+            createdAt: makeDate(year: 2026, month: 6, day: 30, hour: 9)
+        )
+        let julyEntry = makeFixedEntry(
+            id: "70000000-0000-0000-0000-000000000011",
+            day: LocalDay(year: 2026, month: 7, day: 10),
+            minutes: 30,
+            createdAt: makeDate(year: 2026, month: 7, day: 10, hour: 9)
+        )
+        let juneCreate = try await repository.apply(createCommand(for: juneEntry, occurredAt: juneEntry.updatedAt))
+        _ = try await repository.apply(createCommand(for: julyEntry, occurredAt: julyEntry.updatedAt))
+
+        let juneDraft = try await reportDraft(from: repository, month: june)
+        _ = try await repository.reviewReport(
+            ReviewReportRequest(
+                month: june,
+                expectedCalculationFingerprint: juneDraft.calculationFingerprint,
+                expectedPresentationFingerprint: juneDraft.presentationFingerprint,
+                reviewedAt: makeDate(year: 2026, month: 7, day: 1, hour: 8)
+            )
+        )
+        let junePrepared = try await repository.prepareReport(
+            PrepareReportRequest(
+                month: june,
+                expectedCalculationFingerprint: juneDraft.calculationFingerprint,
+                expectedPresentationFingerprint: juneDraft.presentationFingerprint,
+                snapshotID: UUID(uuidString: "70000000-0000-0000-0000-000000000020")!,
+                preparedAt: makeDate(year: 2026, month: 7, day: 1, hour: 9)
+            )
+        )
+
+        let julyDraft = try await reportDraft(from: repository, month: july)
+        _ = try await repository.reviewReport(
+            ReviewReportRequest(
+                month: july,
+                expectedCalculationFingerprint: julyDraft.calculationFingerprint,
+                expectedPresentationFingerprint: julyDraft.presentationFingerprint,
+                reviewedAt: makeDate(year: 2026, month: 8, day: 1, hour: 8)
+            )
+        )
+        let julyPrepared = try await repository.prepareReport(
+            PrepareReportRequest(
+                month: july,
+                expectedCalculationFingerprint: julyDraft.calculationFingerprint,
+                expectedPresentationFingerprint: julyDraft.presentationFingerprint,
+                snapshotID: UUID(uuidString: "70000000-0000-0000-0000-000000000021")!,
+                preparedAt: makeDate(year: 2026, month: 8, day: 1, hour: 9)
+            )
+        )
+
+        _ = try await repository.apply(
+            updateCommand(
+                entryID: juneEntry.id,
+                expectedRevision: juneCreate.appliedRevision,
+                kind: .service,
+                day: LocalDay(year: 2026, month: 7, day: 1),
+                minutes: juneEntry.minutes,
+                note: juneEntry.note,
+                occurredAt: makeDate(year: 2026, month: 8, day: 1, hour: 10),
+                mutationID: UUID(uuidString: "70000000-0000-0000-0000-000000000030")!
+            )
+        )
+        let afterMove = try await repository.ledgerSnapshot()
+        let juneState = try reportState(for: june, in: afterMove)
+        let julyState = try reportState(for: july, in: afterMove)
+        XCTAssertEqual(juneState.state, .changed)
+        XCTAssertEqual(juneState.lastStableState, .prepared)
+        XCTAssertEqual(juneState.currentSnapshotID, junePrepared.snapshot.id)
+        XCTAssertEqual(julyState.state, .changed)
+        XCTAssertEqual(julyState.lastStableState, .prepared)
+        XCTAssertEqual(julyState.currentSnapshotID, julyPrepared.snapshot.id)
+        XCTAssertEqual(afterMove.reportSnapshots.count, 2)
+        XCTAssertEqual(try reportSnapshot(id: junePrepared.snapshot.id, in: afterMove).supersedesID, nil)
+        XCTAssertEqual(try reportSnapshot(id: julyPrepared.snapshot.id, in: afterMove).supersedesID, nil)
+    }
+
+    func testLegacyCheckpointStaysChangedAfterExactUndoOfDayOnlyMutation() async throws {
+        let june = MonthKey(year: 2026, month: 6)
+        let july = MonthKey(year: 2026, month: 7)
+        let authorizationTime = makeDate(year: 2026, month: 8, day: 1, hour: 11, minute: 8)
+        let persistence = PersistenceController(inMemory: true, cloudSyncEnabled: false)
+        let repository = CoreDataLedgerRepository(
+            persistence: persistence,
+            clock: { authorizationTime }
+        )
+        try await configureLedgerStart(repository, month: june)
+        let originalDay = LocalDay(year: 2026, month: 7, day: 5)
+        let movedDay = LocalDay(year: 2026, month: 7, day: 6)
+        let entry = makeFixedEntry(
+            id: "80000000-0000-0000-0000-000000000001",
+            day: originalDay,
+            minutes: 60,
+            createdAt: makeDate(year: 2026, month: 7, day: 5, hour: 9)
+        )
+        let created = try await repository.apply(createCommand(for: entry, occurredAt: entry.updatedAt))
+        let draft = try await reportDraft(from: repository, month: july)
+        _ = try await repository.reviewReport(
+            ReviewReportRequest(
+                month: july,
+                expectedCalculationFingerprint: draft.calculationFingerprint,
+                expectedPresentationFingerprint: draft.presentationFingerprint,
+                reviewedAt: makeDate(year: 2026, month: 8, day: 1, hour: 8)
+            )
+        )
+        let prepared = try await repository.prepareReport(
+            PrepareReportRequest(
+                month: july,
+                expectedCalculationFingerprint: draft.calculationFingerprint,
+                expectedPresentationFingerprint: draft.presentationFingerprint,
+                snapshotID: UUID(uuidString: "80000000-0000-0000-0000-000000000010")!,
+                preparedAt: makeDate(year: 2026, month: 8, day: 1, hour: 9)
+            )
+        )
+        _ = try await repository.markReportSent(
+            MarkReportSentRequest(
+                snapshotID: prepared.snapshot.id,
+                confirmedAt: makeDate(year: 2026, month: 8, day: 1, hour: 10)
+            )
+        )
+        try markSnapshotLegacy(
+            persistence: persistence,
+            snapshotID: prepared.snapshot.id,
+            month: july,
+            updatedAt: makeDate(year: 2026, month: 8, day: 1, hour: 10)
+        )
+
+        let moved = try await repository.apply(
+            updateCommand(
+                entryID: entry.id,
+                expectedRevision: created.appliedRevision,
+                kind: .service,
+                day: movedDay,
+                minutes: entry.minutes,
+                note: entry.note,
+                occurredAt: makeDate(year: 2026, month: 8, day: 1, hour: 11),
+                mutationID: UUID(uuidString: "80000000-0000-0000-0000-000000000011")!
+            )
+        )
+        let afterMove = try await repository.ledgerSnapshot()
+        let changedState = try reportState(for: july, in: afterMove)
+        XCTAssertEqual(changedState.state, .changed)
+        XCTAssertEqual(changedState.lastStableState, .sent)
+        XCTAssertEqual(changedState.currentSnapshotID, prepared.snapshot.id)
+        let firstChangedAt = try XCTUnwrap(changedState.changedAt)
+
+        _ = try await repository.apply(
+            EntryMutationCommand(
+                mutationID: UUID(uuidString: "80000000-0000-0000-0000-000000000012")!,
+                entryID: entry.id,
+                expectedRevision: moved.appliedRevision,
+                operation: .undo,
+                revertedMutationID: moved.mutationID,
+                occurredAt: makeDate(year: 2026, month: 8, day: 1, hour: 11, minute: 5),
+                source: .undo
+            )
+        )
+        let afterUndo = try await repository.ledgerSnapshot()
+        let stillChanged = try reportState(for: july, in: afterUndo)
+        XCTAssertEqual(stillChanged.state, .changed)
+        XCTAssertEqual(stillChanged.lastStableState, .sent)
+        XCTAssertEqual(stillChanged.currentSnapshotID, prepared.snapshot.id)
+        XCTAssertEqual(stillChanged.changedAt, firstChangedAt)
+        XCTAssertEqual(try ledgerRecord(id: entry.id, in: afterUndo).entry.day, originalDay)
+    }
+
     private func makeRepository() async throws -> CoreDataLedgerRepository {
         let repository = CoreDataLedgerRepository(
             persistence: PersistenceController(inMemory: true, cloudSyncEnabled: false)
@@ -872,9 +1271,32 @@ final class EntryMutationTests: XCTestCase {
         return repository
     }
 
+    private func makeRepository(ledgerStartMonth: MonthKey) async throws -> CoreDataLedgerRepository {
+        let repository = CoreDataLedgerRepository(
+            persistence: PersistenceController(inMemory: true, cloudSyncEnabled: false)
+        )
+        try await configureLedgerStart(repository, month: ledgerStartMonth)
+        return repository
+    }
+
+    private func makeRepositoryWithPersistence() -> (PersistenceController, CoreDataLedgerRepository) {
+        let persistence = PersistenceController(inMemory: true, cloudSyncEnabled: false)
+        let repository = CoreDataLedgerRepository(persistence: persistence)
+        return (persistence, repository)
+    }
+
     private func configureLedgerStart(_ repository: CoreDataLedgerRepository) async throws {
         var settings = try await repository.loadSettings()
         settings.ledgerStartMonth = LocalDay(Date(), calendar: .hourleaf).monthKey
+        try await repository.saveSettings(settings)
+    }
+
+    private func configureLedgerStart(
+        _ repository: CoreDataLedgerRepository,
+        month: MonthKey
+    ) async throws {
+        var settings = try await repository.loadSettings()
+        settings.ledgerStartMonth = month
         try await repository.saveSettings(settings)
     }
 
@@ -919,6 +1341,8 @@ final class EntryMutationTests: XCTestCase {
     private func updateCommand(
         entryID: UUID,
         expectedRevision: Int64,
+        kind: EntryKind = .service,
+        day: LocalDay? = nil,
         minutes: Int,
         note: String? = nil,
         occurredAt: Date = .now,
@@ -931,14 +1355,113 @@ final class EntryMutationTests: XCTestCase {
             expectedRevision: expectedRevision,
             operation: .update,
             values: EntryMutationValues(
-                kind: .service,
-                day: LocalDay(Date(), calendar: .hourleaf),
+                kind: kind,
+                day: day ?? LocalDay(Date(), calendar: .hourleaf),
                 minutes: minutes,
                 note: note
             ),
             occurredAt: occurredAt,
             source: source
         )
+    }
+
+    private func reportDraft(
+        from repository: CoreDataLedgerRepository,
+        month: MonthKey
+    ) async throws -> ReportDraft {
+        let snapshot = try await repository.ledgerSnapshot()
+        return try XCTUnwrap(ReportReadiness.draft(for: month, in: snapshot))
+    }
+
+    private func reportState(
+        for month: MonthKey,
+        in snapshot: LedgerSnapshot
+    ) throws -> ReportStateRecord {
+        try XCTUnwrap(snapshot.reportStates.first(where: { $0.month == month }))
+    }
+
+    private func reportSnapshot(
+        id: UUID,
+        in snapshot: LedgerSnapshot
+    ) throws -> ReportSnapshotMetadata {
+        try XCTUnwrap(snapshot.reportSnapshots.first(where: { $0.id == id }))
+    }
+
+    private func ledgerRecord(
+        id: UUID,
+        in snapshot: LedgerSnapshot
+    ) throws -> LedgerEntryRecord {
+        try XCTUnwrap(snapshot.entries.first(where: { $0.id == id }))
+    }
+
+    private func makeFixedEntry(
+        id: String,
+        kind: EntryKind = .service,
+        day: LocalDay,
+        minutes: Int,
+        note: String? = nil,
+        createdAt: Date
+    ) -> TimeEntry {
+        TimeEntry(
+            id: UUID(uuidString: id)!,
+            kind: kind,
+            day: day,
+            minutes: minutes,
+            note: note,
+            createdAt: createdAt,
+            updatedAt: createdAt
+        )
+    }
+
+    private func makeDate(
+        year: Int,
+        month: Int,
+        day: Int,
+        hour: Int = 0,
+        minute: Int = 0
+    ) -> Date {
+        var components = DateComponents()
+        components.calendar = Calendar.hourleaf
+        components.timeZone = TimeZone(secondsFromGMT: 0)
+        components.year = year
+        components.month = month
+        components.day = day
+        components.hour = hour
+        components.minute = minute
+        return components.date!
+    }
+
+    private func markSnapshotLegacy(
+        persistence: PersistenceController,
+        snapshotID: UUID,
+        month: MonthKey,
+        updatedAt: Date
+    ) throws {
+        let context = persistence.container.viewContext
+        let receiptRequest: NSFetchRequest<ReportReceiptEntity> = ReportReceiptEntity.request()
+        receiptRequest.fetchLimit = 1
+        receiptRequest.predicate = NSPredicate(format: "id == %@", snapshotID as CVarArg)
+        let receipt = try XCTUnwrap(context.fetch(receiptRequest).first)
+        receipt.legacyCalculationUnavailable = true
+        receipt.calculationFingerprint = nil
+        receipt.presentationFingerprint = nil
+        receipt.reportLanguage = nil
+        receipt.creditLabel = nil
+        receipt.templateID = nil
+        receipt.createdBySource = nil
+
+        let stateRequest: NSFetchRequest<ReportStateEntity> = ReportStateEntity.request()
+        stateRequest.fetchLimit = 1
+        stateRequest.predicate = NSPredicate(format: "monthKey == %@", month.key)
+        let state = try XCTUnwrap(context.fetch(stateRequest).first)
+        state.state = ReportLifecycleState.sent.rawValue
+        state.lastStableState = nil
+        state.changedAt = nil
+        state.currentSnapshotID = snapshotID
+        state.reviewedCalculationFingerprint = nil
+        state.reviewedPresentationFingerprint = nil
+        state.updatedAt = updatedAt
+        try context.save()
     }
 
     private func undo(

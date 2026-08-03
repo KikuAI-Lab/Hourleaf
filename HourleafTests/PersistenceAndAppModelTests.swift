@@ -1096,6 +1096,506 @@ final class PersistenceAndAppModelTests: XCTestCase {
         XCTAssertNil(stored.confirmedSentAt)
     }
 
+    func testOneTapWriteMarksPreparedClosedMonthChangedWithoutReplacingPreparedSnapshot() async throws {
+        let fixedNow = Date(timeIntervalSince1970: 1_785_747_600) // August 3, 2026 12:00 +03:00
+        let repository = makeRepository(clock: { fixedNow })
+        let sourceDay = LocalDay(year: 2026, month: 7, day: 10)
+        try await configureOneTapLedgerStart(repository, for: sourceDay)
+
+        let source = TimeEntry(
+            id: UUID(uuidString: "21000000-0000-0000-0000-000000000001")!,
+            kind: .service,
+            day: sourceDay,
+            minutes: 75,
+            createdAt: Date(timeIntervalSince1970: 1_783_665_000), // July 10, 2026 09:30 +03:00
+            updatedAt: Date(timeIntervalSince1970: 1_783_665_000)
+        )
+        _ = try await repository.apply(createCommand(for: source))
+
+        let month = MonthKey(year: 2026, month: 7)
+        let beforeReview = try await repository.ledgerSnapshot()
+        let draft = try XCTUnwrap(ReportReadiness.draft(for: month, in: beforeReview))
+        _ = try await repository.reviewReport(
+            ReviewReportRequest(
+                month: month,
+                expectedCalculationFingerprint: draft.calculationFingerprint,
+                expectedPresentationFingerprint: draft.presentationFingerprint,
+                reviewedAt: Date(timeIntervalSince1970: 1_785_564_000) // August 1, 2026 09:00 +03:00
+            )
+        )
+        let preparedID = UUID(uuidString: "21000000-0000-0000-0000-000000000002")!
+        let prepared = try await repository.prepareReport(
+            PrepareReportRequest(
+                month: month,
+                expectedCalculationFingerprint: draft.calculationFingerprint,
+                expectedPresentationFingerprint: draft.presentationFingerprint,
+                snapshotID: preparedID,
+                preparedAt: Date(timeIntervalSince1970: 1_785_564_600) // August 1, 2026 09:10 +03:00
+            )
+        )
+        let proposal = try XCTUnwrap(RepeatLastEntryCommand.proposal(from: prepared.ledger.entries))
+
+        _ = try await RepeatLastEntryCommand(repository: repository).execute(
+            expected: proposal,
+            at: Date(timeIntervalSince1970: 1_785_510_000), // July 31, 2026 18:00 +03:00
+            mutationID: UUID(uuidString: "21000000-0000-0000-0000-000000000003")!,
+            entryID: UUID(uuidString: "21000000-0000-0000-0000-000000000004")!
+        )
+
+        let after = try await repository.ledgerSnapshot()
+        let state = try XCTUnwrap(after.reportStates.first { $0.month == month })
+        XCTAssertEqual(state.state, .changed)
+        XCTAssertEqual(state.lastStableState, .prepared)
+        XCTAssertEqual(state.currentSnapshotID, preparedID)
+        XCTAssertEqual(after.reportSnapshots.map(\.id), [preparedID])
+        XCTAssertEqual(after.reportSnapshots.first?.receipt.text, prepared.snapshot.receipt.text)
+        XCTAssertEqual(
+            after.entries.filter {
+                $0.source == EntryMutationSource.appOneTap.rawValue && $0.entry.day.monthKey == month
+            }.count,
+            1
+        )
+    }
+
+    func testPreparedReportSettingsPresentationReconciliationOnlyChangesAffectedMonths() async throws {
+        let fixedNow = Date(timeIntervalSince1970: 1_785_747_600) // August 3, 2026 12:00 +03:00
+        let month = MonthKey(year: 2026, month: 7)
+        let reviewedAt = Date(timeIntervalSince1970: 1_785_564_000) // August 1, 2026 09:00 +03:00
+        let preparedAt = Date(timeIntervalSince1970: 1_785_564_600) // August 1, 2026 09:10 +03:00
+
+        func prepareMonth(
+            repository: CoreDataLedgerRepository,
+            settings: AppSettings,
+            entries: [TimeEntry],
+            snapshotID: UUID
+        ) async throws -> (prepared: PreparedReportResult, state: ReportStateRecord) {
+            try await repository.saveSettings(settings)
+            for entry in entries {
+                _ = try await repository.apply(createCommand(for: entry))
+            }
+
+            let beforeReview = try await repository.ledgerSnapshot()
+            let draft = try XCTUnwrap(ReportReadiness.draft(for: month, in: beforeReview))
+            _ = try await repository.reviewReport(
+                ReviewReportRequest(
+                    month: month,
+                    expectedCalculationFingerprint: draft.calculationFingerprint,
+                    expectedPresentationFingerprint: draft.presentationFingerprint,
+                    reviewedAt: reviewedAt
+                )
+            )
+            let prepared = try await repository.prepareReport(
+                PrepareReportRequest(
+                    month: month,
+                    expectedCalculationFingerprint: draft.calculationFingerprint,
+                    expectedPresentationFingerprint: draft.presentationFingerprint,
+                    snapshotID: snapshotID,
+                    preparedAt: preparedAt
+                )
+            )
+            let state = try XCTUnwrap(prepared.ledger.reportStates.first { $0.month == month })
+            return (prepared, state)
+        }
+
+        do {
+            let repository = makeRepository(clock: { fixedNow })
+            let settings = AppSettings(
+                reportLanguage: .english,
+                creditLabelEnglish: "Credit hours",
+                creditLabelRussian: "Кредит часов",
+                creditLabelUkrainian: "Кредит годин",
+                ledgerStartMonth: month,
+                baselineServiceYearMinutes: 0,
+                baselineServiceYearStart: MonthKey(year: 2025, month: 9),
+                openingServiceCarryMinutes: 0,
+                openingCreditCarryMinutes: 0,
+                onboardingComplete: true
+            )
+            let entries = [
+                TimeEntry(
+                    id: UUID(uuidString: "31000000-0000-0000-0000-000000000001")!,
+                    kind: .service,
+                    day: LocalDay(year: 2026, month: 7, day: 5),
+                    minutes: 60,
+                    createdAt: Date(timeIntervalSince1970: 1_783_224_000),
+                    updatedAt: Date(timeIntervalSince1970: 1_783_224_000)
+                )
+            ]
+            let prepared = try await prepareMonth(
+                repository: repository,
+                settings: settings,
+                entries: entries,
+                snapshotID: UUID(uuidString: "31000000-0000-0000-0000-000000000002")!
+            )
+
+            var changedSettings = settings
+            changedSettings.reportLanguage = .russian
+            try await repository.saveSettings(changedSettings)
+
+            let after = try await repository.ledgerSnapshot()
+            let state = try XCTUnwrap(after.reportStates.first { $0.month == month })
+            XCTAssertEqual(state.state, .changed)
+            XCTAssertEqual(state.lastStableState, .prepared)
+            XCTAssertEqual(state.currentSnapshotID, prepared.prepared.snapshot.id)
+        }
+
+        do {
+            let repository = makeRepository(clock: { fixedNow })
+            let settings = AppSettings(
+                reportLanguage: .english,
+                creditLabelEnglish: "Credit hours",
+                creditLabelRussian: "Кредит часов",
+                creditLabelUkrainian: "Кредит годин",
+                ledgerStartMonth: month,
+                baselineServiceYearMinutes: 0,
+                baselineServiceYearStart: MonthKey(year: 2025, month: 9),
+                openingServiceCarryMinutes: 0,
+                openingCreditCarryMinutes: 0,
+                onboardingComplete: true
+            )
+            let entries = [
+                TimeEntry(
+                    id: UUID(uuidString: "32000000-0000-0000-0000-000000000001")!,
+                    kind: .service,
+                    day: LocalDay(year: 2026, month: 7, day: 6),
+                    minutes: 60,
+                    createdAt: Date(timeIntervalSince1970: 1_783_310_400),
+                    updatedAt: Date(timeIntervalSince1970: 1_783_310_400)
+                ),
+                TimeEntry(
+                    id: UUID(uuidString: "32000000-0000-0000-0000-000000000002")!,
+                    kind: .credit,
+                    day: LocalDay(year: 2026, month: 7, day: 6),
+                    minutes: 60,
+                    createdAt: Date(timeIntervalSince1970: 1_783_310_401),
+                    updatedAt: Date(timeIntervalSince1970: 1_783_310_401)
+                )
+            ]
+            let prepared = try await prepareMonth(
+                repository: repository,
+                settings: settings,
+                entries: entries,
+                snapshotID: UUID(uuidString: "32000000-0000-0000-0000-000000000003")!
+            )
+
+            var changedSettings = settings
+            changedSettings.creditLabelEnglish = "Field credit"
+            try await repository.saveSettings(changedSettings)
+
+            let after = try await repository.ledgerSnapshot()
+            let state = try XCTUnwrap(after.reportStates.first { $0.month == month })
+            XCTAssertEqual(state.state, .changed)
+            XCTAssertEqual(state.lastStableState, .prepared)
+            XCTAssertEqual(state.currentSnapshotID, prepared.prepared.snapshot.id)
+        }
+
+        do {
+            let repository = makeRepository(clock: { fixedNow })
+            let settings = AppSettings(
+                reportLanguage: .english,
+                creditLabelEnglish: "Credit hours",
+                creditLabelRussian: "Кредит часов",
+                creditLabelUkrainian: "Кредит годин",
+                ledgerStartMonth: month,
+                baselineServiceYearMinutes: 0,
+                baselineServiceYearStart: MonthKey(year: 2025, month: 9),
+                openingServiceCarryMinutes: 0,
+                openingCreditCarryMinutes: 0,
+                onboardingComplete: true
+            )
+            let entries = [
+                TimeEntry(
+                    id: UUID(uuidString: "33000000-0000-0000-0000-000000000001")!,
+                    kind: .service,
+                    day: LocalDay(year: 2026, month: 7, day: 7),
+                    minutes: 60,
+                    createdAt: Date(timeIntervalSince1970: 1_783_396_800),
+                    updatedAt: Date(timeIntervalSince1970: 1_783_396_800)
+                ),
+                TimeEntry(
+                    id: UUID(uuidString: "33000000-0000-0000-0000-000000000002")!,
+                    kind: .credit,
+                    day: LocalDay(year: 2026, month: 7, day: 7),
+                    minutes: 60,
+                    createdAt: Date(timeIntervalSince1970: 1_783_396_801),
+                    updatedAt: Date(timeIntervalSince1970: 1_783_396_801)
+                )
+            ]
+            let prepared = try await prepareMonth(
+                repository: repository,
+                settings: settings,
+                entries: entries,
+                snapshotID: UUID(uuidString: "33000000-0000-0000-0000-000000000003")!
+            )
+
+            var changedSettings = settings
+            changedSettings.creditLabelRussian = "Полевой кредит"
+            try await repository.saveSettings(changedSettings)
+
+            let after = try await repository.ledgerSnapshot()
+            let state = try XCTUnwrap(after.reportStates.first { $0.month == month })
+            XCTAssertEqual(state, prepared.state)
+            XCTAssertEqual(after.reportSnapshots, prepared.prepared.ledger.reportSnapshots)
+        }
+
+        do {
+            let repository = makeRepository(clock: { fixedNow })
+            let settings = AppSettings(
+                reportLanguage: .english,
+                creditLabelEnglish: "Credit hours",
+                creditLabelRussian: "Кредит часов",
+                creditLabelUkrainian: "Кредит годин",
+                ledgerStartMonth: month,
+                baselineServiceYearMinutes: 0,
+                baselineServiceYearStart: MonthKey(year: 2025, month: 9),
+                openingServiceCarryMinutes: 0,
+                openingCreditCarryMinutes: 0,
+                onboardingComplete: true
+            )
+            let entries = [
+                TimeEntry(
+                    id: UUID(uuidString: "34000000-0000-0000-0000-000000000001")!,
+                    kind: .service,
+                    day: LocalDay(year: 2026, month: 7, day: 8),
+                    minutes: 60,
+                    createdAt: Date(timeIntervalSince1970: 1_783_483_200),
+                    updatedAt: Date(timeIntervalSince1970: 1_783_483_200)
+                )
+            ]
+            let prepared = try await prepareMonth(
+                repository: repository,
+                settings: settings,
+                entries: entries,
+                snapshotID: UUID(uuidString: "34000000-0000-0000-0000-000000000002")!
+            )
+
+            var changedSettings = settings
+            changedSettings.creditLabelEnglish = "Field credit"
+            try await repository.saveSettings(changedSettings)
+
+            let after = try await repository.ledgerSnapshot()
+            let state = try XCTUnwrap(after.reportStates.first { $0.month == month })
+            XCTAssertEqual(state, prepared.state)
+            XCTAssertEqual(after.reportSnapshots, prepared.prepared.ledger.reportSnapshots)
+        }
+
+    }
+
+    func testPreparedReportCarryAndPolicyReconciliationOnlyChangesAffectedCheckpoints() async throws {
+        let fixedNow = Date(timeIntervalSince1970: 1_785_747_600) // August 3, 2026 12:00 +03:00
+        let june = MonthKey(year: 2026, month: 6)
+        let july = MonthKey(year: 2026, month: 7)
+
+        func prepareMonth(
+            _ month: MonthKey,
+            in repository: CoreDataLedgerRepository,
+            reviewedAt: Date,
+            preparedAt: Date,
+            snapshotID: UUID
+        ) async throws -> PreparedReportResult {
+            let beforeReview = try await repository.ledgerSnapshot()
+            let draft = try XCTUnwrap(ReportReadiness.draft(for: month, in: beforeReview))
+            _ = try await repository.reviewReport(
+                ReviewReportRequest(
+                    month: month,
+                    expectedCalculationFingerprint: draft.calculationFingerprint,
+                    expectedPresentationFingerprint: draft.presentationFingerprint,
+                    reviewedAt: reviewedAt
+                )
+            )
+            return try await repository.prepareReport(
+                PrepareReportRequest(
+                    month: month,
+                    expectedCalculationFingerprint: draft.calculationFingerprint,
+                    expectedPresentationFingerprint: draft.presentationFingerprint,
+                    snapshotID: snapshotID,
+                    preparedAt: preparedAt
+                )
+            )
+        }
+
+        do {
+            let repository = makeRepository(clock: { fixedNow })
+            var settings = AppSettings(
+                reportLanguage: .english,
+                creditLabelEnglish: "Credit hours",
+                creditLabelRussian: "Кредит часов",
+                creditLabelUkrainian: "Кредит годин",
+                ledgerStartMonth: june,
+                baselineServiceYearMinutes: 0,
+                baselineServiceYearStart: MonthKey(year: 2025, month: 9),
+                openingServiceCarryMinutes: 0,
+                openingCreditCarryMinutes: 0,
+                onboardingComplete: true
+            )
+            try await repository.saveSettings(settings)
+
+            let entries = [
+                TimeEntry(
+                    id: UUID(uuidString: "41000000-0000-0000-0000-000000000001")!,
+                    kind: .service,
+                    day: LocalDay(year: 2026, month: 6, day: 5),
+                    minutes: 30,
+                    createdAt: Date(timeIntervalSince1970: 1_780_545_600),
+                    updatedAt: Date(timeIntervalSince1970: 1_780_545_600)
+                ),
+                TimeEntry(
+                    id: UUID(uuidString: "41000000-0000-0000-0000-000000000002")!,
+                    kind: .credit,
+                    day: LocalDay(year: 2026, month: 6, day: 5),
+                    minutes: 30,
+                    createdAt: Date(timeIntervalSince1970: 1_780_545_601),
+                    updatedAt: Date(timeIntervalSince1970: 1_780_545_601)
+                ),
+                TimeEntry(
+                    id: UUID(uuidString: "41000000-0000-0000-0000-000000000003")!,
+                    kind: .service,
+                    day: LocalDay(year: 2026, month: 7, day: 5),
+                    minutes: 30,
+                    createdAt: Date(timeIntervalSince1970: 1_783_224_000),
+                    updatedAt: Date(timeIntervalSince1970: 1_783_224_000)
+                ),
+                TimeEntry(
+                    id: UUID(uuidString: "41000000-0000-0000-0000-000000000004")!,
+                    kind: .credit,
+                    day: LocalDay(year: 2026, month: 7, day: 5),
+                    minutes: 30,
+                    createdAt: Date(timeIntervalSince1970: 1_783_224_001),
+                    updatedAt: Date(timeIntervalSince1970: 1_783_224_001)
+                )
+            ]
+            for entry in entries {
+                _ = try await repository.apply(createCommand(for: entry))
+            }
+
+            let junePrepared = try await prepareMonth(
+                june,
+                in: repository,
+                reviewedAt: Date(timeIntervalSince1970: 1_783_911_600), // Jul 13
+                preparedAt: Date(timeIntervalSince1970: 1_783_912_200),
+                snapshotID: UUID(uuidString: "41000000-0000-0000-0000-000000000005")!
+            )
+            let julyPrepared = try await prepareMonth(
+                july,
+                in: repository,
+                reviewedAt: Date(timeIntervalSince1970: 1_785_564_000), // Aug 1
+                preparedAt: Date(timeIntervalSince1970: 1_785_564_600),
+                snapshotID: UUID(uuidString: "41000000-0000-0000-0000-000000000006")!
+            )
+            let before = try await repository.ledgerSnapshot()
+            let beforeJuneState = try XCTUnwrap(before.reportStates.first { $0.month == june })
+            let beforeJulyState = try XCTUnwrap(before.reportStates.first { $0.month == july })
+            let beforeJuneSnapshot = try XCTUnwrap(before.reportSnapshots.first { $0.id == junePrepared.snapshot.id })
+            let beforeJulySnapshot = try XCTUnwrap(before.reportSnapshots.first { $0.id == julyPrepared.snapshot.id })
+
+            settings.openingServiceCarryMinutes = 15
+            settings.openingCreditCarryMinutes = 20
+            try await repository.saveSettings(settings)
+
+            let after = try await repository.ledgerSnapshot()
+            let afterJuneState = try XCTUnwrap(after.reportStates.first { $0.month == june })
+            let afterJulyState = try XCTUnwrap(after.reportStates.first { $0.month == july })
+            XCTAssertEqual(afterJuneState.state, .changed)
+            XCTAssertEqual(afterJuneState.lastStableState, .prepared)
+            XCTAssertEqual(afterJuneState.currentSnapshotID, beforeJuneState.currentSnapshotID)
+            XCTAssertEqual(afterJulyState.state, .changed)
+            XCTAssertEqual(afterJulyState.lastStableState, .prepared)
+            XCTAssertEqual(afterJulyState.currentSnapshotID, beforeJulyState.currentSnapshotID)
+            XCTAssertEqual(
+                try XCTUnwrap(after.reportSnapshots.first { $0.id == junePrepared.snapshot.id }),
+                beforeJuneSnapshot
+            )
+            XCTAssertEqual(
+                try XCTUnwrap(after.reportSnapshots.first { $0.id == julyPrepared.snapshot.id }),
+                beforeJulySnapshot
+            )
+        }
+
+        do {
+            let repository = makeRepository(clock: { fixedNow })
+            let settings = AppSettings(
+                reportLanguage: .english,
+                creditLabelEnglish: "Credit hours",
+                creditLabelRussian: "Кредит часов",
+                creditLabelUkrainian: "Кредит годин",
+                ledgerStartMonth: june,
+                baselineServiceYearMinutes: 0,
+                baselineServiceYearStart: MonthKey(year: 2025, month: 9),
+                openingServiceCarryMinutes: 0,
+                openingCreditCarryMinutes: 0,
+                onboardingComplete: true
+            )
+            try await repository.saveSettings(settings)
+
+            let entries = [
+                TimeEntry(
+                    id: UUID(uuidString: "42000000-0000-0000-0000-000000000001")!,
+                    kind: .service,
+                    day: LocalDay(year: 2026, month: 6, day: 8),
+                    minutes: 60,
+                    createdAt: Date(timeIntervalSince1970: 1_780_804_800),
+                    updatedAt: Date(timeIntervalSince1970: 1_780_804_800)
+                ),
+                TimeEntry(
+                    id: UUID(uuidString: "42000000-0000-0000-0000-000000000002")!,
+                    kind: .service,
+                    day: LocalDay(year: 2026, month: 7, day: 8),
+                    minutes: 30,
+                    createdAt: Date(timeIntervalSince1970: 1_783_483_200),
+                    updatedAt: Date(timeIntervalSince1970: 1_783_483_200)
+                )
+            ]
+            for entry in entries {
+                _ = try await repository.apply(createCommand(for: entry))
+            }
+
+            let junePrepared = try await prepareMonth(
+                june,
+                in: repository,
+                reviewedAt: Date(timeIntervalSince1970: 1_783_911_600),
+                preparedAt: Date(timeIntervalSince1970: 1_783_912_200),
+                snapshotID: UUID(uuidString: "42000000-0000-0000-0000-000000000003")!
+            )
+            let julyPrepared = try await prepareMonth(
+                july,
+                in: repository,
+                reviewedAt: Date(timeIntervalSince1970: 1_785_564_000),
+                preparedAt: Date(timeIntervalSince1970: 1_785_564_600),
+                snapshotID: UUID(uuidString: "42000000-0000-0000-0000-000000000004")!
+            )
+            let before = try await repository.ledgerSnapshot()
+            let beforeJuneState = try XCTUnwrap(before.reportStates.first { $0.month == june })
+            let beforeJulyState = try XCTUnwrap(before.reportStates.first { $0.month == july })
+            let beforeJuneSnapshot = try XCTUnwrap(before.reportSnapshots.first { $0.id == junePrepared.snapshot.id })
+            let beforeJulySnapshot = try XCTUnwrap(before.reportSnapshots.first { $0.id == julyPrepared.snapshot.id })
+
+            try await repository.savePolicy(
+                ReportingPolicy(
+                    id: UUID(uuidString: "42000000-0000-0000-0000-000000000005")!,
+                    effectiveMonth: july,
+                    mode: .roundNearest,
+                    createdAt: Date(timeIntervalSince1970: 1_785_565_200)
+                )
+            )
+
+            let after = try await repository.ledgerSnapshot()
+            let afterJuneState = try XCTUnwrap(after.reportStates.first { $0.month == june })
+            let afterJulyState = try XCTUnwrap(after.reportStates.first { $0.month == july })
+            XCTAssertEqual(afterJuneState, beforeJuneState)
+            XCTAssertEqual(afterJulyState.state, .changed)
+            XCTAssertEqual(afterJulyState.lastStableState, .prepared)
+            XCTAssertEqual(afterJulyState.currentSnapshotID, beforeJulyState.currentSnapshotID)
+            XCTAssertEqual(
+                try XCTUnwrap(after.reportSnapshots.first { $0.id == junePrepared.snapshot.id }),
+                beforeJuneSnapshot
+            )
+            XCTAssertEqual(
+                try XCTUnwrap(after.reportSnapshots.first { $0.id == julyPrepared.snapshot.id }),
+                beforeJulySnapshot
+            )
+        }
+    }
+
     func testAccountingKeysRejectMalformedSeparatorsAndComponents() {
         XCTAssertNil(LocalDay(key: "2026-x-07-12"))
         XCTAssertNil(LocalDay(key: "2026--07-12"))
@@ -1276,9 +1776,11 @@ final class PersistenceAndAppModelTests: XCTestCase {
         XCTAssertFalse(model.startupDiagnostic?.isEmpty ?? true)
     }
 
-    private func makeRepository() -> CoreDataLedgerRepository {
+    private func makeRepository(
+        clock: @escaping @Sendable () -> Date = { .now }
+    ) -> CoreDataLedgerRepository {
         let persistence = PersistenceController(inMemory: true, cloudSyncEnabled: false)
-        return CoreDataLedgerRepository(persistence: persistence)
+        return CoreDataLedgerRepository(persistence: persistence, clock: clock)
     }
 
     private func configureOneTapLedgerStart(

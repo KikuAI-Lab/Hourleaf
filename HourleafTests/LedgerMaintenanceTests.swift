@@ -10,6 +10,37 @@ final class LedgerMaintenanceTests: XCTestCase {
         let repository = CoreDataLedgerRepository(persistence: persistence)
         let settings = try await repository.loadSettings()
         let lease = try await repository.acquireMaintenanceLease()
+        let reviewAt = Self.fixedDate(100)
+        let prepareAt = Self.fixedDate(101)
+        let confirmAt = Self.fixedDate(102)
+        let archiveAt = Self.fixedDate(103)
+        let reconcileDuringLeaseAt = Self.fixedDate(99)
+        let reconcileAfterLeaseAt = Self.fixedDate(104)
+        let currentMonth = MonthKey(year: 2026, month: 8)
+        let serviceYearStart = MonthKey(year: 2025, month: 9)
+        let reviewRequest = ReviewReportRequest(
+            month: currentMonth,
+            expectedCalculationFingerprint: "blocked-review",
+            expectedPresentationFingerprint: "blocked-presentation",
+            reviewedAt: reviewAt
+        )
+        let prepareRequest = PrepareReportRequest(
+            month: currentMonth,
+            expectedCalculationFingerprint: "blocked-prepare",
+            expectedPresentationFingerprint: "blocked-presentation",
+            snapshotID: UUID(uuidString: "10000000-0000-0000-0000-000000000201")!,
+            preparedAt: prepareAt
+        )
+        let markSentRequest = MarkReportSentRequest(
+            snapshotID: UUID(uuidString: "10000000-0000-0000-0000-000000000202")!,
+            confirmedAt: confirmAt
+        )
+        let closeServiceYearRequest = CloseServiceYearRequest(
+            startMonth: serviceYearStart,
+            expectedCalculationFingerprint: "blocked-archive",
+            archiveID: UUID(uuidString: "10000000-0000-0000-0000-000000000203")!,
+            createdAt: archiveAt
+        )
 
         await assertMaintenanceBlocked { try await repository.ledgerSnapshot() }
         await assertMaintenanceBlocked { try await repository.portableBackupRecords() }
@@ -46,6 +77,11 @@ final class LedgerMaintenanceTests: XCTestCase {
                 details: nil
             )
         }
+        await assertMaintenanceBlocked { try await repository.reconcileReportLifecycle(asOf: reconcileDuringLeaseAt) }
+        await assertMaintenanceBlocked { try await repository.reviewReport(reviewRequest) }
+        await assertMaintenanceBlocked { try await repository.prepareReport(prepareRequest) }
+        await assertMaintenanceBlocked { try await repository.markReportSent(markSentRequest) }
+        await assertMaintenanceBlocked { try await repository.closeServiceYear(closeServiceYearRequest) }
         await assertMaintenanceBlocked {
             try await repository.apply(
                 EntryMutationCommand(
@@ -66,6 +102,23 @@ final class LedgerMaintenanceTests: XCTestCase {
         try await repository.releaseMaintenanceLease(lease)
         let resumedSettings = try await repository.loadSettings()
         XCTAssertEqual(resumedSettings, settings)
+        do {
+            _ = try await repository.reconcileReportLifecycle(asOf: reconcileAfterLeaseAt)
+        } catch {
+            XCTFail("Expected reconcileReportLifecycle to resume after lease release: \(error)")
+        }
+        await assertLifecycleRejected(.monthStillOpen) {
+            try await repository.reviewReport(reviewRequest)
+        }
+        await assertLifecycleRejected(.monthStillOpen) {
+            try await repository.prepareReport(prepareRequest)
+        }
+        await assertLifecycleRejected(.snapshotNotFound) {
+            try await repository.markReportSent(markSentRequest)
+        }
+        await assertLifecycleRejected(.serviceYearStillOpen) {
+            try await repository.closeServiceYear(closeServiceYearRequest)
+        }
     }
 
     func testCaptureIsExactAndDetectsUnexpectedSecondContextWrite() async throws {
@@ -275,6 +328,24 @@ final class LedgerMaintenanceTests: XCTestCase {
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
+    }
+
+    private func assertLifecycleRejected<T: Sendable>(
+        _ expected: ReportLifecycleError,
+        _ operation: @escaping @Sendable () async throws -> T
+    ) async {
+        do {
+            _ = try await operation()
+            XCTFail("Expected lifecycle error \(expected).")
+        } catch let error as ReportLifecycleError {
+            XCTAssertEqual(error, expected)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    private static func fixedDate(_ seconds: TimeInterval) -> Date {
+        Date(timeIntervalSinceReferenceDate: seconds)
     }
 
     private func makeTemporaryDirectory() throws -> URL {

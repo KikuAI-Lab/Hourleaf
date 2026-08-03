@@ -170,6 +170,84 @@ final class HourleafBackupPersistenceTests: XCTestCase {
         XCTAssertNil(restoredRevision.note)
         XCTAssertEqual(restoredRevision.minutes, 61)
     }
+
+    func testReportReadinessLifecycleBackupRoundTripsFrozenV1WithoutNormalization() async throws {
+        let persistence = PersistenceController(inMemory: true, cloudSyncEnabled: false)
+        let expected = RawBackupFixture.reportLifecycleRecords
+        try RawBackupFixture.seed(expected, into: persistence.container.viewContext)
+
+        let repository = CoreDataLedgerRepository(persistence: persistence)
+        let actual = try await repository.portableBackupRecords()
+
+        let expectedBackup = try HourleafBackupCodec.encode(
+            content: HourleafBackupContentV1(exportedAt: 555.125, records: expected)
+        )
+        let actualBackup = try HourleafBackupCodec.encode(
+            content: HourleafBackupContentV1(exportedAt: 555.125, records: actual)
+        )
+        let canonicalExpected = expectedBackup.content.records
+
+        XCTAssertEqual(actualBackup.content.records, expectedBackup.content.records)
+        XCTAssertEqual(actualBackup.recordsDigest, expectedBackup.recordsDigest)
+
+        let readyState = try XCTUnwrap(actual.states.first(where: { $0.monthKey == "2026-02" }))
+        XCTAssertEqual(readyState.state, "ready")
+        XCTAssertNil(readyState.currentSnapshotID)
+        XCTAssertNil(readyState.lastStableState)
+        XCTAssertNil(readyState.changedAt)
+
+        let reviewedState = try XCTUnwrap(actual.states.first(where: { $0.monthKey == "2026-03" }))
+        XCTAssertEqual(reviewedState.state, "reviewed")
+        XCTAssertEqual(reviewedState.reviewedCalculationFingerprint, "v2:reviewed-calculation")
+        XCTAssertEqual(reviewedState.reviewedPresentationFingerprint, "v2:reviewed-presentation")
+        XCTAssertNil(reviewedState.currentSnapshotID)
+
+        let preparedState = try XCTUnwrap(actual.states.first(where: { $0.monthKey == "2026-04" }))
+        let preparedReceipt = try XCTUnwrap(actual.receipts.first(where: { $0.id == preparedState.currentSnapshotID }))
+        XCTAssertEqual(preparedState.state, "prepared")
+        XCTAssertEqual(preparedReceipt.version, 1)
+        XCTAssertNil(preparedReceipt.supersedesID)
+        XCTAssertNil(preparedReceipt.confirmedSentAt)
+
+        let sentState = try XCTUnwrap(actual.states.first(where: { $0.monthKey == "2026-05" }))
+        let sentHead = try XCTUnwrap(actual.receipts.first(where: { $0.id == sentState.currentSnapshotID }))
+        let sentPrevious = try XCTUnwrap(actual.receipts.first(where: { $0.id == sentHead.supersedesID }))
+        XCTAssertEqual(sentState.state, "sent")
+        XCTAssertEqual(sentHead.version, 2)
+        XCTAssertEqual(sentHead.supersedesID, sentPrevious.id)
+        XCTAssertEqual(sentPrevious.version, 1)
+        XCTAssertEqual(sentHead.confirmedSentAt, 32.0)
+
+        let changedState = try XCTUnwrap(actual.states.first(where: { $0.monthKey == "2026-06" }))
+        let changedHead = try XCTUnwrap(actual.receipts.first(where: { $0.id == changedState.currentSnapshotID }))
+        XCTAssertEqual(changedState.state, "changed")
+        XCTAssertEqual(changedState.lastStableState, "sent")
+        XCTAssertEqual(changedState.changedAt, 45.0)
+        XCTAssertEqual(changedHead.version, 2)
+        XCTAssertEqual(changedHead.supersedesID, RawBackupFixture.idString(760))
+
+        let legacyReceipt = try XCTUnwrap(actual.receipts.first(where: \.legacyCalculationUnavailable))
+        XCTAssertEqual(legacyReceipt.monthKey, "2026-01")
+        XCTAssertEqual(legacyReceipt.reportText, " Legacy report ")
+        XCTAssertNil(legacyReceipt.calculationFingerprint)
+        XCTAssertNil(legacyReceipt.presentationFingerprint)
+
+        let latestArchive = try XCTUnwrap(actual.archives.max(by: { $0.version < $1.version }))
+        XCTAssertEqual(latestArchive.version, 2)
+        XCTAssertEqual(latestArchive.supersedesID, RawBackupFixture.idString(901))
+
+        let restoredPersistence = PersistenceController(inMemory: true, cloudSyncEnabled: false)
+        let decoded = try HourleafBackupCodec.decodeAndVerify(actualBackup.data).content.records
+        try RawBackupFixture.seed(decoded, into: restoredPersistence.container.viewContext)
+        let restored = try await CoreDataLedgerRepository(persistence: restoredPersistence).portableBackupRecords()
+        let restoredBackup = try HourleafBackupCodec.encode(
+            content: HourleafBackupContentV1(exportedAt: 555.125, records: restored)
+        )
+
+        XCTAssertEqual(decoded, canonicalExpected)
+        XCTAssertEqual(restoredBackup.content.records, canonicalExpected)
+        XCTAssertEqual(restoredBackup.recordsDigest, expectedBackup.recordsDigest)
+    }
 }
 
 private enum RawBackupFixture {
@@ -416,6 +494,347 @@ private enum RawBackupFixture {
                     reviewedPresentationFingerprint: nil,
                     state: "sent",
                     updatedAt: 19
+                )
+            ]
+        )
+    }
+
+    static var reportLifecycleRecords: HourleafBackupRecordsV1 {
+        let englishCreditLabel = "Credit hours"
+        let standardTemplateID = "standard"
+        let preparedCalculation = "v2:prepared-calculation"
+        let preparedText = "April 2026\nHours: 1"
+        let preparedPresentation = ReportFingerprint.presentation(
+            calculationFingerprint: preparedCalculation,
+            language: .english,
+            creditLabel: englishCreditLabel,
+            templateID: standardTemplateID,
+            text: preparedText
+        )
+        let sentV1Calculation = "calculation-v1-sent"
+        let sentV1Text = "May 2026\nHours: 1"
+        let sentV1Presentation = ReportFingerprint.presentation(
+            calculationFingerprint: sentV1Calculation,
+            language: .english,
+            creditLabel: englishCreditLabel,
+            templateID: standardTemplateID,
+            text: sentV1Text
+        )
+        let sentV2Calculation = "v2:sent-calculation"
+        let sentV2Text = "May 2026\nHours: 2"
+        let sentV2Presentation = ReportFingerprint.presentation(
+            calculationFingerprint: sentV2Calculation,
+            language: .english,
+            creditLabel: englishCreditLabel,
+            templateID: standardTemplateID,
+            text: sentV2Text
+        )
+        let changedV1Calculation = "v2:changed-calculation-v1"
+        let changedV1Text = "June 2026\nHours: 3"
+        let changedV1Presentation = ReportFingerprint.presentation(
+            calculationFingerprint: changedV1Calculation,
+            language: .english,
+            creditLabel: englishCreditLabel,
+            templateID: standardTemplateID,
+            text: changedV1Text
+        )
+        let changedV2Calculation = "v2:changed-calculation-v2"
+        let changedV2Text = "June 2026\nHours: 4"
+        let changedV2Presentation = ReportFingerprint.presentation(
+            calculationFingerprint: changedV2Calculation,
+            language: .english,
+            creditLabel: englishCreditLabel,
+            templateID: standardTemplateID,
+            text: changedV2Text
+        )
+
+        return HourleafBackupRecordsV1(
+            acknowledgements: [],
+            archives: [
+                HourleafServiceYearArchiveV1(
+                    actualServiceMinutes: 31_200,
+                    baselineServiceMinutes: 600,
+                    calculationFingerprint: "service-year-v1",
+                    createdAt: 40,
+                    endMonthKey: "2026-08",
+                    id: idString(901),
+                    startMonthKey: "2025-09",
+                    supersedesID: nil,
+                    targetMinutes: 36_000,
+                    version: 1
+                ),
+                HourleafServiceYearArchiveV1(
+                    actualServiceMinutes: 32_880,
+                    baselineServiceMinutes: 600,
+                    calculationFingerprint: "service-year-v2",
+                    createdAt: 41,
+                    endMonthKey: "2026-08",
+                    id: idString(902),
+                    startMonthKey: "2025-09",
+                    supersedesID: idString(901),
+                    targetMinutes: 36_000,
+                    version: 2
+                )
+            ],
+            entries: [],
+            policies: [
+                HourleafPolicyRevisionV1(
+                    carryAcrossServiceYear: false,
+                    createdAt: 5,
+                    effectiveMonth: "2026-01",
+                    id: idString(903),
+                    mode: RemainderMode.carry.rawValue
+                )
+            ],
+            presets: [],
+            receipts: [
+                HourleafReportReceiptV1(
+                    calculationFingerprint: nil,
+                    confirmedSentAt: 11,
+                    createdBySource: nil,
+                    creditCarryIn: 0,
+                    creditCarryOut: 0,
+                    creditHours: 0,
+                    creditLabel: nil,
+                    id: idString(750),
+                    legacyCalculationUnavailable: true,
+                    monthKey: "2026-01",
+                    presentationFingerprint: nil,
+                    preparedAt: 10,
+                    rawCreditMinutes: 0,
+                    rawServiceMinutes: 0,
+                    reportLanguage: nil,
+                    reportText: " Legacy report ",
+                    reportingMode: nil,
+                    schemaVersion: 1,
+                    serviceCarryIn: 0,
+                    serviceCarryOut: 0,
+                    serviceHours: 0,
+                    supersedesID: nil,
+                    templateID: nil,
+                    version: 1
+                ),
+                HourleafReportReceiptV1(
+                    calculationFingerprint: preparedCalculation,
+                    confirmedSentAt: nil,
+                    createdBySource: "reportReadinessV1",
+                    creditCarryIn: 0,
+                    creditCarryOut: 0,
+                    creditHours: 0,
+                    creditLabel: englishCreditLabel,
+                    id: idString(751),
+                    legacyCalculationUnavailable: false,
+                    monthKey: "2026-04",
+                    presentationFingerprint: preparedPresentation,
+                    preparedAt: 20,
+                    rawCreditMinutes: 0,
+                    rawServiceMinutes: 60,
+                    reportLanguage: ReportLanguage.english.rawValue,
+                    reportText: preparedText,
+                    reportingMode: RemainderMode.carry.rawValue,
+                    schemaVersion: 2,
+                    serviceCarryIn: 0,
+                    serviceCarryOut: 0,
+                    serviceHours: 1,
+                    supersedesID: nil,
+                    templateID: standardTemplateID,
+                    version: 1
+                ),
+                HourleafReportReceiptV1(
+                    calculationFingerprint: sentV1Calculation,
+                    confirmedSentAt: 23,
+                    createdBySource: "reportComposerV2",
+                    creditCarryIn: 0,
+                    creditCarryOut: 0,
+                    creditHours: 0,
+                    creditLabel: englishCreditLabel,
+                    id: idString(752),
+                    legacyCalculationUnavailable: false,
+                    monthKey: "2026-05",
+                    presentationFingerprint: sentV1Presentation,
+                    preparedAt: 22,
+                    rawCreditMinutes: 0,
+                    rawServiceMinutes: 65,
+                    reportLanguage: ReportLanguage.english.rawValue,
+                    reportText: sentV1Text,
+                    reportingMode: RemainderMode.carry.rawValue,
+                    schemaVersion: 1,
+                    serviceCarryIn: 0,
+                    serviceCarryOut: 5,
+                    serviceHours: 1,
+                    supersedesID: nil,
+                    templateID: standardTemplateID,
+                    version: 1
+                ),
+                HourleafReportReceiptV1(
+                    calculationFingerprint: sentV2Calculation,
+                    confirmedSentAt: 32,
+                    createdBySource: "reportReadinessV1",
+                    creditCarryIn: 0,
+                    creditCarryOut: 0,
+                    creditHours: 0,
+                    creditLabel: englishCreditLabel,
+                    id: idString(753),
+                    legacyCalculationUnavailable: false,
+                    monthKey: "2026-05",
+                    presentationFingerprint: sentV2Presentation,
+                    preparedAt: 31,
+                    rawCreditMinutes: 0,
+                    rawServiceMinutes: 125,
+                    reportLanguage: ReportLanguage.english.rawValue,
+                    reportText: sentV2Text,
+                    reportingMode: RemainderMode.carry.rawValue,
+                    schemaVersion: 2,
+                    serviceCarryIn: 0,
+                    serviceCarryOut: 5,
+                    serviceHours: 2,
+                    supersedesID: idString(752),
+                    templateID: standardTemplateID,
+                    version: 2
+                ),
+                HourleafReportReceiptV1(
+                    calculationFingerprint: changedV1Calculation,
+                    confirmedSentAt: 42,
+                    createdBySource: "reportReadinessV1",
+                    creditCarryIn: 0,
+                    creditCarryOut: 0,
+                    creditHours: 0,
+                    creditLabel: englishCreditLabel,
+                    id: idString(760),
+                    legacyCalculationUnavailable: false,
+                    monthKey: "2026-06",
+                    presentationFingerprint: changedV1Presentation,
+                    preparedAt: 40,
+                    rawCreditMinutes: 0,
+                    rawServiceMinutes: 180,
+                    reportLanguage: ReportLanguage.english.rawValue,
+                    reportText: changedV1Text,
+                    reportingMode: RemainderMode.carry.rawValue,
+                    schemaVersion: 2,
+                    serviceCarryIn: 0,
+                    serviceCarryOut: 0,
+                    serviceHours: 3,
+                    supersedesID: nil,
+                    templateID: standardTemplateID,
+                    version: 1
+                ),
+                HourleafReportReceiptV1(
+                    calculationFingerprint: changedV2Calculation,
+                    confirmedSentAt: nil,
+                    createdBySource: "reportReadinessV1",
+                    creditCarryIn: 0,
+                    creditCarryOut: 0,
+                    creditHours: 0,
+                    creditLabel: englishCreditLabel,
+                    id: idString(761),
+                    legacyCalculationUnavailable: false,
+                    monthKey: "2026-06",
+                    presentationFingerprint: changedV2Presentation,
+                    preparedAt: 44,
+                    rawCreditMinutes: 0,
+                    rawServiceMinutes: 240,
+                    reportLanguage: ReportLanguage.english.rawValue,
+                    reportText: changedV2Text,
+                    reportingMode: RemainderMode.carry.rawValue,
+                    schemaVersion: 2,
+                    serviceCarryIn: 0,
+                    serviceCarryOut: 0,
+                    serviceHours: 4,
+                    supersedesID: idString(760),
+                    templateID: standardTemplateID,
+                    version: 2
+                )
+            ],
+            reminders: [],
+            revisions: [],
+            settings: HourleafSettingsV1(
+                baselineServiceYearMinutes: 600,
+                baselineServiceYearStart: "2025-09",
+                creditLabelEnglish: "Credit hours",
+                creditLabelRussian: "Кредит часов",
+                creditLabelUkrainian: "Кредит годин",
+                dataRevision: 7,
+                id: idString(904),
+                lastPurgeAt: nil,
+                ledgerStartMonth: "2026-01",
+                onboardingComplete: true,
+                openingCreditCarryMinutes: 0,
+                openingServiceCarryMinutes: 0,
+                planningVisible: false,
+                quietGapCheckEnabled: false,
+                quietGapDays: 7,
+                reportLanguage: ReportLanguage.english.rawValue,
+                syncMode: "local",
+                timerVisible: false,
+                updatedAt: 50,
+                widgetPrivacyMode: "hideTotals"
+            ),
+            states: [
+                HourleafReportStateV1(
+                    changedAt: nil,
+                    currentSnapshotID: nil,
+                    id: idString(770),
+                    lastStableState: nil,
+                    monthKey: "2026-02",
+                    reviewedCalculationFingerprint: nil,
+                    reviewedPresentationFingerprint: nil,
+                    state: "ready",
+                    updatedAt: 11
+                ),
+                HourleafReportStateV1(
+                    changedAt: nil,
+                    currentSnapshotID: nil,
+                    id: idString(771),
+                    lastStableState: nil,
+                    monthKey: "2026-03",
+                    reviewedCalculationFingerprint: "v2:reviewed-calculation",
+                    reviewedPresentationFingerprint: "v2:reviewed-presentation",
+                    state: "reviewed",
+                    updatedAt: 12
+                ),
+                HourleafReportStateV1(
+                    changedAt: nil,
+                    currentSnapshotID: idString(751),
+                    id: idString(772),
+                    lastStableState: nil,
+                    monthKey: "2026-04",
+                    reviewedCalculationFingerprint: nil,
+                    reviewedPresentationFingerprint: nil,
+                    state: "prepared",
+                    updatedAt: 21
+                ),
+                HourleafReportStateV1(
+                    changedAt: nil,
+                    currentSnapshotID: idString(753),
+                    id: idString(773),
+                    lastStableState: nil,
+                    monthKey: "2026-05",
+                    reviewedCalculationFingerprint: nil,
+                    reviewedPresentationFingerprint: nil,
+                    state: "sent",
+                    updatedAt: 33
+                ),
+                HourleafReportStateV1(
+                    changedAt: 45,
+                    currentSnapshotID: idString(761),
+                    id: idString(774),
+                    lastStableState: "sent",
+                    monthKey: "2026-06",
+                    reviewedCalculationFingerprint: nil,
+                    reviewedPresentationFingerprint: nil,
+                    state: "changed",
+                    updatedAt: 46
+                ),
+                HourleafReportStateV1(
+                    changedAt: nil,
+                    currentSnapshotID: idString(750),
+                    id: idString(775),
+                    lastStableState: nil,
+                    monthKey: "2026-01",
+                    reviewedCalculationFingerprint: nil,
+                    reviewedPresentationFingerprint: nil,
+                    state: "sent",
+                    updatedAt: 13
                 )
             ]
         )

@@ -112,6 +112,86 @@ final class AppIntentTests: XCTestCase {
         }
     }
 
+    func testRecordIntentMarksPreparedClosedMonthAsChangedWithoutRewritingPreparedSnapshot() async throws {
+        let repositoryNow = makeDate(year: 2030, month: 1, day: 10, hour: 12, minute: 0)
+        let preparedMonth = MonthKey(year: 2029, month: 12)
+        let repository = try await makeRepository(
+            ledgerStartMonth: MonthKey(year: 2029, month: 9),
+            clock: { repositoryNow }
+        )
+        let manager = makeDependencyManager(repository: repository)
+        let initialEntryID = UUID(uuidString: "20000000-0000-0000-0000-000000000001")!
+        let preparedSnapshotID = UUID(uuidString: "40000000-0000-0000-0000-000000000001")!
+
+        _ = try await repository.apply(
+            EntryMutationCommand(
+                mutationID: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!,
+                entryID: initialEntryID,
+                expectedRevision: nil,
+                operation: .create,
+                values: EntryMutationValues(
+                    kind: .service,
+                    day: LocalDay(year: 2029, month: 12, day: 3),
+                    minutes: 60,
+                    note: nil
+                ),
+                occurredAt: makeDate(year: 2030, month: 1, day: 2, hour: 9, minute: 0),
+                source: .appQuickEntry
+            )
+        )
+
+        let reviewSnapshot = try await repository.ledgerSnapshot()
+        let draft = try XCTUnwrap(ReportReadiness.draft(for: preparedMonth, in: reviewSnapshot))
+        _ = try await repository.reviewReport(
+            ReviewReportRequest(
+                month: preparedMonth,
+                expectedCalculationFingerprint: draft.calculationFingerprint,
+                expectedPresentationFingerprint: draft.presentationFingerprint,
+                reviewedAt: makeDate(year: 2030, month: 1, day: 4, hour: 8, minute: 0)
+            )
+        )
+        let prepared = try await repository.prepareReport(
+            PrepareReportRequest(
+                month: preparedMonth,
+                expectedCalculationFingerprint: draft.calculationFingerprint,
+                expectedPresentationFingerprint: draft.presentationFingerprint,
+                snapshotID: preparedSnapshotID,
+                preparedAt: makeDate(year: 2030, month: 1, day: 5, hour: 8, minute: 0)
+            )
+        )
+
+        try await RecordTimeIntent(
+            kind: .service,
+            hours: 0,
+            minutes: 30,
+            date: makeDate(year: 2029, month: 12, day: 20, hour: 10, minute: 0),
+            dependencyManager: manager
+        ).persist(using: repository)
+
+        let after = try await repository.ledgerSnapshot()
+        let state = try XCTUnwrap(after.reportStates.first(where: { $0.month == preparedMonth }))
+        let stableSnapshot = try XCTUnwrap(after.reportSnapshots.first(where: { $0.id == preparedSnapshotID }))
+        let shortcutRevision = try XCTUnwrap(
+            after.entryRevisions.first(where: {
+                $0.source == EntryMutationSource.shortcut.rawValue
+                    && $0.entryID != initialEntryID
+            })
+        )
+
+        XCTAssertEqual(HourleafShortcuts.appShortcuts.count, 3)
+        XCTAssertEqual(shortcutRevision.source, EntryMutationSource.shortcut.rawValue)
+        XCTAssertEqual(shortcutRevision.localDay, LocalDay(year: 2029, month: 12, day: 20).key)
+        XCTAssertEqual(shortcutRevision.minutes, 30)
+        XCTAssertEqual(state.state, .changed)
+        XCTAssertEqual(state.lastStableState, .prepared)
+        XCTAssertEqual(state.currentSnapshotID, preparedSnapshotID)
+        XCTAssertEqual(stableSnapshot.id, prepared.snapshot.id)
+        XCTAssertEqual(stableSnapshot.version, prepared.snapshot.version)
+        XCTAssertEqual(stableSnapshot.supersedesID, prepared.snapshot.supersedesID)
+        XCTAssertEqual(stableSnapshot.receipt, prepared.snapshot.receipt)
+        XCTAssertEqual(after.reportSnapshots.count, 1)
+    }
+
     func testIntentExecutionPoliciesStaySeparated() {
         XCTAssertFalse(RecordTimeIntent.openAppWhenRun)
         XCTAssertEqual(RecordTimeIntent.authenticationPolicy, .requiresLocalDeviceAuthentication)
@@ -274,11 +354,25 @@ final class AppIntentTests: XCTestCase {
     }
 
     private func makeRepository() async throws -> CoreDataLedgerRepository {
+        try await makeRepository(
+            ledgerStartMonth: MonthKey(Date.now, calendar: .hourleaf)
+        )
+    }
+
+    private func makeRepository(
+        ledgerStartMonth: MonthKey,
+        clock: @escaping @Sendable () -> Date = { .now }
+    ) async throws -> CoreDataLedgerRepository {
         let repository = CoreDataLedgerRepository(
-            persistence: PersistenceController(inMemory: true, cloudSyncEnabled: false)
+            persistence: PersistenceController(inMemory: true, cloudSyncEnabled: false),
+            clock: clock
         )
         var settings = try await repository.loadSettings()
-        settings.ledgerStartMonth = MonthKey(Date.now, calendar: .hourleaf)
+        settings.ledgerStartMonth = ledgerStartMonth
+        settings.baselineServiceYearStart = MonthKey(
+            year: ledgerStartMonth.month >= 9 ? ledgerStartMonth.year : ledgerStartMonth.year - 1,
+            month: 9
+        )
         try await repository.saveSettings(settings)
         return repository
     }
@@ -332,6 +426,24 @@ final class AppIntentTests: XCTestCase {
         } catch {
             XCTFail("Expected \(expected), got \(error).", file: file, line: line)
         }
+    }
+
+    private func makeDate(
+        year: Int,
+        month: Int,
+        day: Int,
+        hour: Int,
+        minute: Int
+    ) -> Date {
+        let components = DateComponents(
+            calendar: .hourleaf,
+            year: year,
+            month: month,
+            day: day,
+            hour: hour,
+            minute: minute
+        )
+        return components.date!
     }
 }
 
