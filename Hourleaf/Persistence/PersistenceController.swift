@@ -111,12 +111,27 @@ final class PersistentStoreCleanupCapability: @unchecked Sendable {
     }
 }
 
+/// A source that may participate in a closed-store replacement. It is minted
+/// only after an isolated local Core Data controller has passed raw/domain/raw
+/// validation, crossed its final coordinator validation barrier, retired its
+/// container, and exposed the resulting Core Data store identity. The cleanup
+/// authority intentionally stays process-local and is never serialized.
+struct ValidatedTransitionStore: @unchecked Sendable {
+    let artifact: PersistentStoreArtifact
+    fileprivate let cleanupCapability: PersistentStoreCleanupCapability
+    let storeUUID: String
+    let recordsDigest: String
+    let recordCounts: HourleafBackupRecordCountsV1
+}
+
 enum PersistentStoreTransitionError: LocalizedError, Equatable, Sendable {
     case unsupportedStoreMode(PersistentStoreMode)
     case storeAlreadyClosed
     case storeNotClosed
     case unexpectedStoreURL
     case transitionFailed(String)
+    case validationFailedBeforeClose(String)
+    case coordinatorOutcomeUnknown(String)
 
     var errorDescription: String? {
         switch self {
@@ -130,6 +145,10 @@ enum PersistentStoreTransitionError: LocalizedError, Equatable, Sendable {
             "Hourleaf refused a transition for an unexpected data-store location."
         case let .transitionFailed(message):
             "Hourleaf could not transition local data: \(message)"
+        case let .validationFailedBeforeClose(message):
+            "Hourleaf could not validate local data before closing it: \(message)"
+        case let .coordinatorOutcomeUnknown(message):
+            "Hourleaf could not determine whether Core Data closed local data: \(message)"
         }
     }
 }
@@ -263,18 +282,35 @@ final class PersistenceController: @unchecked Sendable {
             // which committed before it is acquired is included in `validate`;
             // one that arrives after it is acquired cannot save before removal.
             try coordinator.performAndWait {
-                try validationContext.performAndWait {
-                    try validate(validationContext)
-                    validationContext.reset()
+                do {
+                    try validationContext.performAndWait {
+                        try validate(validationContext)
+                        validationContext.reset()
+                    }
+                    transitionBoundaryObserver()
+                    activeContainer.viewContext.performAndWait {
+                        activeContainer.viewContext.reset()
+                    }
+                } catch {
+                    throw PersistentStoreTransitionError.validationFailedBeforeClose(
+                        error.localizedDescription
+                    )
                 }
-                transitionBoundaryObserver()
-                activeContainer.viewContext.performAndWait {
-                    activeContainer.viewContext.reset()
+
+                do {
+                    try coordinator.remove(store)
+                } catch {
+                    throw PersistentStoreTransitionError.coordinatorOutcomeUnknown(
+                        error.localizedDescription
+                    )
                 }
-                try coordinator.remove(store)
             }
+        } catch let error as PersistentStoreTransitionError {
+            throw error
         } catch {
-            throw PersistentStoreTransitionError.transitionFailed(error.localizedDescription)
+            throw PersistentStoreTransitionError.validationFailedBeforeClose(
+                error.localizedDescription
+            )
         }
         storeIsClosed = true
         return ClosedPersistentStoreDescriptor(
@@ -314,13 +350,19 @@ final class PersistenceController: @unchecked Sendable {
     }
 
     /// Replaces the exact closed live store using Core Data's coordinator API.
-    /// Callers must validate the staged source before this operation.
+    /// A bare artifact is deliberately not accepted: callers must supply an
+    /// isolated raw/domain/raw-validated source carrying a process-local
+    /// cleanup authority.
     func replaceClosedStore(
         _ closed: ClosedPersistentStoreDescriptor,
-        with source: PersistentStoreArtifact
+        with source: ValidatedTransitionStore
     ) throws {
         try validate(closed)
-        guard source.purpose == .staging else {
+        guard
+            source.artifact.purpose == .staging || source.artifact.purpose == .evidence,
+            !source.storeUUID.isEmpty,
+            !source.recordsDigest.isEmpty
+        else {
             throw PersistentStoreTransitionError.unexpectedStoreURL
         }
         lock.lock()
@@ -330,13 +372,134 @@ final class PersistenceController: @unchecked Sendable {
             try activeContainer.persistentStoreCoordinator.replacePersistentStore(
                 at: closed.url,
                 destinationOptions: Self.sqliteStoreOptions,
-                withPersistentStoreFrom: source.url,
+                withPersistentStoreFrom: source.artifact.url,
                 sourceOptions: Self.sqliteStoreOptions,
                 type: .sqlite
             )
         } catch {
             throw PersistentStoreTransitionError.transitionFailed(error.localizedDescription)
         }
+    }
+
+    /// Closes an isolated task-owned source only after a final coordinator
+    /// barrier repeats the complete raw/domain/raw proof. The returned source
+    /// cannot be fabricated from a URL and is the only input accepted by the
+    /// replacement overload above.
+    func closeAndRelinquishOwnedTransitionStore(
+        _ artifact: PersistentStoreArtifact,
+        expectedRecordsDigest: String,
+        expectedRecordCounts: HourleafBackupRecordCountsV1
+    ) throws -> ValidatedTransitionStore {
+        try validateOwnedTransitionArtifact(artifact)
+        _ = try closePersistentStoreForTransition { context in
+            try CoreDataLedgerRepository.validateExactRawDomainRaw(
+                in: context,
+                expectedRecordsDigest: expectedRecordsDigest,
+                expectedRecordCounts: expectedRecordCounts
+            )
+        }
+        let cleanupCapability = try relinquishOwnedTransitionStore(artifact)
+        let rawStoreUUID = try Self.storeUUID(at: artifact.url)
+        guard let parsedStoreUUID = UUID(uuidString: rawStoreUUID) else {
+            throw PersistentStoreTransitionError.transitionFailed(
+                "The task-owned SQLite store returned an invalid Core Data identity."
+            )
+        }
+        let storeUUID = parsedStoreUUID.uuidString.lowercased()
+        return ValidatedTransitionStore(
+            artifact: artifact,
+            cleanupCapability: cleanupCapability,
+            storeUUID: storeUUID,
+            recordsDigest: expectedRecordsDigest,
+            recordCounts: expectedRecordCounts
+        )
+    }
+
+    /// Recovery is allowed to close only a canonical local-only live
+    /// descriptor and only after a trusted transaction passed preflight. If
+    /// startup failed before a store attached, the caller receives a closed
+    /// descriptor only when the coordinator proves that no stores are attached.
+    func closePersistentStoreForRecovery(
+        authorizedBy transaction: VerifiedRestoreTransactionV1
+    ) throws -> ClosedPersistentStoreDescriptor {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard
+            transaction.journal.content.phase != .critical,
+            descriptor.mode == .localOnlySQLite,
+            let url = descriptor.url
+        else {
+            throw PersistentStoreTransitionError.unsupportedStoreMode(descriptor.mode)
+        }
+
+        if storeIsClosed {
+            return closedDescriptor(for: url)
+        }
+
+        let coordinator = activeContainer.persistentStoreCoordinator
+        if activeStartupError != nil {
+            guard coordinator.persistentStores.isEmpty else {
+                throw PersistentStoreTransitionError.coordinatorOutcomeUnknown(
+                    "A failed startup left an attached persistent store."
+                )
+            }
+            storeIsClosed = true
+            return closedDescriptor(for: url)
+        }
+
+        let stores = coordinator.persistentStores
+        guard stores.count == 1,
+              let store = stores.first,
+              store.type == NSSQLiteStoreType,
+              store.url?.standardizedFileURL == url.standardizedFileURL,
+              activeContainer.persistentStoreDescriptions.count == 1,
+              let description = activeContainer.persistentStoreDescriptions.first,
+              description.type == NSSQLiteStoreType,
+              description.url?.standardizedFileURL == url.standardizedFileURL,
+              description.cloudKitContainerOptions == nil,
+              Self.hasRequiredLocalOptions(description.options)
+        else {
+            throw PersistentStoreTransitionError.unexpectedStoreURL
+        }
+
+        do {
+            try coordinator.performAndWait {
+                activeContainer.viewContext.performAndWait {
+                    activeContainer.viewContext.reset()
+                }
+                do {
+                    try coordinator.remove(store)
+                } catch {
+                    throw PersistentStoreTransitionError.coordinatorOutcomeUnknown(
+                        error.localizedDescription
+                    )
+                }
+            }
+        } catch let error as PersistentStoreTransitionError {
+            throw error
+        } catch {
+            throw PersistentStoreTransitionError.validationFailedBeforeClose(
+                error.localizedDescription
+            )
+        }
+
+        storeIsClosed = true
+        return ClosedPersistentStoreDescriptor(
+            url: url,
+            mode: descriptor.mode,
+            storeType: store.type,
+            usesPersistentHistory: (description.options[NSPersistentHistoryTrackingKey] as? NSNumber)?.boolValue == true,
+            postsRemoteChangeNotifications: (description.options[NSPersistentStoreRemoteChangeNotificationPostOptionKey] as? NSNumber)?.boolValue == true,
+            fileProtection: (description.options[NSPersistentStoreFileProtectionKey] as? String) ?? ""
+        )
+    }
+
+    static func destroyValidatedTransitionStore(
+        _ source: ValidatedTransitionStore,
+        afterDestroy: () throws -> Void = {}
+    ) throws {
+        try destroyRelinquishedTransitionStore(source.cleanupCapability, afterDestroy: afterDestroy)
     }
 
     /// Coordinator-owned destruction is available only for task-owned
@@ -355,7 +518,7 @@ final class PersistenceController: @unchecked Sendable {
     ) throws -> PersistentStoreCleanupCapability {
         lock.lock()
         defer { lock.unlock() }
-        try validateOwnedStagingArtifact(artifact)
+        try validateOwnedTransitionArtifact(artifact)
         guard storeIsClosed else { throw PersistentStoreTransitionError.storeNotClosed }
         let previousStoreUUID = try Self.storeUUID(at: artifact.url)
 
@@ -372,7 +535,7 @@ final class PersistenceController: @unchecked Sendable {
         )
     }
 
-    /// Destroys only a relinquished task-owned staging artifact. The fresh
+    /// Destroys only a relinquished task-owned transition artifact. The fresh
     /// coordinator is scoped to this call and no former container is retained.
     static func destroyRelinquishedTransitionStore(
         _ capability: PersistentStoreCleanupCapability,
@@ -381,7 +544,7 @@ final class PersistenceController: @unchecked Sendable {
         do {
             try capability.consume { payload in
                 let artifact = payload.artifact
-                guard artifact.purpose == .staging else {
+                guard artifact.purpose == .staging || artifact.purpose == .evidence else {
                     throw PersistentStoreTransitionError.unexpectedStoreURL
                 }
                 if existingSQLiteFamilyURLs(for: artifact.url).isEmpty == false {
@@ -419,7 +582,7 @@ final class PersistenceController: @unchecked Sendable {
     ) throws -> [URL] {
         lock.lock()
         defer { lock.unlock() }
-        try validateOwnedStagingArtifact(artifact)
+        try validateOwnedTransitionArtifact(artifact)
         let files = Self.existingSQLiteFamilyURLs(for: artifact.url)
         guard files.first == artifact.url else {
             throw PersistentStoreTransitionError.transitionFailed(
@@ -429,7 +592,7 @@ final class PersistenceController: @unchecked Sendable {
         return files
     }
 
-    /// Read-only discovery for the one deterministic app-owned staging slot.
+    /// Read-only discovery for one deterministic app-owned transition slot.
     /// It accepts a partial SQLite family after process interruption, but never
     /// a directory, symlink, different filename, or path outside the exact root.
     static func existingOrphanedTransitionStoreFiles(
@@ -508,9 +671,20 @@ final class PersistenceController: @unchecked Sendable {
         }
     }
 
-    private func validateOwnedStagingArtifact(_ artifact: PersistentStoreArtifact) throws {
+    private func closedDescriptor(for url: URL) -> ClosedPersistentStoreDescriptor {
+        ClosedPersistentStoreDescriptor(
+            url: url,
+            mode: descriptor.mode,
+            storeType: NSSQLiteStoreType,
+            usesPersistentHistory: true,
+            postsRemoteChangeNotifications: true,
+            fileProtection: Self.protectionClass
+        )
+    }
+
+    private func validateOwnedTransitionArtifact(_ artifact: PersistentStoreArtifact) throws {
         guard artifact == ownedTransitionArtifact,
-              artifact.purpose == .staging,
+              artifact.purpose == .staging || artifact.purpose == .evidence,
               descriptor.mode == .localOnlySQLite,
               descriptor.url == artifact.url
         else {
@@ -537,7 +711,7 @@ final class PersistenceController: @unchecked Sendable {
         let expected = root.appendingPathComponent(filename, isDirectory: false).standardizedFileURL
         let rootValues = try root.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
         guard
-            artifact.purpose == .staging,
+            artifact.purpose == .staging || artifact.purpose == .evidence,
             filename == URL(fileURLWithPath: filename).lastPathComponent,
             artifact.url == expected,
             expected.deletingLastPathComponent() == root,

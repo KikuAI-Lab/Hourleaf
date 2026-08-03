@@ -1,3 +1,4 @@
+@preconcurrency import CoreData
 import Foundation
 @testable import Hourleaf
 
@@ -364,5 +365,197 @@ enum RestoreFixture {
 
     static func idString(_ value: Int) -> String {
         String(format: "00000000-0000-0000-0000-%012d", value)
+    }
+}
+
+@MainActor
+final class RestoreTestRuntime {
+    let persistence: PersistenceController
+    let repository: CoreDataLedgerRepository
+    private var isClosed = false
+
+    init(
+        storeURL: URL,
+        reopenFailureMessage: @escaping @Sendable () -> String? = { nil }
+    ) {
+        let persistence = PersistenceController(
+            inMemory: false,
+            cloudSyncEnabled: false,
+            storeURL: storeURL,
+            reopenFailureMessage: reopenFailureMessage
+        )
+        self.persistence = persistence
+        repository = CoreDataLedgerRepository(persistence: persistence)
+    }
+
+    func seed(_ records: HourleafBackupRecordsV1) throws {
+        let context = persistence.container.newBackgroundContext()
+        context.undoManager = nil
+        defer {
+            context.performAndWait { context.reset() }
+        }
+        try context.performAndWait {
+            try RawBackupStore.insert(records, into: context)
+        }
+    }
+
+    func readyRuntime() -> RestoreReadyRuntime {
+        RestoreReadyRuntime(persistence: persistence, repository: repository)
+    }
+
+    func close() {
+        guard !isClosed else { return }
+        // Confirmation may intentionally leave a process-local controller
+        // closed after an injected boundary failure. Teardown owns only its
+        // sandbox, so a second close is a harmless no-op here.
+        _ = try? persistence.closePersistentStoreForTransition()
+        isClosed = true
+    }
+}
+
+final class RestoreTestProtectionReader: HourleafFileProtectionReading, @unchecked Sendable {
+    private let value: String?
+
+    init(value: String? = FileProtectionType.completeUntilFirstUserAuthentication.rawValue) {
+        self.value = value
+    }
+
+    func protectionClass(at _: URL) throws -> String? {
+        value
+    }
+}
+
+@MainActor
+final class RestoreTestReminderScheduler: ReminderScheduling {
+    enum Failure: Error {
+        case injected
+    }
+
+    private(set) var requestsAuthorizationCount = 0
+    private(set) var rescheduled: [[ReminderSchedule]] = []
+    var failsReschedule = false
+
+    func requestAuthorization() async throws -> Bool {
+        requestsAuthorizationCount += 1
+        return true
+    }
+
+    func reschedule(_ reminders: [ReminderSchedule]) async throws {
+        rescheduled.append(reminders)
+        if failsReschedule { throw Failure.injected }
+    }
+}
+
+/// Exercises the public repository writer gate from inside the reminder
+/// boundary. A successful restore must keep ordinary writes unavailable until
+/// after this callback, cleanup, journal completion, and terminal readback.
+@MainActor
+final class RestoreLeaseCheckingReminderScheduler: ReminderScheduling {
+    private let repository: CoreDataLedgerRepository
+    private(set) var observedMaintenanceLease = false
+    private(set) var observedOrdinaryWriterBlocked = false
+    private(set) var rescheduled: [[ReminderSchedule]] = []
+
+    init(repository: CoreDataLedgerRepository) {
+        self.repository = repository
+    }
+
+    func requestAuthorization() async throws -> Bool {
+        true
+    }
+
+    func reschedule(_ reminders: [ReminderSchedule]) async throws {
+        rescheduled.append(reminders)
+        observedMaintenanceLease = await repository.maintenanceIsInProgress()
+        guard let reminder = reminders.first else { return }
+        do {
+            try await repository.saveReminder(reminder)
+        } catch let error as LedgerRepositoryError {
+            observedOrdinaryWriterBlocked = error == .maintenanceInProgress
+        } catch {
+            observedOrdinaryWriterBlocked = false
+        }
+    }
+}
+
+final class RestoreLockedCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func increment() {
+        lock.withLock { value += 1 }
+    }
+
+    func read() -> Int {
+        lock.withLock { value }
+    }
+}
+
+final class RestoreOneShotReopenFailure: @unchecked Sendable {
+    private let lock = NSLock()
+    private var pendingMessage: String?
+
+    init(message: String) {
+        pendingMessage = message
+    }
+
+    func consume() -> String? {
+        lock.withLock {
+            defer { pendingMessage = nil }
+            return pendingMessage
+        }
+    }
+}
+
+enum RestoreTestFault: Error {
+    case injected
+}
+
+final class RestoreOneShotFault: @unchecked Sendable {
+    private let lock = NSLock()
+    private let point: RestoreFaultPoint
+    private var didFire = false
+
+    init(point: RestoreFaultPoint) {
+        self.point = point
+    }
+
+    func inject(_ observed: RestoreFaultPoint) throws {
+        guard observed == point else { return }
+        let shouldThrow = lock.withLock {
+            guard !didFire else { return false }
+            didFire = true
+            return true
+        }
+        if shouldThrow {
+            throw RestoreTestFault.injected
+        }
+    }
+}
+
+final class RestoreOneShotAction: @unchecked Sendable {
+    private let lock = NSLock()
+    private let point: RestoreFaultPoint
+    private let action: @Sendable () throws -> Void
+    private var didRun = false
+
+    init(
+        point: RestoreFaultPoint,
+        action: @escaping @Sendable () throws -> Void
+    ) {
+        self.point = point
+        self.action = action
+    }
+
+    func inject(_ observed: RestoreFaultPoint) throws {
+        guard observed == point else { return }
+        let shouldRun = lock.withLock {
+            guard !didRun else { return false }
+            didRun = true
+            return true
+        }
+        if shouldRun {
+            try action()
+        }
     }
 }

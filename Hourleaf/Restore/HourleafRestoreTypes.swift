@@ -30,6 +30,38 @@ struct RestorePreview: Equatable, Sendable {
     let archiveCount: Int
 }
 
+/// The complete logical identity used to decide whether a freshly opened
+/// store is the original ledger (A) or the prepared candidate (B). A digest
+/// alone is deliberately insufficient: the count vector makes every terminal
+/// decision bind the full backup-shaped record set.
+struct RestoreLogicalProof: Equatable, Sendable {
+    let recordsDigest: String
+    let recordCounts: HourleafBackupRecordCountsV1
+}
+
+enum RestoreSelectedTarget: Equatable, Sendable {
+    case original
+    case candidate
+}
+
+struct RestoreCommitResult: Equatable, Sendable {
+    let selectedTarget: RestoreSelectedTarget
+    let recordsDigest: String
+    let recordCounts: HourleafBackupRecordCountsV1
+}
+
+/// The runtime is intentionally returned only after bootstrap has completed
+/// journal preflight and, when necessary, exact recovery proof.
+struct RestoreReadyRuntime: Sendable {
+    let persistence: PersistenceController
+    let repository: CoreDataLedgerRepository
+}
+
+enum RestoreBootstrapResult: Sendable {
+    case ready(RestoreReadyRuntime)
+    case blocked(RedactedRestoreCriticalState)
+}
+
 enum HourleafRestoreError: LocalizedError, Equatable, Sendable {
     case cloudStoreUnsupported
     case invalidFileSelection
@@ -71,6 +103,8 @@ enum RestoreFaultPoint: Equatable, Sendable {
     case candidateStoreDestroyedBeforeProof
     case candidateBackupCleanup
     case journalPhase(String)
+    case confirmationBoundary(String)
+    case recoveryBoundary(String)
 }
 
 /// Tests may inject a deterministic failure after any bounded staging batch or

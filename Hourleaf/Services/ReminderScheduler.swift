@@ -32,7 +32,7 @@ enum ReminderNotificationDestination: String, Sendable {
 }
 
 @MainActor
-protocol ReminderScheduling {
+protocol ReminderScheduling: Sendable {
     func requestAuthorization() async throws -> Bool
     func reschedule(_ reminders: [ReminderSchedule]) async throws
 }

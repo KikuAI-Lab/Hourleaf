@@ -403,7 +403,10 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
             _ = try Self.snapshot(in: context)
             return try HourleafBackupRecordsV1.rawRecords(in: context)
         }
-        guard try HourleafBackupCodec.storeDigest(current) == capture.recordsDigest else {
+        guard
+            try HourleafBackupCodec.storeDigest(current) == capture.recordsDigest,
+            current.counts == capture.recordCounts
+        else {
             throw LedgerRepositoryError.invalidManagedObject(
                 "Hourleaf detected a concurrent local-data change before restore."
             )
@@ -424,7 +427,10 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
             try Self.pinBackupReadGeneration(in: context)
             _ = try Self.snapshot(in: context)
             let records = try HourleafBackupRecordsV1.rawRecords(in: context)
-            guard try HourleafBackupCodec.storeDigest(records) == capture.recordsDigest else {
+            guard
+                try HourleafBackupCodec.storeDigest(records) == capture.recordsDigest,
+                records.counts == capture.recordCounts
+            else {
                 throw LedgerRepositoryError.invalidManagedObject(
                     "Hourleaf detected a concurrent local-data change at the restore boundary."
                 )
@@ -449,12 +455,15 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
         }
         let rawBeforeDigest = try HourleafBackupCodec.storeDigest(rawBefore)
         try ensureNormalized()
-        let rawAfter = try perform { context in
+        let final = try perform { context in
             try Self.pinBackupReadGeneration(in: context)
-            _ = try Self.snapshot(in: context)
-            return try HourleafBackupRecordsV1.rawRecords(in: context)
+            let snapshot = try Self.snapshot(in: context)
+            return (
+                records: try HourleafBackupRecordsV1.rawRecords(in: context),
+                reminderSchedules: snapshot.reminderSchedules
+            )
         }
-        let rawAfterDigest = try HourleafBackupCodec.storeDigest(rawAfter)
+        let rawAfterDigest = try HourleafBackupCodec.storeDigest(final.records)
         guard rawBeforeDigest == rawAfterDigest else {
             throw LedgerRepositoryError.invalidManagedObject(
                 "Hourleaf refused a data-store transition because normalization changed raw records."
@@ -464,8 +473,43 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
             rawBeforeNormalizationDigest: rawBeforeDigest,
             rawAfterNormalizationDigest: rawAfterDigest,
             recordsDigest: rawAfterDigest,
-            recordCounts: rawAfter.counts
+            recordCounts: final.records.counts,
+            reminderSchedules: final.reminderSchedules
         )
+    }
+
+    /// A synchronous Core Data coordinator close must perform its final
+    /// validation while it holds the coordinator barrier. This deliberately
+    /// shares the repository's raw/domain/raw definition without manufacturing
+    /// a second persistence abstraction around a bare SQLite URL.
+    nonisolated static func validateExactRawDomainRaw(
+        in context: NSManagedObjectContext,
+        expectedRecordsDigest: String,
+        expectedRecordCounts: HourleafBackupRecordCountsV1
+    ) throws {
+        try pinBackupReadGeneration(in: context)
+        let rawBefore = try HourleafBackupRecordsV1.rawRecords(in: context)
+        guard
+            try HourleafBackupCodec.storeDigest(rawBefore) == expectedRecordsDigest,
+            rawBefore.counts == expectedRecordCounts
+        else {
+            throw LedgerRepositoryError.invalidManagedObject(
+                "Hourleaf refused a transition because the raw store did not match its expected proof."
+            )
+        }
+
+        _ = try snapshot(in: context)
+
+        try pinBackupReadGeneration(in: context)
+        let rawAfter = try HourleafBackupRecordsV1.rawRecords(in: context)
+        guard
+            try HourleafBackupCodec.storeDigest(rawAfter) == expectedRecordsDigest,
+            rawAfter.counts == expectedRecordCounts
+        else {
+            throw LedgerRepositoryError.invalidManagedObject(
+                "Hourleaf refused a transition because domain validation changed its raw proof."
+            )
+        }
     }
 
     func releaseMaintenanceLease(_ lease: LedgerMaintenanceLease) throws {

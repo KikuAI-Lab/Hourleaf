@@ -34,6 +34,10 @@ struct ValidatedReadback: Equatable, Sendable {
     let rawAfterNormalizationDigest: String
     let recordsDigest: String
     let recordCounts: HourleafBackupRecordCountsV1
+    /// These schedules come from the same final domain snapshot that proved
+    /// the raw-after digest. Restore must never derive notification work from
+    /// a preview, a backup alone, or a stale app model.
+    let reminderSchedules: [ReminderSchedule]
 }
 
 enum LedgerMaintenanceError: LocalizedError, Equatable, Sendable {
