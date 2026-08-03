@@ -4,6 +4,30 @@ import XCTest
 
 @MainActor
 final class PersistenceAndAppModelTests: XCTestCase {
+    func testDefaultPersistentStoreIsLocalOnly() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HourleafLocalDefault-\(UUID().uuidString)", isDirectory: true)
+        let storeURL = directory.appendingPathComponent("Hourleaf.sqlite")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var persistence: PersistenceController?
+        defer {
+            if let persistence {
+                try? closePersistentStores(in: persistence)
+            }
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let opened = PersistenceController(storeURL: storeURL)
+        persistence = opened
+
+        XCTAssertNil(opened.startupError)
+        XCTAssertNil(opened.container.persistentStoreDescriptions.first?.cloudKitContainerOptions)
+        XCTAssertEqual(
+            opened.container.persistentStoreCoordinator.persistentStores.first?.url?.standardizedFileURL,
+            storeURL.standardizedFileURL
+        )
+    }
+
     func testRepositoryRoundTripsEntrySettingsPolicyReminderAndReceipt() async throws {
         let repository = makeRepository()
         var initialSettings = try await repository.loadSettings()

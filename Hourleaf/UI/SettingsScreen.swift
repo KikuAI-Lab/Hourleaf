@@ -121,11 +121,7 @@ struct SettingsScreen: View {
     }
 
     private var privacyDetail: String {
-        #if HOURLEAF_LOCAL_DEVICE
-        String(localized: "settings.privacy_local_detail")
-        #else
         String(localized: "settings.privacy_detail")
-        #endif
     }
 
     private func reminderRow(_ reminder: ReminderSchedule) -> some View {
