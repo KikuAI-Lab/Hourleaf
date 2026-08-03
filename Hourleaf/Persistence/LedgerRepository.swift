@@ -30,6 +30,7 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
     private let clock: @Sendable () -> Date
     private var normalizationComplete = false
     private var normalizationFailure: LedgerRepositoryError?
+    private var maintenanceLease: LedgerMaintenanceLease?
 
     init(
         persistence: PersistenceController,
@@ -40,6 +41,7 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
     }
 
     func ledgerSnapshot() async throws -> LedgerSnapshot {
+        try requireAvailable()
         try ensureNormalized()
         return try perform { context in
             try Self.snapshot(in: context)
@@ -50,6 +52,7 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
     /// attributes from that exact actor-owned context. `LedgerSnapshot` is not
     /// the backup payload because it applies domain fallbacks and projections.
     func portableBackupRecords() async throws -> HourleafBackupRecordsV1 {
+        try requireAvailable()
         try ensureNormalized()
         return try perform { context in
             try Self.pinBackupReadGeneration(in: context)
@@ -59,14 +62,17 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
     }
 
     func fetchEntries() async throws -> [TimeEntry] {
-        try await ledgerSnapshot().activeEntries
+        try requireAvailable()
+        return try await ledgerSnapshot().activeEntries
     }
 
     func fetchAllEntries() async throws -> [LedgerEntryRecord] {
-        try await ledgerSnapshot().entries
+        try requireAvailable()
+        return try await ledgerSnapshot().entries
     }
 
     func apply(_ command: EntryMutationCommand) async throws -> EntryMutationReceipt {
+        try requireAvailable()
         try ensureNormalized()
         let authorizationTime = clock()
         do {
@@ -141,6 +147,7 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
     }
 
     func latestUndoCandidate(asOf: Date = .now) async throws -> EntryUndoCandidate? {
+        try requireAvailable()
         try ensureNormalized()
         return try perform { context in
             try Self.latestUndoCandidate(in: context, asOf: asOf)
@@ -148,10 +155,12 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
     }
 
     func loadSettings() async throws -> AppSettings {
-        try await ledgerSnapshot().settings
+        try requireAvailable()
+        return try await ledgerSnapshot().settings
     }
 
     func saveSettings(_ settings: AppSettings) async throws {
+        try requireAvailable()
         try ensureNormalized()
         try perform { context in
             let request: NSFetchRequest<SettingsEntity> = SettingsEntity.request()
@@ -170,10 +179,12 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
     }
 
     func fetchPolicies() async throws -> [ReportingPolicy] {
-        try await ledgerSnapshot().policies
+        try requireAvailable()
+        return try await ledgerSnapshot().policies
     }
 
     func savePolicy(_ policy: ReportingPolicy) async throws {
+        try requireAvailable()
         try ensureNormalized()
         try perform { context in
             let request: NSFetchRequest<PolicyRevisionEntity> = PolicyRevisionEntity.request()
@@ -190,10 +201,12 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
     }
 
     func fetchReminders() async throws -> [ReminderSchedule] {
-        try await ledgerSnapshot().reminderSchedules
+        try requireAvailable()
+        return try await ledgerSnapshot().reminderSchedules
     }
 
     func saveReminder(_ reminder: ReminderSchedule) async throws {
+        try requireAvailable()
         try ensureNormalized()
         try perform { context in
             let request: NSFetchRequest<ReminderEntity> = ReminderEntity.request()
@@ -213,6 +226,7 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
     }
 
     func deleteReminder(id: UUID) async throws {
+        try requireAvailable()
         try ensureNormalized()
         try perform { context in
             let request: NSFetchRequest<ReminderEntity> = ReminderEntity.request()
@@ -223,10 +237,12 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
     }
 
     func fetchReceipts() async throws -> [ReportReceipt] {
-        try await ledgerSnapshot().receipts
+        try requireAvailable()
+        return try await ledgerSnapshot().receipts
     }
 
     func saveReceipt(_ receipt: ReportReceipt, details: ReportSnapshotDetails?) async throws {
+        try requireAvailable()
         try ensureNormalized()
         try perform { context in
             let request: NSFetchRequest<ReportReceiptEntity> = ReportReceiptEntity.request()
@@ -346,6 +362,121 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
         }
     }
 
+    /// The lease is installed in this exact actor turn before normalization or
+    /// a Core Data context can be opened for the caller's restore operation.
+    /// Every later ordinary repository message observes the gate first.
+    func acquireMaintenanceLease() throws -> LedgerMaintenanceLease {
+        guard maintenanceLease == nil else {
+            throw LedgerMaintenanceError.alreadyInProgress
+        }
+        let lease = LedgerMaintenanceLease(token: UUID())
+        maintenanceLease = lease
+        return lease
+    }
+
+    func maintenanceCapture(for lease: LedgerMaintenanceLease) throws -> LedgerMaintenanceCapture {
+        try require(lease)
+        try ensureNormalized()
+        let records = try perform { context in
+            try Self.pinBackupReadGeneration(in: context)
+            _ = try Self.snapshot(in: context)
+            return try HourleafBackupRecordsV1.rawRecords(in: context)
+        }
+        return LedgerMaintenanceCapture(
+            records: records,
+            recordsDigest: try HourleafBackupCodec.storeDigest(records),
+            recordCounts: records.counts
+        )
+    }
+
+    /// Detects a write from any unexpected second repository/context before a
+    /// closed-store operation. The transaction must not call this a success
+    /// merely because its earlier actor snapshot was coherent.
+    func currentStoreMatchesCapture(
+        _ capture: LedgerMaintenanceCapture,
+        for lease: LedgerMaintenanceLease
+    ) throws {
+        try require(lease)
+        try ensureNormalized()
+        let current = try perform { context in
+            try Self.pinBackupReadGeneration(in: context)
+            _ = try Self.snapshot(in: context)
+            return try HourleafBackupRecordsV1.rawRecords(in: context)
+        }
+        guard try HourleafBackupCodec.storeDigest(current) == capture.recordsDigest else {
+            throw LedgerRepositoryError.invalidManagedObject(
+                "Hourleaf detected a concurrent local-data change before restore."
+            )
+        }
+    }
+
+    /// Performs the last exact-A digest comparison and closes the live store
+    /// under the same Core Data coordinator critical section. A second context
+    /// therefore either commits before this final raw read (and is detected) or
+    /// cannot commit until the persistent store has been removed.
+    func validateCaptureAndCloseStore(
+        _ capture: LedgerMaintenanceCapture,
+        for lease: LedgerMaintenanceLease
+    ) throws -> ClosedPersistentStoreDescriptor {
+        try require(lease)
+        try ensureNormalized()
+        return try persistence.closePersistentStoreForTransition { context in
+            try Self.pinBackupReadGeneration(in: context)
+            _ = try Self.snapshot(in: context)
+            let records = try HourleafBackupRecordsV1.rawRecords(in: context)
+            guard try HourleafBackupCodec.storeDigest(records) == capture.recordsDigest else {
+                throw LedgerRepositoryError.invalidManagedObject(
+                    "Hourleaf detected a concurrent local-data change at the restore boundary."
+                )
+            }
+        }
+    }
+
+    /// A new container has no valid normalization cache. Clear both the
+    /// success and failure memoization before the first readback so an old
+    /// startup failure can never be reported as a successful replacement.
+    func resetAfterPersistentStoreTransition(for lease: LedgerMaintenanceLease) throws {
+        try require(lease)
+        normalizationComplete = false
+        normalizationFailure = nil
+    }
+
+    func validatedReadback(for lease: LedgerMaintenanceLease) throws -> ValidatedReadback {
+        try require(lease)
+        let rawBefore = try perform { context in
+            try Self.pinBackupReadGeneration(in: context)
+            return try HourleafBackupRecordsV1.rawRecords(in: context)
+        }
+        let rawBeforeDigest = try HourleafBackupCodec.storeDigest(rawBefore)
+        try ensureNormalized()
+        let rawAfter = try perform { context in
+            try Self.pinBackupReadGeneration(in: context)
+            _ = try Self.snapshot(in: context)
+            return try HourleafBackupRecordsV1.rawRecords(in: context)
+        }
+        let rawAfterDigest = try HourleafBackupCodec.storeDigest(rawAfter)
+        guard rawBeforeDigest == rawAfterDigest else {
+            throw LedgerRepositoryError.invalidManagedObject(
+                "Hourleaf refused a data-store transition because normalization changed raw records."
+            )
+        }
+        return ValidatedReadback(
+            rawBeforeNormalizationDigest: rawBeforeDigest,
+            rawAfterNormalizationDigest: rawAfterDigest,
+            recordsDigest: rawAfterDigest,
+            recordCounts: rawAfter.counts
+        )
+    }
+
+    func releaseMaintenanceLease(_ lease: LedgerMaintenanceLease) throws {
+        try require(lease)
+        maintenanceLease = nil
+    }
+
+    func maintenanceIsInProgress() -> Bool {
+        maintenanceLease != nil
+    }
+
     private func ensureNormalized() throws {
         if let normalizationFailure { throw normalizationFailure }
         guard !normalizationComplete else { return }
@@ -371,6 +502,18 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
             let wrapped = LedgerRepositoryError.normalizationFailed(error.localizedDescription)
             normalizationFailure = wrapped
             throw wrapped
+        }
+    }
+
+    private func requireAvailable() throws {
+        guard maintenanceLease == nil else {
+            throw LedgerRepositoryError.maintenanceInProgress
+        }
+    }
+
+    private func require(_ lease: LedgerMaintenanceLease) throws {
+        guard maintenanceLease == lease else {
+            throw LedgerMaintenanceError.invalidLease
         }
     }
 

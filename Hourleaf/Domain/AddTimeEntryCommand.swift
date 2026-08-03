@@ -22,6 +22,7 @@ enum LedgerRepositoryError: LocalizedError, Equatable, Sendable {
     case persistenceUnavailable(String)
     case invalidManagedObject(String)
     case normalizationFailed(String)
+    case maintenanceInProgress
 
     var errorDescription: String? {
         switch self {
@@ -29,6 +30,8 @@ enum LedgerRepositoryError: LocalizedError, Equatable, Sendable {
              let .invalidManagedObject(message),
              let .normalizationFailed(message):
             message
+        case .maintenanceInProgress:
+            String(localized: "error.restore_in_progress")
         }
     }
 }
