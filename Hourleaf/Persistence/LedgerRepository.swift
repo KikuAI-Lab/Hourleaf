@@ -18,7 +18,7 @@ protocol LedgerRepository: Sendable {
     func saveReceipt(_ receipt: ReportReceipt, details: ReportSnapshotDetails?) async throws
 }
 
-actor CoreDataLedgerRepository: LedgerRepository {
+actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
     private static let settingsID = UUID(uuidString: "4E777EA2-6E2E-4C02-AC50-734F6F8B91E1")!
     private static let dataRevision = 2
     private static let appSource = "appQuickEntry"
@@ -43,6 +43,18 @@ actor CoreDataLedgerRepository: LedgerRepository {
         try ensureNormalized()
         return try perform { context in
             try Self.snapshot(in: context)
+        }
+    }
+
+    /// Backup must begin with the normal domain validation, then read the raw
+    /// attributes from that exact actor-owned context. `LedgerSnapshot` is not
+    /// the backup payload because it applies domain fallbacks and projections.
+    func portableBackupRecords() async throws -> HourleafBackupRecordsV1 {
+        try ensureNormalized()
+        return try perform { context in
+            try Self.pinBackupReadGeneration(in: context)
+            _ = try Self.snapshot(in: context)
+            return try HourleafBackupRecordsV1.rawRecords(in: context)
         }
     }
 
@@ -395,6 +407,18 @@ private enum EntryMutationRetry: Error {
 }
 
 private extension CoreDataLedgerRepository {
+    /// Snapshot and raw DTO fetches must observe one Core Data generation even
+    /// when a CloudKit/import context saves outside this repository actor.
+    /// Query generations are unavailable for the in-memory store used by unit
+    /// tests, where there is no external-store merge to pin against.
+    static func pinBackupReadGeneration(in context: NSManagedObjectContext) throws {
+        let stores = context.persistentStoreCoordinator?.persistentStores ?? []
+        guard !stores.isEmpty, !stores.allSatisfy({ $0.type == NSInMemoryStoreType }) else {
+            return
+        }
+        try context.setQueryGenerationFrom(.current)
+    }
+
     static func applyNew(
         _ command: EntryMutationCommand,
         in context: NSManagedObjectContext,
@@ -1590,7 +1614,13 @@ private extension CoreDataLedgerRepository {
         let request: NSFetchRequest<ReportReceiptEntity> = ReportReceiptEntity.request()
         request.predicate = NSPredicate(format: "monthKey == %@", monthKey)
         let versions = try context.fetch(request).map(\.version)
-        return max((versions.max() ?? 0) + 1, 1)
+        let current = max(versions.max() ?? 0, 0)
+        guard current < Int32.max else {
+            throw LedgerRepositoryError.invalidManagedObject(
+                "Saved report versions are exhausted for this month."
+            )
+        }
+        return current + 1
     }
 
     static func newestReceipt(

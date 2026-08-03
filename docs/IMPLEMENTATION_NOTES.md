@@ -45,6 +45,12 @@ MVP is accepted.
   Open Add Time. Record commands use the same validated repository actor as the
   app; opening the form and tapping a reminder only route to a blank quick-entry
   draft and never create time automatically.
+- Portable backup v1 is a canonical, password-free `.hourleafbackup` JSON file.
+  It preserves the exact raw values of all ten V2 entities, uses SHA-256 for
+  corruption detection, never overwrites an existing destination, and is
+  protected before its first byte is written. A portable backup is readable by
+  anyone who obtains the file, so the future UI must warn plainly when notes are
+  included.
 
 ## Delivery gates
 
@@ -109,3 +115,26 @@ MVP is accepted.
   stopped before installing because Xcode had no signed-in Personal Team
   account; no app or data on the physical iPhone was changed. Device lifecycle,
   Action Button, and reminder-tap acceptance remain an owner-controlled gate.
+
+## Verification snapshot — 2026-08-03 (roadmap Slice 4)
+
+- The accepted backup format covers all 10 V2 entities and all 115 model
+  attributes, including explicit `nil` values, Unicode notes, soft-deleted
+  entries, mutation histories, report snapshots, reminders, presets, archives,
+  settings, and legacy compatibility values.
+- Strict canonical JSON, SHA-256, bounded input and record counts, graph
+  validation, exact raw Core Data mapping, and atomic no-overwrite publication
+  are covered by 26 focused backup tests. The stable golden fixture remains
+  3,387 bytes with checksum
+  `23be45de3687f2200b02f3c87dc42722ab67d10ece3e9d74e3c591631cc66533`.
+- After a minimality pass removed only dead and redundant comparisons, the
+  backup branch passed 100/100 tests serially. Rebasing it over the accepted
+  Shortcuts slice produced a final 115/115 combined pass. Unsigned Debug and
+  Release device builds and Xcode Analyze also passed; the Core Data model,
+  project, entitlements, privacy manifest, and dependency surface remain
+  unchanged.
+- A Sol Max adversarial review returned GO with no P0 or P1 findings. Signed
+  device file-protection readback and File Provider behavior remain Slice 5
+  gates. Restore must validate a disposable store, create a verified
+  pre-restore backup, replace the whole local store, and prove an exact digest
+  after relaunch before any real iPhone ledger can be touched.
