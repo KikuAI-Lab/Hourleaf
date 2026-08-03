@@ -174,6 +174,86 @@ final class RestoreJournalTests: XCTestCase {
         XCTAssertFalse(RestoreJournalCodecV1.canTransition(from: .critical, to: .rollbackStarted))
     }
 
+    func testPreRestoreBackupVerifiedDirectlySelectsAPendingSequence3() throws {
+        try assertDirectAPending(
+            from: .preRestoreBackupVerified,
+            expectedSequence: 3,
+            expectsPhysicalA: false
+        )
+    }
+
+    func testOldStoreCopyStartedDirectlySelectsAPendingSequence4() throws {
+        try assertDirectAPending(
+            from: .oldStoreCopyStarted,
+            expectedSequence: 4,
+            expectsPhysicalA: false
+        )
+    }
+
+    func testOldStoreCopyVerifiedDirectlySelectsAPendingSequence5() throws {
+        try assertDirectAPending(
+            from: .oldStoreCopyVerified,
+            expectedSequence: 5,
+            expectsPhysicalA: true
+        )
+    }
+
+    func testAPendingSequence3And4ForbidPhysicalAEvidence() throws {
+        for sequence in [Int64(3), 4] {
+            let content = try aPendingJournal(sequence: sequence)
+            XCTAssertNoThrow(try RestoreJournalCodecV1.validate(content: content))
+
+            var inventedPhysical = content
+            inventedPhysical.physicalAStoreUUID = physicalUUID
+            inventedPhysical.physicalARecordsDigest = content.aRecordsDigest
+            XCTAssertThrowsError(
+                try RestoreJournalCodecV1.validate(content: inventedPhysical),
+                "A-pending sequence \(sequence) must not invent physical-A evidence."
+            )
+        }
+    }
+
+    func testAPendingSequence5And7Through9RequirePhysicalAEvidence() throws {
+        for sequence in [Int64(5), 7, 8, 9] {
+            let content = try aPendingJournal(sequence: sequence)
+            XCTAssertNoThrow(try RestoreJournalCodecV1.validate(content: content))
+
+            var missingPhysical = content
+            missingPhysical.physicalAStoreUUID = nil
+            missingPhysical.physicalARecordsDigest = nil
+            XCTAssertThrowsError(
+                try RestoreJournalCodecV1.validate(content: missingPhysical),
+                "A-pending sequence \(sequence) must retain physical-A evidence."
+            )
+        }
+    }
+
+    func testCriticalAPendingProjectionUsesSourceSequenceMinusOne() throws {
+        for sourceSequence in [Int64(3), 4, 5, 7, 8, 9] {
+            var critical = try aPendingJournal(sequence: sourceSequence)
+            critical.phase = .critical
+            critical.sequence = sourceSequence + 1
+            critical.criticalFromPhase = .oldStoreVerifiedRemindersPending
+            critical.criticalReasonCode = "recovery-evidence-failed"
+            XCTAssertNoThrow(
+                try RestoreJournalCodecV1.validate(content: critical),
+                "Critical projection must use A-pending source sequence \(sourceSequence)."
+            )
+
+            if sourceSequence == 3 || sourceSequence == 4 {
+                critical.physicalAStoreUUID = physicalUUID
+                critical.physicalARecordsDigest = critical.aRecordsDigest
+            } else {
+                critical.physicalAStoreUUID = nil
+                critical.physicalARecordsDigest = nil
+            }
+            XCTAssertThrowsError(
+                try RestoreJournalCodecV1.validate(content: critical),
+                "Critical projection accepted evidence for the wrong source sequence."
+            )
+        }
+    }
+
     func testEvidenceMatrixRejectsFutureFieldsAndOversizedBackupEvidence() throws {
         let backup = try verifiedPortableA()
         let basename = portableBasename(for: backup)
@@ -264,61 +344,40 @@ final class RestoreJournalTests: XCTestCase {
         XCTAssertThrowsError(try RestoreJournalCodecV1.encode(content: invalidCritical))
     }
 
-    func testTerminalDecisionUsesExactEvidenceAndRecoveryTable() throws {
+    func testCompleteAcceptsOnlyFourCorrectedTerminalPairs() throws {
         let allowed: [(RestoreJournalPhase, RestoreTerminalTargetV1)] = [
             (.prepared, .unstarted),
             (.maintenanceAcquired, .a),
-            (.preRestoreBackupVerified, .a),
-            (.oldStoreCopyStarted, .a),
-            (.oldStoreCopyVerified, .a),
-            (.replacementStarted, .a),
-            (.replacementStarted, .b),
-            (.replacementReturned, .b),
             (.newStoreVerifiedRemindersPending, .b),
-            (.rollbackStarted, .a),
             (.oldStoreVerifiedRemindersPending, .a)
         ]
-        for (phase, target) in allowed {
+        let targets: [RestoreTerminalTargetV1] = [.unstarted, .a, .b]
+
+        for phase in RestoreJournalPhase.allCases {
             let content = try journal(for: phase)
-            XCTAssertNoThrow(
-                try RestoreJournalCodecV1.validateTerminalDecision(
-                    terminalDecision(for: content, target: target),
-                    against: content
-                ),
-                "Expected \(phase) -> \(target) to be terminalizable."
-            )
+            for target in targets {
+                let operation = {
+                    try RestoreJournalCodecV1.validateTerminalDecision(
+                        self.terminalDecision(for: content, target: target),
+                        against: content
+                    )
+                }
+                if allowed.contains(where: { $0.0 == phase && $0.1 == target }) {
+                    XCTAssertNoThrow(
+                        try operation(),
+                        "Expected \(phase) -> \(target) to be terminalizable."
+                    )
+                } else {
+                    XCTAssertThrowsError(
+                        try operation(),
+                        "Unexpected terminal pair \(phase) -> \(target)."
+                    )
+                }
+            }
         }
 
-        let replacementReturned = try journal(for: .replacementReturned)
-        XCTAssertThrowsError(
-            try RestoreJournalCodecV1.validateTerminalDecision(
-                terminalDecision(for: replacementReturned, target: .a),
-                against: replacementReturned
-            )
-        )
         let bPending = try journal(for: .newStoreVerifiedRemindersPending)
-        XCTAssertThrowsError(
-            try RestoreJournalCodecV1.validateTerminalDecision(
-                terminalDecision(for: bPending, target: .a),
-                against: bPending
-            )
-        )
-        let rollbackStarted = try journal(for: .rollbackStarted)
-        XCTAssertThrowsError(
-            try RestoreJournalCodecV1.validateTerminalDecision(
-                terminalDecision(for: rollbackStarted, target: .b),
-                against: rollbackStarted
-            )
-        )
-        let critical = try journal(for: .critical)
-        XCTAssertThrowsError(
-            try RestoreJournalCodecV1.validateTerminalDecision(
-                terminalDecision(for: critical, target: .a),
-                against: critical
-            )
-        )
-
-        var wrongEvidence = terminalDecision(for: try journal(for: .replacementStarted), target: .b)
+        var wrongEvidence = terminalDecision(for: bPending, target: .b)
         wrongEvidence = RestoreTerminalDecisionV1(
             transactionID: wrongEvidence.transactionID,
             sourcePhase: wrongEvidence.sourcePhase,
@@ -326,10 +385,128 @@ final class RestoreJournalTests: XCTestCase {
             recordsDigest: digest("wrong"),
             recordCounts: wrongEvidence.recordCounts
         )
-        let replacementStarted = try journal(for: .replacementStarted)
         XCTAssertThrowsError(
-            try RestoreJournalCodecV1.validateTerminalDecision(wrongEvidence, against: replacementStarted)
+            try RestoreJournalCodecV1.validateTerminalDecision(wrongEvidence, against: bPending)
         )
+    }
+
+    func testCompleteRejectsEveryJournalBoundPrePendingAndIntermediatePhase() throws {
+        let forbiddenPhases: [RestoreJournalPhase] = [
+            .preRestoreBackupVerified,
+            .oldStoreCopyStarted,
+            .oldStoreCopyVerified,
+            .replacementStarted,
+            .replacementReturned,
+            .rollbackStarted
+        ]
+        for phase in forbiddenPhases {
+            let content = try journal(for: phase)
+            for target in [RestoreTerminalTargetV1.unstarted, .a, .b] {
+                XCTAssertThrowsError(
+                    try RestoreJournalCodecV1.validateTerminalDecision(
+                        terminalDecision(for: content, target: target),
+                        against: content
+                    ),
+                    "Pre-pending/intermediate phase \(phase) terminalized as \(target)."
+                )
+            }
+        }
+    }
+
+    func testMissingPortableABeforePendingIsCriticalForEveryDirectSource() throws {
+        let backup = try verifiedPortableA()
+        for source in directAPendingSources {
+            let sandbox = try makeSandbox()
+            defer { try? FileManager.default.removeItem(at: sandbox) }
+            let root = sandbox.appendingPathComponent(source.rawValue, isDirectory: true)
+            let store = makeStore(root: root)
+            let basename = try advanceToDirectAPendingSource(store, source: source, backup: backup)
+            let portableURL = root.appendingPathComponent("active/\(basename)")
+            try FileManager.default.removeItem(at: portableURL)
+
+            XCTAssertEqual(
+                try makeStore(root: root).inspectBeforeStoreLoad(),
+                .critical(RedactedRestoreCriticalState(reasonCode: "untrusted-transaction")),
+                "Missing portable A before \(source) became trusted."
+            )
+            XCTAssertFalse(FileManager.default.fileExists(atPath: portableURL.path))
+        }
+    }
+
+    func testMissingPortableAAfterDirectPendingRemainsTrustedAndCompletesA() throws {
+        let backup = try verifiedPortableA()
+        for source in directAPendingSources {
+            let sandbox = try makeSandbox()
+            defer { try? FileManager.default.removeItem(at: sandbox) }
+            let root = sandbox.appendingPathComponent(source.rawValue, isDirectory: true)
+            let store = makeStore(root: root)
+            let basename = try advanceToDirectAPendingSource(store, source: source, backup: backup)
+            try store.advance(to: .oldStoreVerifiedRemindersPending) { _ in }
+
+            let portableURL = root.appendingPathComponent("active/\(basename)")
+            try FileManager.default.removeItem(at: portableURL)
+            let fresh = makeStore(root: root)
+            let recovered = try recoveredTransaction(fresh)
+            XCTAssertEqual(recovered.journal.content.phase, .oldStoreVerifiedRemindersPending)
+            XCTAssertEqual(recovered.journal.content.sequence, directAPendingSequence(after: source))
+            XCTAssertFalse(FileManager.default.fileExists(atPath: portableURL.path))
+
+            try fresh.complete(try terminalDecision(from: fresh, target: .a))
+            XCTAssertEqual(try fresh.inspectBeforeStoreLoad(), .idle)
+        }
+    }
+
+    func testDirectPendingJournalFaultLeavesOldOrNewTrustedStateWithPortableA() throws {
+        let backup = try verifiedPortableA()
+        let faultPoints: [RestoreJournalFaultPoint] = [
+            .afterPayloadWrite(.journal),
+            .afterFileSync(.journal),
+            .afterPartialReadback(.journal),
+            .afterRename(.journal),
+            .afterDirectorySync(.journal),
+            .afterFinalReadback(.journal)
+        ]
+        let newJournalFaultPoints: [RestoreJournalFaultPoint] = [
+            .afterRename(.journal),
+            .afterDirectorySync(.journal),
+            .afterFinalReadback(.journal)
+        ]
+
+        for source in directAPendingSources {
+            for point in faultPoints {
+                let sandbox = try makeSandbox()
+                defer { try? FileManager.default.removeItem(at: sandbox) }
+                let root = sandbox.appendingPathComponent(
+                    "\(source.rawValue)-\(UUID().uuidString)",
+                    isDirectory: true
+                )
+                let normal = makeStore(root: root)
+                let basename = try advanceToDirectAPendingSource(normal, source: source, backup: backup)
+                let sourceJournal = try recoveredTransaction(normal).journal.content
+                let portableURL = root.appendingPathComponent("active/\(basename)")
+                let portableBytes = try Data(contentsOf: portableURL)
+                let failing = makeStore(root: root, faultInjector: { observed in
+                    if observed == point { throw JournalInjectedFailure.failed }
+                })
+
+                XCTAssertThrowsError(
+                    try failing.advance(to: .oldStoreVerifiedRemindersPending) { _ in },
+                    "Expected injected write fault \(point) from \(source)."
+                )
+                let recovered = try recoveredTransaction(makeStore(root: root))
+                if newJournalFaultPoints.contains(point) {
+                    XCTAssertEqual(recovered.journal.content.phase, .oldStoreVerifiedRemindersPending)
+                    XCTAssertEqual(
+                        recovered.journal.content.sequence,
+                        directAPendingSequence(after: source)
+                    )
+                } else {
+                    XCTAssertEqual(recovered.journal.content.phase, source)
+                    XCTAssertEqual(recovered.journal.content.sequence, sourceJournal.sequence)
+                }
+                XCTAssertEqual(try Data(contentsOf: portableURL), portableBytes)
+            }
+        }
     }
 
     func testArmAdvanceAndTerminalCleanupUseTrustedCanonicalFiles() throws {
@@ -1147,6 +1324,116 @@ final class RestoreJournalTests: XCTestCase {
         journal.portableARecordsDigest = backup.recordsDigest
     }
 
+    private func assertDirectAPending(
+        from source: RestoreJournalPhase,
+        expectedSequence: Int64,
+        expectsPhysicalA: Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        let sandbox = try makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let root = sandbox.appendingPathComponent(source.rawValue, isDirectory: true)
+        let store = makeStore(root: root)
+        let backup = try verifiedPortableA()
+        let basename = try advanceToDirectAPendingSource(store, source: source, backup: backup)
+        let current = try recoveredTransaction(store).journal.content
+
+        var wrongSequence = current
+        wrongSequence.phase = .oldStoreVerifiedRemindersPending
+        wrongSequence.sequence = wrongDirectAPendingSequence(after: source)
+        XCTAssertNoThrow(
+            try RestoreJournalCodecV1.validate(content: wrongSequence),
+            "Wrong-sequence fixture must itself be a valid journal.",
+            file: file,
+            line: line
+        )
+        XCTAssertThrowsError(
+            try RestoreJournalCodecV1.validateTransition(from: current, to: wrongSequence),
+            "Direct A-pending transition accepted the wrong sequence.",
+            file: file,
+            line: line
+        )
+
+        try store.advance(to: .oldStoreVerifiedRemindersPending) { _ in }
+        let pending = try recoveredTransaction(makeStore(root: root)).journal.content
+        XCTAssertEqual(pending.phase, .oldStoreVerifiedRemindersPending, file: file, line: line)
+        XCTAssertEqual(pending.sequence, expectedSequence, file: file, line: line)
+        XCTAssertEqual(pending.physicalAStoreUUID != nil, expectsPhysicalA, file: file, line: line)
+        XCTAssertEqual(pending.physicalARecordsDigest != nil, expectsPhysicalA, file: file, line: line)
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: root.appendingPathComponent("active/\(basename)").path),
+            file: file,
+            line: line
+        )
+    }
+
+    @discardableResult
+    private func advanceToDirectAPendingSource(
+        _ store: RestoreJournalStoreV1,
+        source: RestoreJournalPhase,
+        backup: VerifiedHourleafBackupV1
+    ) throws -> String {
+        guard directAPendingSources.contains(source) else {
+            throw JournalInjectedFailure.failed
+        }
+        try armMaintenance(store, backup: backup)
+        let active = try recoveredTransaction(store).activeDirectory
+        let basename = portableBasename(for: backup)
+        try backup.data.write(to: active.appendingPathComponent(basename))
+        try store.advance(to: .preRestoreBackupVerified) { journal in
+            bindPortableAEvidence(&journal, basename: basename, from: backup)
+        }
+        if source == .preRestoreBackupVerified { return basename }
+
+        try store.advance(to: .oldStoreCopyStarted) { _ in }
+        if source == .oldStoreCopyStarted { return basename }
+
+        try store.advance(to: .oldStoreCopyVerified) { journal in
+            journal.physicalAStoreUUID = physicalUUID
+            journal.physicalARecordsDigest = backup.recordsDigest
+        }
+        return basename
+    }
+
+    private func directAPendingSequence(after source: RestoreJournalPhase) -> Int64 {
+        switch source {
+        case .preRestoreBackupVerified: 3
+        case .oldStoreCopyStarted: 4
+        case .oldStoreCopyVerified: 5
+        default: -1
+        }
+    }
+
+    private func wrongDirectAPendingSequence(after source: RestoreJournalPhase) -> Int64 {
+        switch source {
+        case .preRestoreBackupVerified: 4
+        case .oldStoreCopyStarted: 3
+        case .oldStoreCopyVerified: 7
+        default: -1
+        }
+    }
+
+    private func aPendingJournal(sequence: Int64) throws -> RestoreJournalContentV1 {
+        let source: RestoreJournalPhase
+        switch sequence {
+        case 3:
+            source = .preRestoreBackupVerified
+        case 4:
+            source = .oldStoreCopyStarted
+        case 5:
+            source = .oldStoreCopyVerified
+        case 7, 8, 9:
+            source = .oldStoreVerifiedRemindersPending
+        default:
+            throw JournalInjectedFailure.failed
+        }
+        var content = try journal(for: source)
+        content.phase = .oldStoreVerifiedRemindersPending
+        content.sequence = sequence
+        return content
+    }
+
     private func journal(for phase: RestoreJournalPhase) throws -> RestoreJournalContentV1 {
         if phase == .prepared { return preparedJournal() }
         let backup = try verifiedPortableA()
@@ -1357,6 +1644,9 @@ final class RestoreJournalTests: XCTestCase {
 
     private var transactionID: String { "a0000000-0000-0000-0000-000000000001" }
     private var physicalUUID: String { "00000000-0000-0000-0000-000000000002" }
+    private var directAPendingSources: [RestoreJournalPhase] {
+        [.preRestoreBackupVerified, .oldStoreCopyStarted, .oldStoreCopyVerified]
+    }
 }
 
 private enum JournalInjectedFailure: Error {

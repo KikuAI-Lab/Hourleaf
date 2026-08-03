@@ -505,8 +505,11 @@ enum RestoreJournalCodecV1 {
         case (.prepared, .maintenanceAcquired),
              (.maintenanceAcquired, .preRestoreBackupVerified),
              (.preRestoreBackupVerified, .oldStoreCopyStarted),
+             (.preRestoreBackupVerified, .oldStoreVerifiedRemindersPending),
              (.oldStoreCopyStarted, .oldStoreCopyVerified),
+             (.oldStoreCopyStarted, .oldStoreVerifiedRemindersPending),
              (.oldStoreCopyVerified, .replacementStarted),
+             (.oldStoreCopyVerified, .oldStoreVerifiedRemindersPending),
              (.replacementStarted, .replacementReturned),
              (.replacementReturned, .newStoreVerifiedRemindersPending),
              (.replacementStarted, .rollbackStarted),
@@ -606,8 +609,9 @@ enum RestoreJournalCodecV1 {
         }
         try validateSequence(content)
 
-        let evidencePhase = try evidenceSourcePhase(for: content)
-        let requirements = evidenceRequirements(for: evidencePhase)
+        let evidencePhase = content.criticalFromPhase ?? content.phase
+        let evidenceSequence = content.phase == .critical ? content.sequence - 1 : content.sequence
+        let requirements = evidenceRequirements(for: evidencePhase, sequence: evidenceSequence)
         let hasA = content.aRecordsDigest != nil
         let hasPortableA = content.portableABasename != nil
         let hasPhysicalA = content.physicalAStoreUUID != nil
@@ -848,20 +852,9 @@ enum RestoreJournalCodecV1 {
         }
     }
 
-    private static func evidenceSourcePhase(
-        for content: RestoreJournalContentV1
-    ) throws -> RestoreJournalPhase {
-        if content.phase == .critical {
-            guard let criticalFromPhase = content.criticalFromPhase else {
-                throw RestoreJournalError.invalidContent("missing critical source phase")
-            }
-            return criticalFromPhase
-        }
-        return content.phase
-    }
-
     private static func evidenceRequirements(
-        for phase: RestoreJournalPhase
+        for phase: RestoreJournalPhase,
+        sequence: Int64
     ) -> RestoreJournalEvidenceRequirementsV1 {
         switch phase {
         case .prepared:
@@ -874,11 +867,16 @@ enum RestoreJournalCodecV1 {
              .replacementStarted,
              .replacementReturned,
              .newStoreVerifiedRemindersPending,
-             .rollbackStarted,
-             .oldStoreVerifiedRemindersPending:
+             .rollbackStarted:
             .init(requiresA: true, requiresPortableA: true, requiresPhysicalA: true)
+        case .oldStoreVerifiedRemindersPending:
+            .init(
+                requiresA: true,
+                requiresPortableA: true,
+                requiresPhysicalA: sequence != 3 && sequence != 4
+            )
         case .critical:
-            // `critical` is projected through `criticalFromPhase` above.
+            // `critical` is projected through its source phase and sequence above.
             .init(requiresA: false, requiresPortableA: false, requiresPhysicalA: false)
         }
     }
@@ -909,7 +907,7 @@ enum RestoreJournalCodecV1 {
         case .replacementReturned: [6]
         case .newStoreVerifiedRemindersPending: [7]
         case .rollbackStarted: [6, 7, 8]
-        case .oldStoreVerifiedRemindersPending: [7, 8, 9]
+        case .oldStoreVerifiedRemindersPending: [3, 4, 5, 7, 8, 9]
         case .critical: []
         }
     }
@@ -921,14 +919,7 @@ enum RestoreJournalCodecV1 {
         switch (phase, target) {
         case (.prepared, .unstarted),
              (.maintenanceAcquired, .a),
-             (.preRestoreBackupVerified, .a),
-             (.oldStoreCopyStarted, .a),
-             (.oldStoreCopyVerified, .a),
-             (.replacementStarted, .a),
-             (.replacementStarted, .b),
-             (.replacementReturned, .b),
              (.newStoreVerifiedRemindersPending, .b),
-             (.rollbackStarted, .a),
              (.oldStoreVerifiedRemindersPending, .a):
             true
         default:
