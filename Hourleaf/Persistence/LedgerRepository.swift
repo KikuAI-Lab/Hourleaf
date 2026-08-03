@@ -9,6 +9,7 @@ protocol LedgerRepository: Sendable {
     func latestUndoCandidate(asOf: Date) async throws -> EntryUndoCandidate?
     func loadSettings() async throws -> AppSettings
     func saveSettings(_ settings: AppSettings) async throws
+    func saveQuickSurfacePreferences(_ value: QuickSurfacePreferences) async throws
     func savePlanningPreferences(_ value: PlanningPreferences) async throws
     func acknowledgeNothingToRecord(
         on day: LocalDay,
@@ -29,6 +30,12 @@ protocol LedgerRepository: Sendable {
 }
 
 extension LedgerRepository {
+    func saveQuickSurfacePreferences(_ value: QuickSurfacePreferences) async throws {
+        throw LedgerRepositoryError.invalidManagedObject(
+            "This repository does not support quick surface preferences."
+        )
+    }
+
     func savePlanningPreferences(_ value: PlanningPreferences) async throws {
         throw LedgerRepositoryError.invalidManagedObject(
             "This repository does not support planning preferences."
@@ -264,6 +271,43 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
             else {
                 throw LedgerRepositoryError.invalidManagedObject(
                     "Hourleaf could not verify saved planning preferences."
+                )
+            }
+        }
+    }
+
+    func saveQuickSurfacePreferences(_ value: QuickSurfacePreferences) async throws {
+        try requireAvailable()
+        try ensureNormalized()
+        let updatedAt = clock()
+
+        try performMutation { context in
+            let request: NSFetchRequest<SettingsEntity> = SettingsEntity.request()
+            let objects = try context.fetch(request)
+            guard
+                objects.count == 1,
+                let object = Self.preferredSettingsObject(in: objects)
+            else {
+                throw LedgerRepositoryError.invalidManagedObject(
+                    "Hourleaf settings are unavailable."
+                )
+            }
+
+            object.timerVisible = value.timerVisible
+            object.widgetPrivacyMode = value.privacyMode.rawValue
+            object.updatedAt = updatedAt
+            try Self.saveIfNeeded(context)
+            context.refreshAllObjects()
+
+            let reread = try context.fetch(request)
+            guard
+                reread.count == 1,
+                let persisted = Self.preferredSettingsObject(in: reread),
+                persisted.timerVisible == value.timerVisible,
+                WidgetPrivacyMode(persistedValue: persisted.widgetPrivacyMode) == value.privacyMode
+            else {
+                throw LedgerRepositoryError.invalidManagedObject(
+                    "Hourleaf could not verify saved quick surface preferences."
                 )
             }
         }
