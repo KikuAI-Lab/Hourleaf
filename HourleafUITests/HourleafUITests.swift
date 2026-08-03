@@ -63,6 +63,53 @@ final class HourleafUITests: XCTestCase {
         XCTAssertFalse(app.buttons["sharePreparedReportButton"].exists)
     }
 
+    func testPaceIsHiddenByDefaultAndToggleShowsServiceOnlyGuide() {
+        let app = launchApp(
+            additionalArguments: [
+                "-seedPaceUITest",
+                "-hourleafTestNow",
+                "2026-04-01T12:00:00Z"
+            ]
+        )
+        app.tabBars.buttons["Progress"].tap()
+
+        XCTAssertTrue(app.staticTexts["360 hr"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["serviceYearPaceText"].exists)
+
+        app.tabBars.buttons["Settings"].tap()
+        let planningToggle = app.switches["planningVisibilityToggle"]
+        XCTAssertTrue(scrollUntilVisible(planningToggle, in: app))
+        planningToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+
+        app.tabBars.buttons["Progress"].tap()
+        let pace = app.staticTexts["serviceYearPaceText"]
+        XCTAssertTrue(pace.waitForExistence(timeout: 5))
+        XCTAssertEqual(
+            pace.label,
+            "For reference: about 10 hr 59 min a week until August 31."
+        )
+        XCTAssertTrue(app.buttons["serviceYearPaceDetails"].exists)
+    }
+
+    func testPaceAboveSixHundredShowsUncappedTotal() {
+        let app = launchApp(
+            additionalArguments: [
+                "-seedPaceAboveGoalUITest",
+                "-enablePlanningUITest",
+                "-hourleafTestNow",
+                "2026-08-01T12:00:00Z"
+            ]
+        )
+        app.tabBars.buttons["Progress"].tap()
+
+        XCTAssertTrue(app.staticTexts["601 hr 15 min"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["serviceYearPaceText"].waitForExistence(timeout: 5))
+        XCTAssertEqual(
+            app.staticTexts["serviceYearPaceText"].label,
+            "600-hour guide reached. Total: 601 hr 15 min."
+        )
+    }
+
     func testPreviousMonthZeroEntryBannerOpensExactMonth() {
         let app = launchApp(
             additionalArguments: [

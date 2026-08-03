@@ -25,6 +25,7 @@ struct ProgressScreen: View {
     private var earliestMonth: MonthKey { model.settings.ledgerStartMonth }
     private var draft: ReportDraft { model.reportDraft(for: selectedMonth) }
     private var lifecycleState: ReportLifecycleState { model.lifecycleState(for: selectedMonth) }
+    private var currentPace: ServiceYearPace { model.currentServiceYearPace() }
 
     private var selectedStateRecord: ReportStateRecord? {
         model.reportStates.first { $0.month == selectedMonth }
@@ -76,6 +77,9 @@ struct ProgressScreen: View {
                     monthSelector
                     totalsCard
                     serviceYearCard
+                    if selectedServiceYearStart != currentPace.start.monthKey {
+                        selectedServiceYearArchiveCard
+                    }
                     reportLifecycleCard
                     reportVersionHistory
                 }
@@ -173,13 +177,109 @@ struct ProgressScreen: View {
     }
 
     private var serviceYearCard: some View {
+        let pace = currentPace
+
+        return VStack(alignment: .leading, spacing: 12) {
+            Text(String(
+                format: String(localized: "pace.service_year_range_format"),
+                AppDateText.range(from: pace.start, through: pace.endInclusive)
+            ))
+            .font(.headline)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("currentServiceYearRange")
+
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 4) {
+                        serviceYearActual(pace)
+                        serviceYearTarget(pace)
+                    }
+                } else {
+                    HStack(alignment: .firstTextBaseline) {
+                        serviceYearActual(pace)
+                        Spacer(minLength: 12)
+                        serviceYearTarget(pace)
+                    }
+                }
+            }
+
+            ProgressView(
+                value: min(Double(pace.actualMinutes), Double(pace.targetMinutes)),
+                total: Double(pace.targetMinutes)
+            )
+            .tint(.green)
+            .accessibilityLabel(String(localized: "progress.service_year"))
+            .accessibilityValue(DurationText.format(minutes: pace.actualMinutes))
+
+            if model.planningPreferences.isPaceVisible {
+                Text(serviceYearPaceText(pace))
+                    .font(.subheadline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("serviceYearPaceText")
+
+                DisclosureGroup(String(localized: "pace.details_title")) {
+                    Text("pace.details")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityIdentifier("serviceYearPaceDetails")
+            }
+        }
+        .hourleafCard()
+        .accessibilityElement(children: .contain)
+    }
+
+    private func serviceYearActual(_ pace: ServiceYearPace) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("pace.actual_label")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(DurationText.format(minutes: pace.actualMinutes))
+                .font(.title3.bold().monospacedDigit())
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func serviceYearTarget(_ pace: ServiceYearPace) -> some View {
+        Text(String(
+            format: String(localized: "pace.target_format"),
+            DurationText.format(minutes: pace.targetMinutes)
+        ))
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func serviceYearPaceText(_ pace: ServiceYearPace) -> String {
+        switch pace.presentation {
+        case let .weekly(minutes):
+            String(
+                format: String(localized: "pace.weekly_format"),
+                DurationText.format(minutes: minutes)
+            )
+        case let .finalDays(remainingMinutes, _):
+            String(
+                format: String(localized: "pace.final_days_format"),
+                DurationText.format(minutes: remainingMinutes)
+            )
+        case .reached:
+            String(
+                format: String(localized: "pace.reached_format"),
+                DurationText.format(minutes: pace.actualMinutes)
+            )
+        }
+    }
+
+    private var selectedServiceYearArchiveCard: some View {
         let yearDraft = selectedServiceYearDraft
         let totalMinutes = yearDraft.actualServiceMinutes + yearDraft.baselineServiceMinutes
         let status = selectedServiceYearStatus
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("progress.service_year")
+                Text("service_year.archive_title")
                     .font(.headline)
                 Spacer()
                 Text("\(totalMinutes / 60) / \(yearDraft.targetMinutes / 60)")

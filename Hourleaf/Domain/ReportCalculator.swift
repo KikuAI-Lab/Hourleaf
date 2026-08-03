@@ -107,9 +107,25 @@ enum ServiceYearCalculator {
     ) -> Int {
         let start = serviceYearStart(containing: day, policy: policy)
         let end = LocalDay(year: start.year + 1, month: policy.startMonth, day: 1)
-        let recorded = entries
-            .filter { $0.kind == .service && $0.day >= start && $0.day < end }
-            .reduce(0) { $0 + $1.minutes }
-        return max(0, baselineMinutes) + recorded
+        let calendar = Calendar.hourleaf
+
+        do {
+            let endDate = try ServiceYearPaceCalculator.validatedDate(for: end, calendar: calendar)
+            guard let inclusiveDate = calendar.date(byAdding: .day, value: -1, to: endDate) else {
+                throw ServiceYearPaceCalculationError.invalidDay(end)
+            }
+            let totals = try ServiceYearActualMinutesCalculator.totals(
+                entries: entries,
+                yearStart: start,
+                yearEnd: end,
+                ledgerStartDay: start,
+                through: LocalDay(inclusiveDate, calendar: calendar),
+                openingMinutes: max(0, baselineMinutes),
+                calendar: calendar
+            )
+            return try ServiceYearPaceCalculator.exactInt(totals.actual)
+        } catch {
+            preconditionFailure("Invalid service-year data: \(error)")
+        }
     }
 }

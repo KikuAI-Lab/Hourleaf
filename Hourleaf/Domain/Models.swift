@@ -85,6 +85,21 @@ struct ReminderSchedule: Identifiable, Equatable, Sendable {
     }
 }
 
+struct PlanningPreferences: Equatable, Sendable {
+    var isPaceVisible: Bool = false
+    var isQuietGapEnabled: Bool = false
+    var quietGapDays: Int = 7
+}
+
+enum DayAcknowledgementStatus: String, Sendable {
+    case nothingToday
+}
+
+enum DayAcknowledgementSource: String, Sendable {
+    case scheduledReminder
+    case quietGap
+}
+
 struct AppSettings: Equatable, Sendable {
     var reportLanguage: ReportLanguage = .preferredForCurrentLocale
     var creditLabelEnglish = "Credit hours"

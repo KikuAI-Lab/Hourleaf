@@ -264,3 +264,15 @@
 "data_management.error.restore_preview" = "The backup file could not be reviewed. Choose a valid Hourleaf backup and try again.";
 "data_management.error.restore" = "The backup could not be restored. Please try again.";
 "data_management.error.csv" = "The CSV file could not be exported. Please try again.";
+"settings.planning" = "Planning";
+"planning.toggle" = "Show weekly guide to 600 hours";
+"planning.footer" = "A private planning aid. You can hide it at any time.";
+"pace.service_year_range_format" = "Service year · %@";
+"pace.actual_label" = "Saved service";
+"pace.target_format" = "600-hour guide: %@";
+"pace.weekly_format" = "For reference: about %@ a week until August 31.";
+"pace.final_days_format" = "Until August 31, %@ remains to the 600-hour guide.";
+"pace.reached_format" = "600-hour guide reached. Total: %@.";
+"pace.details_title" = "How this is calculated";
+"pace.details" = "Based only on saved service time and time entered from before Hourleaf. Credit and monthly minute carry are not included.";
+"service_year.archive_title" = "Selected service year";

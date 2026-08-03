@@ -9,6 +9,12 @@ protocol LedgerRepository: Sendable {
     func latestUndoCandidate(asOf: Date) async throws -> EntryUndoCandidate?
     func loadSettings() async throws -> AppSettings
     func saveSettings(_ settings: AppSettings) async throws
+    func savePlanningPreferences(_ value: PlanningPreferences) async throws
+    func acknowledgeNothingToRecord(
+        on day: LocalDay,
+        source: DayAcknowledgementSource,
+        at: Date
+    ) async throws -> DayAcknowledgementRecord
     func fetchPolicies() async throws -> [ReportingPolicy]
     func savePolicy(_ policy: ReportingPolicy) async throws
     func fetchReminders() async throws -> [ReminderSchedule]
@@ -20,6 +26,24 @@ protocol LedgerRepository: Sendable {
     func prepareReport(_ request: PrepareReportRequest) async throws -> PreparedReportResult
     func markReportSent(_ request: MarkReportSentRequest) async throws -> LedgerSnapshot
     func closeServiceYear(_ request: CloseServiceYearRequest) async throws -> ServiceYearArchiveResult
+}
+
+extension LedgerRepository {
+    func savePlanningPreferences(_ value: PlanningPreferences) async throws {
+        throw LedgerRepositoryError.invalidManagedObject(
+            "This repository does not support planning preferences."
+        )
+    }
+
+    func acknowledgeNothingToRecord(
+        on day: LocalDay,
+        source: DayAcknowledgementSource,
+        at: Date
+    ) async throws -> DayAcknowledgementRecord {
+        throw LedgerRepositoryError.invalidManagedObject(
+            "This repository does not support day acknowledgements."
+        )
+    }
 }
 
 actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
@@ -198,6 +222,133 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
             else {
                 throw LedgerRepositoryError.invalidManagedObject("Hourleaf could not verify saved settings.")
             }
+        }
+    }
+
+    func savePlanningPreferences(_ value: PlanningPreferences) async throws {
+        try requireAvailable()
+        try ensureNormalized()
+        guard (1...365).contains(value.quietGapDays) else {
+            throw LedgerRepositoryError.invalidManagedObject(
+                "Quiet Gap interval must be between 1 and 365 days."
+            )
+        }
+
+        let updatedAt = clock()
+        try performMutation { context in
+            let request: NSFetchRequest<SettingsEntity> = SettingsEntity.request()
+            let objects = try context.fetch(request)
+            guard
+                objects.count == 1,
+                let object = Self.preferredSettingsObject(in: objects)
+            else {
+                throw LedgerRepositoryError.invalidManagedObject(
+                    "Hourleaf settings are unavailable."
+                )
+            }
+
+            object.planningVisible = value.isPaceVisible
+            object.quietGapCheckEnabled = value.isQuietGapEnabled
+            object.quietGapDays = Int16(value.quietGapDays)
+            object.updatedAt = updatedAt
+            try Self.saveIfNeeded(context)
+            context.refreshAllObjects()
+
+            let reread = try context.fetch(request)
+            guard
+                reread.count == 1,
+                let persisted = reread.first,
+                persisted.planningVisible == value.isPaceVisible,
+                persisted.quietGapCheckEnabled == value.isQuietGapEnabled,
+                Int(persisted.quietGapDays) == value.quietGapDays
+            else {
+                throw LedgerRepositoryError.invalidManagedObject(
+                    "Hourleaf could not verify saved planning preferences."
+                )
+            }
+        }
+    }
+
+    func acknowledgeNothingToRecord(
+        on day: LocalDay,
+        source: DayAcknowledgementSource,
+        at: Date
+    ) async throws -> DayAcknowledgementRecord {
+        try requireAvailable()
+        try ensureNormalized()
+        guard let canonicalDay = LocalDay(key: day.key), canonicalDay == day else {
+            throw LedgerRepositoryError.invalidManagedObject(
+                "The acknowledgement day is invalid."
+            )
+        }
+        guard day <= LocalDay(at, calendar: .hourleaf) else {
+            throw LedgerRepositoryError.invalidManagedObject(
+                "A future day cannot be acknowledged."
+            )
+        }
+
+        return try performMutation { context in
+            let settingsRequest: NSFetchRequest<SettingsEntity> = SettingsEntity.request()
+            guard
+                let settingsObject = Self.preferredSettingsObject(
+                    in: try context.fetch(settingsRequest)
+                ),
+                let settings = Self.domainSettings(from: settingsObject)
+            else {
+                throw LedgerRepositoryError.invalidManagedObject(
+                    "Hourleaf settings are unavailable."
+                )
+            }
+            guard day.monthKey >= settings.ledgerStartMonth else {
+                throw LedgerRepositoryError.invalidManagedObject(
+                    "The acknowledgement day is before Hourleaf records begin."
+                )
+            }
+
+            let request: NSFetchRequest<DayAcknowledgementEntity> = DayAcknowledgementEntity.request()
+            request.predicate = NSPredicate(format: "localDay == %@", day.key)
+            let matching = try context.fetch(request)
+            guard matching.count <= 1 else {
+                throw LedgerRepositoryError.invalidManagedObject(
+                    "Hourleaf found duplicate day acknowledgements."
+                )
+            }
+
+            let object = matching.first ?? context.insert(DayAcknowledgementEntity.self)
+            if let existing = matching.first {
+                guard
+                    existing.status == DayAcknowledgementStatus.nothingToday.rawValue,
+                    Self.dayAcknowledgementRecord(from: existing) != nil
+                else {
+                    throw LedgerRepositoryError.invalidManagedObject(
+                        "Hourleaf found an unsupported day acknowledgement."
+                    )
+                }
+            } else {
+                object.id = UUID()
+                object.localDay = day.key
+                object.status = DayAcknowledgementStatus.nothingToday.rawValue
+                object.createdAt = at
+            }
+            object.source = source.rawValue
+            object.updatedAt = at
+
+            try Self.saveIfNeeded(context)
+            context.refreshAllObjects()
+
+            let reread = try context.fetch(request)
+            guard
+                reread.count == 1,
+                let record = reread.first.flatMap(Self.dayAcknowledgementRecord),
+                record.day == day,
+                record.status == DayAcknowledgementStatus.nothingToday.rawValue,
+                record.source == source.rawValue
+            else {
+                throw LedgerRepositoryError.invalidManagedObject(
+                    "Hourleaf could not verify the day acknowledgement."
+                )
+            }
+            return record
         }
     }
 

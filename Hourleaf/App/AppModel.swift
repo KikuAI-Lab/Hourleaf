@@ -19,6 +19,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var reportSnapshots: [ReportSnapshotMetadata] = []
     @Published private(set) var reportStates: [ReportStateRecord] = []
     @Published private(set) var serviceYearArchives: [ServiceYearArchiveRecord] = []
+    @Published private(set) var planningPreferences = PlanningPreferences()
+    @Published private(set) var dayAcknowledgements: [DayAcknowledgementRecord] = []
     @Published private(set) var currentDate: Date
     @Published private(set) var currentMonth: MonthKey
     @Published var selectedReportMonth: MonthKey
@@ -44,6 +46,8 @@ final class AppModel: ObservableObject {
     private var initialSnapshotLoaded = false
     private var settingsSaveGeneration = 0
     private var settingsSaveTask: Task<Void, Never>?
+    private var planningSaveGeneration = 0
+    private var planningSaveTask: Task<Void, Never>?
     private var restoringEntryIDs = Set<UUID>()
     private var isUndoing = false
     private var undoBannerTask: Task<Void, Never>?
@@ -101,6 +105,9 @@ final class AppModel: ObservableObject {
         while let pendingSettingsSave = settingsSaveTask {
             await pendingSettingsSave.value
         }
+        while let pendingPlanningSave = planningSaveTask {
+            await pendingPlanningSave.value
+        }
         while isStoreRefreshInFlight {
             await Task.yield()
         }
@@ -119,6 +126,8 @@ final class AppModel: ObservableObject {
         startupDiagnostic = nil
         settingsSaveGeneration &+= 1
         settingsSaveTask = nil
+        planningSaveGeneration &+= 1
+        planningSaveTask = nil
         storeRefreshRequested = false
         storeRefreshShouldShowUndo = false
         reviewingReportMonths.removeAll()
@@ -292,6 +301,12 @@ final class AppModel: ObservableObject {
         reportSnapshots = snapshot.reportSnapshots
         reportStates = snapshot.reportStates
         serviceYearArchives = snapshot.serviceYearArchives
+        planningPreferences = PlanningPreferences(
+            isPaceVisible: snapshot.settingsMetadata.planningVisible,
+            isQuietGapEnabled: snapshot.settingsMetadata.quietGapCheckEnabled,
+            quietGapDays: snapshot.settingsMetadata.quietGapDays
+        )
+        dayAcknowledgements = snapshot.dayAcknowledgements
         updateSelectedReportMonth(from: snapshot, preferLatestClosed: false)
     }
 
@@ -716,6 +731,71 @@ final class AppModel: ObservableObject {
             containing: day,
             baselineMinutes: baseline
         )
+    }
+
+    func currentServiceYearPace(calendar: Calendar = .hourleaf) -> ServiceYearPace {
+        guard let snapshot = latestLedgerSnapshot else {
+            preconditionFailure("A service-year pace requires a loaded ledger snapshot.")
+        }
+        do {
+            return try ServiceYearPaceCalculator.calculate(
+                records: snapshot.entries,
+                settings: snapshot.settings,
+                asOf: LocalDay(currentDate, calendar: calendar),
+                calendar: calendar
+            )
+        } catch {
+            preconditionFailure("Invalid service-year pace data: \(error)")
+        }
+    }
+
+    func updatePlanningVisibility(_ isVisible: Bool) async {
+        var updated = planningPreferences
+        updated.isPaceVisible = isVisible
+        await enqueuePlanningPreferencesSave(updated).value
+    }
+
+    func queuePlanningVisibilityChange(_ isVisible: Bool) {
+        var updated = planningPreferences
+        updated.isPaceVisible = isVisible
+        enqueuePlanningPreferencesSave(updated)
+    }
+
+    @discardableResult
+    private func enqueuePlanningPreferencesSave(
+        _ updated: PlanningPreferences
+    ) -> Task<Void, Never> {
+        planningPreferences = updated
+        planningSaveGeneration &+= 1
+        let generation = planningSaveGeneration
+        let previousTask = planningSaveTask
+        let repository = repository
+        let task = Task { @MainActor [weak self] in
+            await previousTask?.value
+            guard let self else { return }
+
+            do {
+                try await repository.savePlanningPreferences(updated)
+                let snapshot = try await repository.ledgerSnapshot()
+                guard generation == self.planningSaveGeneration else { return }
+                self.apply(snapshot)
+            } catch {
+                guard generation == self.planningSaveGeneration else { return }
+                self.present(error)
+                do {
+                    let snapshot = try await repository.ledgerSnapshot()
+                    guard generation == self.planningSaveGeneration else { return }
+                    self.apply(snapshot)
+                } catch {
+                    self.present(error)
+                }
+            }
+            if generation == self.planningSaveGeneration {
+                self.planningSaveTask = nil
+            }
+        }
+        planningSaveTask = task
+        return task
     }
 
     func saveSettings(_ updated: AppSettings) async {

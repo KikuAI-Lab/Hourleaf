@@ -243,6 +243,40 @@ final class HourleafAppLauncher: ObservableObject {
             if arguments.contains("-ledgerStartsCurrentMonthUITest") {
                 settings.ledgerStartMonth = model.currentMonth
                 await model.saveSettings(settings)
+            } else if arguments.contains("-seedPaceUITest") {
+                settings.ledgerStartMonth = MonthKey(year: 2026, month: 4)
+                settings.baselineServiceYearMinutes = 300 * 60
+                settings.baselineServiceYearStart = MonthKey(year: 2025, month: 9)
+                await model.saveSettings(settings)
+
+                let seedDate = LocalDay(year: 2026, month: 4, day: 1)
+                    .date(calendar: .hourleaf)
+                _ = await model.addEntry(
+                    kind: .service,
+                    date: seedDate,
+                    hours: 60,
+                    minutes: 0,
+                    note: nil
+                )
+                _ = await model.addEntry(
+                    kind: .credit,
+                    date: seedDate,
+                    hours: 50,
+                    minutes: 0,
+                    note: nil
+                )
+                _ = await model.addEntry(
+                    kind: .credit,
+                    date: seedDate,
+                    hours: 50,
+                    minutes: 0,
+                    note: nil
+                )
+            } else if arguments.contains("-seedPaceAboveGoalUITest") {
+                settings.ledgerStartMonth = MonthKey(year: 2025, month: 9)
+                settings.baselineServiceYearMinutes = 36_075
+                settings.baselineServiceYearStart = MonthKey(year: 2025, month: 9)
+                await model.saveSettings(settings)
             } else if arguments.contains("-seedServiceYearUITest") {
                 settings.ledgerStartMonth = MonthKey(year: 2025, month: GoalPolicy.regularPioneer.startMonth)
                 await model.saveSettings(settings)
@@ -339,6 +373,9 @@ final class HourleafAppLauncher: ObservableObject {
                 }
             } else {
                 await model.saveSettings(settings)
+            }
+            if arguments.contains("-enablePlanningUITest") {
+                await model.updatePlanningVisibility(true)
             }
             // Seed commands exercise the real mutation path, but their Undo
             // banner is not part of the fixture being tested on first launch.

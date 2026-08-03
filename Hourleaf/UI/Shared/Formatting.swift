@@ -62,6 +62,17 @@ enum AppDateText {
         return formatter.string(from: day.date(calendar: .hourleaf))
     }
 
+    static func range(from start: LocalDay, through end: LocalDay) -> String {
+        let formatter = DateIntervalFormatter()
+        formatter.locale = .current
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(
+            from: start.date(calendar: .hourleaf),
+            to: end.date(calendar: .hourleaf)
+        )
+    }
+
     static func weekday(_ value: Int) -> String {
         let symbols = Calendar.hourleaf.weekdaySymbols
         guard symbols.indices.contains(value - 1) else { return "" }

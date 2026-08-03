@@ -48,6 +48,26 @@ struct SettingsScreen: View {
                 }
 
                 Section {
+                    Toggle(
+                        "planning.toggle",
+                        isOn: Binding(
+                            get: { model.planningPreferences.isPaceVisible },
+                            set: { _ in
+                                model.queuePlanningVisibilityChange(
+                                    !model.planningPreferences.isPaceVisible
+                                )
+                            }
+                        )
+                    )
+                    .accessibilityHint(String(localized: "planning.footer"))
+                    .accessibilityIdentifier("planningVisibilityToggle")
+                } header: {
+                    Text("settings.planning")
+                } footer: {
+                    Text("planning.footer")
+                }
+
+                Section {
                     ForEach(model.reminders) { reminder in
                         reminderRow(reminder)
                     }
