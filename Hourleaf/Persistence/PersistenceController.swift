@@ -75,6 +75,42 @@ struct PersistentStoreArtifact: Equatable, Sendable {
     }
 }
 
+/// A one-store cleanup authority minted only after the owning staging
+/// controller has closed and retired its container. Holding this value never
+/// retains the former Core Data stack.
+final class PersistentStoreCleanupCapability: @unchecked Sendable {
+    fileprivate struct Payload {
+        let artifact: PersistentStoreArtifact
+        let previousStoreUUID: String?
+    }
+
+    private let lock = NSLock()
+    private let payload: Payload
+    private var isConsumed = false
+
+    fileprivate init(
+        artifact: PersistentStoreArtifact,
+        previousStoreUUID: String?
+    ) {
+        payload = Payload(
+            artifact: artifact,
+            previousStoreUUID: previousStoreUUID
+        )
+    }
+
+    /// A failed attempt remains retryable. Once logical destruction is proved,
+    /// later retries are no-ops so they cannot touch a reused staging slot.
+    fileprivate func consume(
+        _ operation: (Payload) throws -> Void
+    ) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isConsumed else { return }
+        try operation(payload)
+        isConsumed = true
+    }
+}
+
 enum PersistentStoreTransitionError: LocalizedError, Equatable, Sendable {
     case unsupportedStoreMode(PersistentStoreMode)
     case storeAlreadyClosed
@@ -307,24 +343,131 @@ final class PersistenceController: @unchecked Sendable {
     /// temporary/evidence stores after a caller has independently decided that
     /// deletion is safe. It never targets the live descriptor.
     func destroyOwnedTransitionStore(_ artifact: PersistentStoreArtifact) throws {
+        let capability = try relinquishOwnedTransitionStore(artifact)
+        try Self.destroyRelinquishedTransitionStore(capability)
+    }
+
+    /// Retires the closed staging container and hands callers a typed cleanup
+    /// authority that contains no Core Data objects. Candidate state must hold
+    /// this value, never the former staging controller.
+    func relinquishOwnedTransitionStore(
+        _ artifact: PersistentStoreArtifact
+    ) throws -> PersistentStoreCleanupCapability {
         lock.lock()
         defer { lock.unlock() }
-        guard artifact == ownedTransitionArtifact,
-              artifact.purpose == .staging,
-              descriptor.mode == .localOnlySQLite,
-              descriptor.url == artifact.url
-        else {
-            throw PersistentStoreTransitionError.unexpectedStoreURL
-        }
+        try validateOwnedStagingArtifact(artifact)
+        guard storeIsClosed else { throw PersistentStoreTransitionError.storeNotClosed }
+        let previousStoreUUID = try Self.storeUUID(at: artifact.url)
+
+        let model = activeContainer.managedObjectModel
+        let retiredReplacement = NSPersistentCloudKitContainer(
+            name: Self.modelName,
+            managedObjectModel: model
+        )
+        retiredReplacement.persistentStoreDescriptions = []
+        activeContainer = retiredReplacement
+        return PersistentStoreCleanupCapability(
+            artifact: artifact,
+            previousStoreUUID: previousStoreUUID
+        )
+    }
+
+    /// Destroys only a relinquished task-owned staging artifact. The fresh
+    /// coordinator is scoped to this call and no former container is retained.
+    static func destroyRelinquishedTransitionStore(
+        _ capability: PersistentStoreCleanupCapability,
+        afterDestroy: () throws -> Void = {}
+    ) throws {
         do {
-            try activeContainer.persistentStoreCoordinator.destroyPersistentStore(
-                at: artifact.url,
-                type: .sqlite,
-                options: Self.sqliteStoreOptions
-            )
+            try capability.consume { payload in
+                let artifact = payload.artifact
+                guard artifact.purpose == .staging else {
+                    throw PersistentStoreTransitionError.unexpectedStoreURL
+                }
+                if existingSQLiteFamilyURLs(for: artifact.url).isEmpty == false {
+                    try autoreleasepool {
+                        let modelContainer = NSPersistentCloudKitContainer(name: Self.modelName)
+                        let destroyCoordinator = NSPersistentStoreCoordinator(
+                            managedObjectModel: modelContainer.managedObjectModel
+                        )
+                        try destroyCoordinator.destroyPersistentStore(
+                            at: artifact.url,
+                            type: .sqlite,
+                            options: Self.sqliteStoreOptions
+                        )
+                    }
+                    try afterDestroy()
+                }
+                try verifyLogicallyDestroyedStore(
+                    at: artifact.url,
+                    previousStoreUUID: payload.previousStoreUUID
+                )
+            }
         } catch {
+            if let transitionError = error as? PersistentStoreTransitionError {
+                throw transitionError
+            }
             throw PersistentStoreTransitionError.transitionFailed(error.localizedDescription)
         }
+    }
+
+    /// Read-only protection verification surface for the exact typed staging
+    /// artifact. Existing WAL/SHM members are included; absent sidecars are not
+    /// invented or touched.
+    func existingOwnedTransitionStoreFiles(
+        _ artifact: PersistentStoreArtifact
+    ) throws -> [URL] {
+        lock.lock()
+        defer { lock.unlock() }
+        try validateOwnedStagingArtifact(artifact)
+        let files = Self.existingSQLiteFamilyURLs(for: artifact.url)
+        guard files.first == artifact.url else {
+            throw PersistentStoreTransitionError.transitionFailed(
+                "The task-owned SQLite store is missing."
+            )
+        }
+        return files
+    }
+
+    /// Read-only discovery for the one deterministic app-owned staging slot.
+    /// It accepts a partial SQLite family after process interruption, but never
+    /// a directory, symlink, different filename, or path outside the exact root.
+    static func existingOrphanedTransitionStoreFiles(
+        _ artifact: PersistentStoreArtifact,
+        in directory: URL,
+        named filename: String
+    ) throws -> [URL] {
+        try validateExactOwnedSlot(artifact, in: directory, named: filename)
+        let files = existingSQLiteFamilyURLs(for: artifact.url)
+        for file in files {
+            let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+            guard values.isRegularFile == true, values.isSymbolicLink != true else {
+                throw PersistentStoreTransitionError.unexpectedStoreURL
+            }
+        }
+        return files
+    }
+
+    /// Mints cleanup authority for an exact deterministic slot left by a
+    /// previous process. Readable stores retain their prior Core Data UUID;
+    /// corrupt/partial stores use the subsequent zero-record proof instead.
+    static func orphanedTransitionStoreCleanupCapability(
+        _ artifact: PersistentStoreArtifact,
+        in directory: URL,
+        named filename: String
+    ) throws -> PersistentStoreCleanupCapability {
+        let files = try existingOrphanedTransitionStoreFiles(
+            artifact,
+            in: directory,
+            named: filename
+        )
+        guard !files.isEmpty else {
+            throw PersistentStoreTransitionError.unexpectedStoreURL
+        }
+        return PersistentStoreCleanupCapability(
+            artifact: artifact,
+            previousStoreUUID: try readableStoreUUID(at: artifact.url)
+        )
     }
 
     /// Reopens using a brand-new container after a closed-store transition.
@@ -362,6 +505,122 @@ final class PersistenceController: @unchecked Sendable {
             closed.fileProtection == Self.protectionClass
         else {
             throw PersistentStoreTransitionError.unexpectedStoreURL
+        }
+    }
+
+    private func validateOwnedStagingArtifact(_ artifact: PersistentStoreArtifact) throws {
+        guard artifact == ownedTransitionArtifact,
+              artifact.purpose == .staging,
+              descriptor.mode == .localOnlySQLite,
+              descriptor.url == artifact.url
+        else {
+            throw PersistentStoreTransitionError.unexpectedStoreURL
+        }
+    }
+
+    private static func existingSQLiteFamilyURLs(for storeURL: URL) -> [URL] {
+        let fileManager = FileManager.default
+        let candidates = [
+            storeURL,
+            URL(fileURLWithPath: storeURL.path + "-wal", isDirectory: false),
+            URL(fileURLWithPath: storeURL.path + "-shm", isDirectory: false)
+        ]
+        return candidates.filter { fileManager.fileExists(atPath: $0.path) }
+    }
+
+    private static func validateExactOwnedSlot(
+        _ artifact: PersistentStoreArtifact,
+        in directory: URL,
+        named filename: String
+    ) throws {
+        let root = directory.standardizedFileURL
+        let expected = root.appendingPathComponent(filename, isDirectory: false).standardizedFileURL
+        let rootValues = try root.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        guard
+            artifact.purpose == .staging,
+            filename == URL(fileURLWithPath: filename).lastPathComponent,
+            artifact.url == expected,
+            expected.deletingLastPathComponent() == root,
+            rootValues.isDirectory == true,
+            rootValues.isSymbolicLink != true
+        else {
+            throw PersistentStoreTransitionError.unexpectedStoreURL
+        }
+    }
+
+    private static func storeUUID(at url: URL) throws -> String {
+        guard let identifier = try readableStoreUUID(at: url) else {
+            throw PersistentStoreTransitionError.transitionFailed(
+                "The task-owned SQLite store has no readable Core Data identity."
+            )
+        }
+        return identifier
+    }
+
+    private static func readableStoreUUID(at url: URL) throws -> String? {
+        let metadata: [String: Any]
+        do {
+            metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(
+                type: .sqlite,
+                at: url,
+                options: sqliteStoreOptions
+            )
+        } catch {
+            return nil
+        }
+        guard let identifier = metadata[NSStoreUUIDKey] as? String, !identifier.isEmpty else {
+            throw PersistentStoreTransitionError.transitionFailed(
+                "The task-owned SQLite store returned an invalid Core Data identity."
+            )
+        }
+        return identifier
+    }
+
+    private static func verifyLogicallyDestroyedStore(
+        at url: URL,
+        previousStoreUUID: String?
+    ) throws {
+        try autoreleasepool {
+            let modelContainer = NSPersistentCloudKitContainer(name: modelName)
+            let model = modelContainer.managedObjectModel
+            let coordinator = NSPersistentStoreCoordinator(managedObjectModel: model)
+            let store = try coordinator.addPersistentStore(
+                type: .sqlite,
+                configuration: nil,
+                at: url,
+                options: sqliteStoreOptions
+            )
+            defer { try? coordinator.remove(store) }
+
+            let metadata = coordinator.metadata(for: store)
+            guard let currentStoreUUID = metadata[NSStoreUUIDKey] as? String,
+                  !currentStoreUUID.isEmpty,
+                  previousStoreUUID == nil || currentStoreUUID != previousStoreUUID
+            else {
+                throw PersistentStoreTransitionError.transitionFailed(
+                    "Core Data retained the destroyed staging-store identity."
+                )
+            }
+
+            let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
+            context.persistentStoreCoordinator = coordinator
+            try context.performAndWait {
+                defer { context.reset() }
+                for entity in model.entities where !entity.isAbstract {
+                    guard let entityName = entity.name else {
+                        throw PersistentStoreTransitionError.transitionFailed(
+                            "The current Core Data model contains an unnamed entity."
+                        )
+                    }
+                    let request = NSFetchRequest<NSFetchRequestResult>(entityName: entityName)
+                    request.includesSubentities = false
+                    guard try context.count(for: request) == 0 else {
+                        throw PersistentStoreTransitionError.transitionFailed(
+                            "Core Data retained records after staging-store destruction."
+                        )
+                    }
+                }
+            }
         }
     }
 
