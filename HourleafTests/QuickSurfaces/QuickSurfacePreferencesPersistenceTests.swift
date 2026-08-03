@@ -91,6 +91,7 @@ final class QuickSurfacePreferencesPersistenceTests: XCTestCase {
         XCTAssertEqual(snapshot.settings, settings)
         XCTAssertEqual(snapshot.settingsMetadata.quickSurfacePreferences.privacyMode, .showTotals)
         XCTAssertTrue(snapshot.settingsMetadata.quickSurfacePreferences.timerVisible)
+        XCTAssertEqual(snapshot.settingsMetadata.widgetPrivacyMode, WidgetPrivacyMode.showTotals.rawValue)
         XCTAssertTrue(snapshot.settingsMetadata.planningVisible)
         XCTAssertTrue(snapshot.settingsMetadata.quietGapCheckEnabled)
         XCTAssertEqual(snapshot.settingsMetadata.quietGapDays, 9)

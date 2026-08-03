@@ -304,7 +304,7 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
                 reread.count == 1,
                 let persisted = Self.preferredSettingsObject(in: reread),
                 persisted.timerVisible == value.timerVisible,
-                WidgetPrivacyMode(persistedValue: persisted.widgetPrivacyMode) == value.privacyMode
+                persisted.widgetPrivacyMode == value.privacyMode.rawValue
             else {
                 throw LedgerRepositoryError.invalidManagedObject(
                     "Hourleaf could not verify saved quick surface preferences."
