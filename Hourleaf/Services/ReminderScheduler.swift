@@ -4,7 +4,20 @@ import UserNotifications
 @MainActor
 protocol ReminderScheduling: Sendable {
     func requestAuthorization() async throws -> Bool
+    func notificationAuthorizationStatus() async -> ReminderAuthorizationStatus
     func reschedule(_ reminders: [ReminderSchedule]) async throws
+    func reconcile(_ request: ReminderReconciliationRequest) async throws
+    func scheduleFollowUp(from context: ReminderNotificationResponseContext) async throws
+}
+
+extension ReminderScheduling {
+    func notificationAuthorizationStatus() async -> ReminderAuthorizationStatus { .authorized }
+
+    func reconcile(_ request: ReminderReconciliationRequest) async throws {
+        try await reschedule(request.reminders)
+    }
+
+    func scheduleFollowUp(from context: ReminderNotificationResponseContext) async throws {}
 }
 
 @MainActor
@@ -16,6 +29,11 @@ protocol ReminderUserNotificationCenter: Sendable {
     func pendingNotificationRequests() async -> [UNNotificationRequest]
     func add(_ request: UNNotificationRequest) async throws
     func removePendingNotificationRequests(withIdentifiers identifiers: [String])
+}
+
+struct ReminderReconciliationRequest: Equatable, Sendable {
+    let reminders: [ReminderSchedule]
+    let quietGap: QuietGapSchedulingRequest
 }
 
 @MainActor
@@ -66,6 +84,35 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
         }
     }
 
+    func reconcile(_ request: ReminderReconciliationRequest) async throws {
+        registerCategories()
+
+        let status = await center.authorizationStatus()
+        let pendingRequests = await center.pendingNotificationRequests()
+        try await removePendingWeeklyRequests(from: pendingRequests)
+
+        if status.allowsScheduling {
+            for reminder in request.reminders where reminder.isEnabled {
+                try await center.add(weeklyRequest(for: reminder))
+            }
+        }
+
+        removeStaleFollowUps(from: pendingRequests, request: request, allowsScheduling: status.allowsScheduling)
+
+        try await removePendingQuietGapRequests(from: pendingRequests)
+        guard status.allowsScheduling else {
+            return
+        }
+
+        if let candidate = QuietGapReminderCalculator.candidate(
+            for: request.quietGap,
+            now: now(),
+            calendar: calendar
+        ) {
+            try await center.add(quietGapRequest(for: candidate))
+        }
+    }
+
     func scheduleQuietGap(_ request: QuietGapSchedulingRequest) async throws -> QuietGapSchedulingOutcome {
         registerCategories()
         try await removePendingQuietGapRequests()
@@ -104,6 +151,14 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
         ])
     }
 
+    func scheduleFollowUp(from context: ReminderNotificationResponseContext) async throws {
+        guard let request = followupRequest(from: context) else {
+            return
+        }
+        center.removePendingNotificationRequests(withIdentifiers: [request.identifier])
+        try await center.add(request)
+    }
+
     func handleResponse(_ context: ReminderNotificationResponseContext) async throws {
         switch context.action {
         case .open, .addTime:
@@ -112,17 +167,11 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
             }
             router?.route(to: .quickEntry)
         case .nothingToRecord:
-            guard let event = nothingToRecordEvent(from: context) else {
-                return
-            }
-            cancelFollowUp(reminderID: event.reminderID, targetDay: event.day)
-            router?.publish(reminderEvent: .acknowledgeNothingToRecord(event))
+            guard context.nothingToRecordEvent(calendar: calendar) != nil else { return }
+            router?.publish(reminderEvent: .response(context))
         case .later:
-            guard let request = followupRequest(from: context) else {
-                return
-            }
-            center.removePendingNotificationRequests(withIdentifiers: [request.identifier])
-            try await center.add(request)
+            guard followupRequest(from: context) != nil else { return }
+            router?.publish(reminderEvent: .response(context))
         case .unknown:
             return
         }
@@ -177,7 +226,11 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
     }
 
     private func removePendingWeeklyRequests() async throws {
-        let identifiers = await center.pendingNotificationRequests()
+        try await removePendingWeeklyRequests(from: await center.pendingNotificationRequests())
+    }
+
+    private func removePendingWeeklyRequests(from requests: [UNNotificationRequest]) async throws {
+        let identifiers = requests
             .map(\.identifier)
             .filter { $0.hasPrefix(ReminderNotificationRequestID.weeklyPrefix) }
         guard !identifiers.isEmpty else {
@@ -187,7 +240,11 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
     }
 
     private func removePendingQuietGapRequests() async throws {
-        let identifiers = await center.pendingNotificationRequests()
+        try await removePendingQuietGapRequests(from: await center.pendingNotificationRequests())
+    }
+
+    private func removePendingQuietGapRequests(from requests: [UNNotificationRequest]) async throws {
+        let identifiers = requests
             .map(\.identifier)
             .filter { $0.hasPrefix(ReminderNotificationRequestID.quietGapPrefix) }
         guard !identifiers.isEmpty else {
@@ -284,7 +341,23 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
             categoryIdentifier: ReminderNotificationCategoryID.followup,
             payload: payload
         )
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 60 * 60, repeats: false)
+        guard
+            let triggerDate = calendar.date(
+                byAdding: .minute,
+                value: 60,
+                to: context.responseDate
+            )
+        else {
+            return nil
+        }
+        guard triggerDate > now() else {
+            return nil
+        }
+        let components = calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: triggerDate
+        )
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
         return UNNotificationRequest(
             identifier: followupIdentifier(
                 reminderID: context.payload.reminderID,
@@ -296,36 +369,13 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
     }
 
     private func targetDay(for context: ReminderNotificationResponseContext) -> LocalDay? {
-        switch context.payload.kind {
-        case .weekly:
-            return LocalDay(context.deliveryDate, calendar: calendar)
-        case .followup, .quietGap:
-            return context.payload.targetDay
-        }
+        context.targetDay(calendar: calendar)
     }
 
     private func nothingToRecordEvent(
         from context: ReminderNotificationResponseContext
     ) -> ReminderNothingToRecordEvent? {
-        guard let targetDay = targetDay(for: context) else {
-            return nil
-        }
-
-        let source: ReminderNothingToRecordSource
-        switch context.payload.kind {
-        case .quietGap:
-            source = .quietGap
-        case .followup where context.payload.reminderID == nil:
-            source = .quietGap
-        case .weekly, .followup:
-            source = .scheduledReminder
-        }
-
-        return ReminderNothingToRecordEvent(
-            day: targetDay,
-            source: source,
-            reminderID: context.payload.reminderID
-        )
+        context.nothingToRecordEvent(calendar: calendar)
     }
 
     private func followupIdentifier(reminderID: UUID?, targetDay: LocalDay) -> String {
@@ -360,6 +410,63 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
             value: defaultValue,
             comment: ""
         )
+    }
+
+    private func removeStaleFollowUps(
+        from requests: [UNNotificationRequest],
+        request: ReminderReconciliationRequest,
+        allowsScheduling: Bool
+    ) {
+        let enabledReminderIDs = Set(request.reminders.filter(\.isEnabled).map(\.id))
+        let coveredDays = coveredDays(for: request.quietGap)
+        let identifiers = requests.compactMap { pending -> String? in
+            let identifier = pending.identifier
+            guard
+                identifier.hasPrefix(ReminderNotificationRequestID.followupWeeklyPrefix)
+                    || identifier.hasPrefix(ReminderNotificationRequestID.quietGapFollowupPrefix),
+                let payload = ReminderNotificationPayload(userInfo: pending.content.userInfo),
+                payload.kind == .followup,
+                let targetDay = payload.targetDay
+            else {
+                return nil
+            }
+
+            if !allowsScheduling || coveredDays.contains(targetDay) {
+                return identifier
+            }
+            if let reminderID = payload.reminderID, !enabledReminderIDs.contains(reminderID) {
+                return identifier
+            }
+            return nil
+        }
+        guard !identifiers.isEmpty else {
+            return
+        }
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+    }
+
+    private func coveredDays(for request: QuietGapSchedulingRequest) -> Set<LocalDay> {
+        let entryDays = request.entries.compactMap { record -> LocalDay? in
+            guard
+                record.deletedAt == nil,
+                record.entry.kind == .service,
+                record.entry.day.monthKey >= request.ledgerStartMonth
+            else {
+                return nil
+            }
+            return record.entry.day
+        }
+        let acknowledgementDays = request.acknowledgements.compactMap { record -> LocalDay? in
+            guard
+                record.status == DayAcknowledgementStatus.nothingToday.rawValue,
+                !record.source.isEmpty,
+                record.day.monthKey >= request.ledgerStartMonth
+            else {
+                return nil
+            }
+            return record.day
+        }
+        return Set(entryDays).union(acknowledgementDays)
     }
 }
 

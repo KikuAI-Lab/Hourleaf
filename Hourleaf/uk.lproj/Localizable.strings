@@ -200,7 +200,13 @@
 "reminder.weekday" = "День";
 "reminder.time" = "Час";
 "reminder.notification.title" = "Hourleaf";
-"reminder.notification.body" = "Скільки часу ви сьогодні служили?";
+"reminder.notification.body" = "Перевірити записи?";
+"quiet_gap.notification.body" = "Перевірити останні записи?";
+"reminder.action.add" = "Додати час";
+"reminder.action.nothing" = "Немає чого записувати";
+"reminder.action.later" = "Пізніше";
+"notifications.off" = "Сповіщення для Hourleaf вимкнено.";
+"notifications.open_settings" = "Відкрити налаштування iPhone";
 "balances.intro" = "Тут не створюються записи за минулі дні. Укажіть уже враховане служіння та хвилини, перенесені з попереднього звіту.";
 "balances.year_progress" = "Уже враховане служіння цього року";
 "balances.year_progress_help" = "Це час, який ви вже служили до першого запису в Hourleaf. Він іде лише в прогрес службового року.";
@@ -267,6 +273,8 @@
 "settings.planning" = "Планування";
 "planning.toggle" = "Показувати тижневий орієнтир до 600 годин";
 "planning.footer" = "Особистий орієнтир для планування. Його можна приховати будь-коли.";
+"quiet_gap.toggle" = "Перевіряти після тижня без записів";
+"quiet_gap.footer" = "Якщо немає збереженого часу служіння, Hourleaf може раз на сім днів запропонувати перевірити записи. Використовуються лише записи в Hourleaf.";
 "pace.service_year_range_format" = "Службовий рік · %@";
 "pace.actual_label" = "Збережено у служінні";
 "pace.target_format" = "Орієнтир у 600 годин: %@";
@@ -275,4 +283,10 @@
 "pace.reached_format" = "Орієнтира в 600 годин досягнуто. Усього: %@.";
 "pace.details_title" = "Як це розраховано";
 "pace.details" = "Розрахунок ґрунтується лише на збереженому часі служіння та часі до початку обліку в Hourleaf. Кредит і перенесення хвилин між звітами не враховуються.";
+"backup_status.title" = "Стан резервної копії";
+"backup_status.none" = "Повний експорт ще не перевірявся.";
+"backup_status.matches_format" = "Останній перевірений повний експорт відповідає цим записам — %@.";
+"backup_status.changed_format" = "Після останнього перевіреного повного експорту записи змінилися — %@.";
+"backup_status.unavailable" = "Стан резервної копії недоступний.";
+"backup_status.limitation" = "Hourleaf перевіряє архів перед відкриттям меню «Поділитися», але не може підтвердити, де ви його зберегли.";
 "service_year.archive_title" = "Вибраний службовий рік";

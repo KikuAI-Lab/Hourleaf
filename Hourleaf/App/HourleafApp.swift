@@ -83,7 +83,7 @@ final class HourleafAppLauncher: ObservableObject {
 
         if usesTestStore {
             let router = AppRouter()
-            let scheduler = UITestReminderScheduler()
+            let scheduler = UITestReminderScheduler(arguments: arguments)
             let persistence = PersistenceController(inMemory: true, cloudSyncEnabled: false)
             let repository = CoreDataLedgerRepository(persistence: persistence, clock: clock)
             let journalStore = RestoreJournalStoreV1(
@@ -377,6 +377,21 @@ final class HourleafAppLauncher: ObservableObject {
             if arguments.contains("-enablePlanningUITest") {
                 await model.updatePlanningVisibility(true)
             }
+            if arguments.contains("-notificationNothingUITest") {
+                let deliveryDate = model.currentDate
+                session.router.publish(reminderEvent: .response(
+                    ReminderNotificationResponseContext(
+                        action: .nothingToRecord,
+                        payload: ReminderNotificationPayload(
+                            kind: .weekly,
+                            reminderID: UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+                        ),
+                        requestIdentifier: "hourleaf.reminder.weekly.aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                        deliveryDate: deliveryDate,
+                        responseDate: deliveryDate.addingTimeInterval(60)
+                    )
+                ))
+            }
             // Seed commands exercise the real mutation path, but their Undo
             // banner is not part of the fixture being tested on first launch.
             model.dismissUndoBanner()
@@ -434,6 +449,20 @@ final class HourleafAppSession {
 
 @MainActor
 private final class UITestReminderScheduler: ReminderScheduling {
-    func requestAuthorization() async throws -> Bool { true }
+    private let status: ReminderAuthorizationStatus
+    private let requestAuthorizationResult: Bool
+
+    init(arguments: [String]) {
+        if arguments.contains("-notificationDeniedUITest") {
+            status = .denied
+            requestAuthorizationResult = false
+        } else {
+            status = .authorized
+            requestAuthorizationResult = true
+        }
+    }
+
+    func requestAuthorization() async throws -> Bool { requestAuthorizationResult }
+    func notificationAuthorizationStatus() async -> ReminderAuthorizationStatus { status }
     func reschedule(_ reminders: [ReminderSchedule]) async throws {}
 }

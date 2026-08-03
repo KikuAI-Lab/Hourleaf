@@ -556,6 +556,53 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["No entries yet"].waitForExistence(timeout: 5))
     }
 
+    func testNotificationDeniedLeavesNewReminderAndQuietGapOff() {
+        let app = launchApp(additionalArguments: ["-notificationDeniedUITest"])
+        app.tabBars.buttons["Settings"].tap()
+
+        app.buttons["addReminderButton"].tap()
+        XCTAssertTrue(app.navigationBars["New reminder"].waitForExistence(timeout: 5))
+        app.buttons["confirmAddReminderButton"].tap()
+
+        let notificationStatus = app.staticTexts["notificationAuthorizationStatus"]
+        XCTAssertTrue(notificationStatus.waitForExistence(timeout: 5))
+        XCTAssertEqual(notificationStatus.label, "Notifications are off for Hourleaf.")
+        let openSettingsButton = app.buttons["openNotificationSettingsButton"]
+        XCTAssertTrue(scrollUntilVisible(openSettingsButton, in: app))
+
+        let reminderRows = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH 'reminderRow_'")
+        )
+        XCTAssertEqual(reminderRows.count, 0)
+
+        let quietGapToggle = app.switches["quietGapCheckToggle"]
+        XCTAssertTrue(scrollUntilVisible(quietGapToggle, in: app))
+        XCTAssertEqual(quietGapToggle.value as? String, "0")
+        quietGapToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertEqual(quietGapToggle.value as? String, "0")
+    }
+
+    func testNotificationNothingToRecordAddsNoHistoryOrReportTime() {
+        let app = launchApp(additionalArguments: ["-notificationNothingUITest"])
+        app.tabBars.buttons["History"].tap()
+
+        XCTAssertTrue(app.staticTexts["No entries yet"].waitForExistence(timeout: 5))
+    }
+
+    func testQuietGapCopyExplainsLocalSevenDayCheckAndCanBeDisabled() {
+        let app = launchApp()
+        app.tabBars.buttons["Settings"].tap()
+
+        let quietGapToggle = app.switches["quietGapCheckToggle"]
+        XCTAssertTrue(scrollUntilVisible(quietGapToggle, in: app))
+        XCTAssertEqual(quietGapToggle.value as? String, "0")
+        XCTAssertTrue(
+            app.staticTexts[
+                "If there is no saved service time, Hourleaf may ask you to check once every seven days. It uses only records in Hourleaf."
+            ].exists
+        )
+    }
+
     func testColdQuickEntryRouteLaunchesOnAddTime() {
         let app = launchApp(additionalArguments: ["-coldQuickEntryRouteUITest"])
 

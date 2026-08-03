@@ -114,7 +114,7 @@ final class ReminderSchedulerTests: XCTestCase {
         XCTAssertTrue(center.requestsByIdentifier.isEmpty)
     }
 
-    func testNothingToRecordEmitsTypedEventAndCancelsMatchingFollowup() async throws {
+    func testNothingToRecordEmitsTypedResponseEventWithoutImmediateCenterMutation() async throws {
         let center = FakeReminderNotificationCenter()
         let calendar = makeReminderTestCalendar()
         let reminderID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
@@ -152,20 +152,35 @@ final class ReminderSchedulerTests: XCTestCase {
             )
         )
 
-        XCTAssertNil(center.requestsByIdentifier[followupIdentifier])
+        XCTAssertNotNil(center.requestsByIdentifier[followupIdentifier])
         XCTAssertEqual(
             router.pendingReminderEvent,
-            .acknowledgeNothingToRecord(
-                ReminderNothingToRecordEvent(
-                    day: LocalDay(year: 2026, month: 8, day: 3),
-                    source: .scheduledReminder,
-                    reminderID: reminderID
+            .response(
+                ReminderNotificationResponseContext(
+                    action: .nothingToRecord,
+                    payload: ReminderNotificationPayload(kind: .weekly, reminderID: reminderID),
+                    requestIdentifier: "weekly",
+                    deliveryDate: makeReminderTestDate(
+                        year: 2026,
+                        month: 8,
+                        day: 3,
+                        hour: 18,
+                        calendar: calendar
+                    ),
+                    responseDate: makeReminderTestDate(
+                        year: 2026,
+                        month: 8,
+                        day: 3,
+                        hour: 18,
+                        minute: 1,
+                        calendar: calendar
+                    )
                 )
             )
         )
     }
 
-    func testLaterSchedulesExactlyOneFollowupPerReminderAndDay() async throws {
+    func testLaterEmitsRetainedResponseEventWithoutSchedulingDirectly() async throws {
         let center = FakeReminderNotificationCenter()
         let calendar = makeReminderTestCalendar()
         let reminderID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
@@ -188,12 +203,31 @@ final class ReminderSchedulerTests: XCTestCase {
         try await scheduler.handleResponse(context)
         try await scheduler.handleResponse(context)
 
+        XCTAssertTrue(center.requestsByIdentifier.isEmpty)
+        XCTAssertEqual(router.pendingReminderEvent, .response(context))
+    }
+
+    func testScheduleFollowUpUsesExactResponseDatePlusSixtyMinutes() async throws {
+        let center = FakeReminderNotificationCenter()
+        let calendar = makeReminderTestCalendar()
+        let reminderID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let scheduler = ReminderScheduler(center: center, now: { .distantPast }, calendar: calendar)
+
+        let context = ReminderNotificationResponseContext(
+            action: .later,
+            payload: ReminderNotificationPayload(kind: .weekly, reminderID: reminderID),
+            requestIdentifier: "weekly",
+            deliveryDate: makeReminderTestDate(year: 2026, month: 8, day: 3, hour: 18, calendar: calendar),
+            responseDate: makeReminderTestDate(year: 2026, month: 8, day: 3, hour: 18, minute: 5, calendar: calendar)
+        )
+
+        try await scheduler.scheduleFollowUp(from: context)
+
         let identifier = ReminderNotificationRequestID.followup(
             reminderID: reminderID,
             targetDay: LocalDay(year: 2026, month: 8, day: 3)
         )
         let request = try XCTUnwrap(center.requestsByIdentifier[identifier])
-        XCTAssertEqual(request.content.categoryIdentifier, ReminderNotificationCategoryID.followup)
         XCTAssertEqual(
             ReminderNotificationPayload(userInfo: request.content.userInfo),
             ReminderNotificationPayload(
@@ -202,11 +236,11 @@ final class ReminderSchedulerTests: XCTestCase {
                 targetDay: LocalDay(year: 2026, month: 8, day: 3)
             )
         )
-        let trigger = try XCTUnwrap(request.trigger as? UNTimeIntervalNotificationTrigger)
-        XCTAssertEqual(trigger.timeInterval, 60 * 60, accuracy: 0.001)
+        let trigger = try XCTUnwrap(request.trigger as? UNCalendarNotificationTrigger)
+        let fireDate = calendar.date(from: trigger.dateComponents)
         XCTAssertEqual(
-            center.requestsByIdentifier.keys.filter { $0 == identifier }.count,
-            1
+            fireDate,
+            makeReminderTestDate(year: 2026, month: 8, day: 3, hour: 19, minute: 5, calendar: calendar)
         )
     }
 

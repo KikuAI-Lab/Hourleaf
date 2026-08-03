@@ -207,7 +207,7 @@ struct ReminderNothingToRecordEvent: Equatable, Sendable {
 }
 
 enum ReminderNotificationEvent: Equatable, Sendable {
-    case acknowledgeNothingToRecord(ReminderNothingToRecordEvent)
+    case response(ReminderNotificationResponseContext)
 }
 
 enum ReminderAuthorizationStatus: Equatable, Sendable {
@@ -223,6 +223,15 @@ enum ReminderAuthorizationStatus: Equatable, Sendable {
         case .authorized, .provisional, .ephemeral:
             return true
         case .notDetermined, .denied, .unknown:
+            return false
+        }
+    }
+
+    var showsInlineGuidance: Bool {
+        switch self {
+        case .denied, .unknown:
+            return true
+        case .notDetermined, .authorized, .provisional, .ephemeral:
             return false
         }
     }
@@ -248,5 +257,38 @@ enum ReminderNotificationRequestID {
 
     static func quietGapFollowup(targetDay: LocalDay) -> String {
         "\(quietGapFollowupPrefix)\(targetDay.key)"
+    }
+}
+
+extension ReminderNotificationResponseContext {
+    func targetDay(calendar: Calendar) -> LocalDay? {
+        switch payload.kind {
+        case .weekly:
+            return LocalDay(deliveryDate, calendar: calendar)
+        case .followup, .quietGap:
+            return payload.targetDay
+        }
+    }
+
+    func nothingToRecordEvent(calendar: Calendar) -> ReminderNothingToRecordEvent? {
+        guard let targetDay = targetDay(calendar: calendar) else {
+            return nil
+        }
+
+        let source: ReminderNothingToRecordSource
+        switch payload.kind {
+        case .quietGap:
+            source = .quietGap
+        case .followup where payload.reminderID == nil:
+            source = .quietGap
+        case .weekly, .followup:
+            source = .scheduledReminder
+        }
+
+        return ReminderNothingToRecordEvent(
+            day: targetDay,
+            source: source,
+            reminderID: payload.reminderID
+        )
     }
 }

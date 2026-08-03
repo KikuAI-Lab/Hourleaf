@@ -200,7 +200,13 @@
 "reminder.weekday" = "Day";
 "reminder.time" = "Time";
 "reminder.notification.title" = "Hourleaf";
-"reminder.notification.body" = "How much time did you serve?";
+"reminder.notification.body" = "Would you like to check your record?";
+"quiet_gap.notification.body" = "Check your recent records?";
+"reminder.action.add" = "Add time";
+"reminder.action.nothing" = "Nothing to record";
+"reminder.action.later" = "Later";
+"notifications.off" = "Notifications are off for Hourleaf.";
+"notifications.open_settings" = "Open iPhone Settings";
 "balances.intro" = "This does not create entries for past days. Enter service already counted this year and any minutes carried from an earlier report.";
 "balances.year_progress" = "Service already counted this year";
 "balances.year_progress_help" = "This is the time you had already served before your first Hourleaf entry. It counts only toward service-year progress.";
@@ -267,6 +273,8 @@
 "settings.planning" = "Planning";
 "planning.toggle" = "Show weekly guide to 600 hours";
 "planning.footer" = "A private planning aid. You can hide it at any time.";
+"quiet_gap.toggle" = "Check after a week without records";
+"quiet_gap.footer" = "If there is no saved service time, Hourleaf may ask you to check once every seven days. It uses only records in Hourleaf.";
 "pace.service_year_range_format" = "Service year · %@";
 "pace.actual_label" = "Saved service";
 "pace.target_format" = "600-hour guide: %@";
@@ -275,4 +283,10 @@
 "pace.reached_format" = "600-hour guide reached. Total: %@.";
 "pace.details_title" = "How this is calculated";
 "pace.details" = "Based only on saved service time and time entered from before Hourleaf. Credit and monthly minute carry are not included.";
+"backup_status.title" = "Backup status";
+"backup_status.none" = "No verified full export yet.";
+"backup_status.matches_format" = "Last verified full export matches these records — %@.";
+"backup_status.changed_format" = "Records changed after the last verified full export — %@.";
+"backup_status.unavailable" = "Backup status is unavailable.";
+"backup_status.limitation" = "Hourleaf verifies the archive before sharing. It cannot confirm where you saved it.";
 "service_year.archive_title" = "Selected service year";

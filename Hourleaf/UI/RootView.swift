@@ -1,6 +1,9 @@
 import Combine
 import CoreData
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct RootView: View {
     let dataManagementActions: DataManagementActions
@@ -42,16 +45,21 @@ struct RootView: View {
         }
         .onAppear {
             consumePendingRoute()
+            consumePendingReminderEvent()
             consumeLedgerChange()
         }
         .onChange(of: router.pendingRoute) { _, _ in
             consumePendingRoute()
+        }
+        .onChange(of: router.pendingReminderEvent) { _, _ in
+            consumePendingReminderEvent()
         }
         .onChange(of: router.ledgerChangeGeneration) { _, _ in
             consumeLedgerChange()
         }
         .onChange(of: model.startupState) { _, state in
             guard state == .ready else { return }
+            consumePendingReminderEvent()
             consumeLedgerChange()
         }
     }
@@ -101,8 +109,16 @@ struct RootView: View {
         ) { _ in
             Task {
                 await model.refreshAfterExternalLedgerChange()
-                await model.rescheduleReminders()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            Task { await model.rescheduleReminders() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
+            Task { await model.rescheduleReminders() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSLocale.currentLocaleDidChangeNotification)) { _ in
+            Task { await model.rescheduleReminders() }
         }
         .fullScreenCover(isPresented: onboardingBinding) {
             OnboardingView()
@@ -131,6 +147,12 @@ struct RootView: View {
         case .quickEntry:
             model.prepareQuickEntry()
         }
+    }
+
+    private func consumePendingReminderEvent() {
+        guard model.startupState == .ready else { return }
+        guard let event = router.consumePendingReminderEvent() else { return }
+        Task { await model.handleReminderEvent(event) }
     }
 
     private func consumeLedgerChange() {

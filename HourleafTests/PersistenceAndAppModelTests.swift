@@ -373,6 +373,150 @@ final class PersistenceAndAppModelTests: XCTestCase {
         XCTAssertEqual(receipts.count, 1)
     }
 
+    func testHandleReminderNothingResponseUpsertsOneAcknowledgementWithoutEntriesAndIsIdempotent() async throws {
+        let now = fixedDate(year: 2026, month: 8, day: 3)
+        let deliveryDate = fixedDate(year: 2026, month: 8, day: 2, hour: 18)
+        let responseDate = deliveryDate.addingTimeInterval(5 * 60)
+        let repository = makeRepository(clock: { now })
+        try await configureLedgerStart(repository, month: MonthKey(year: 2026, month: 7))
+        let scheduler = InspectingReminderScheduler()
+        let model = AppModel(repository: repository, reminderScheduler: scheduler, now: { now })
+        await model.loadInitialSnapshot()
+        let reminderID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let context = makeWeeklyReminderResponseContext(
+            action: .nothingToRecord,
+            reminderID: reminderID,
+            deliveryDate: deliveryDate,
+            responseDate: responseDate
+        )
+        let reconcileCountAfterLoad = scheduler.reconcileRequests.count
+
+        await model.handleReminderEvent(.response(context))
+
+        let firstSnapshot = try await repository.ledgerSnapshot()
+        XCTAssertEqual(scheduler.reconcileRequests.count, reconcileCountAfterLoad + 1)
+        XCTAssertTrue(scheduler.scheduledFollowUpContexts.isEmpty)
+        XCTAssertEqual(firstSnapshot.dayAcknowledgements.count, 1)
+        XCTAssertTrue(firstSnapshot.activeEntries.isEmpty)
+        let firstAcknowledgement = try XCTUnwrap(firstSnapshot.dayAcknowledgements.first)
+        XCTAssertEqual(firstAcknowledgement.day, LocalDay(year: 2026, month: 8, day: 2))
+        XCTAssertEqual(firstAcknowledgement.status, DayAcknowledgementStatus.nothingToday.rawValue)
+        XCTAssertEqual(firstAcknowledgement.source, DayAcknowledgementSource.scheduledReminder.rawValue)
+        XCTAssertEqual(model.dayAcknowledgements, [firstAcknowledgement])
+        XCTAssertTrue(model.entryRecords.isEmpty)
+
+        await model.handleReminderEvent(.response(context))
+
+        let replaySnapshot = try await repository.ledgerSnapshot()
+        XCTAssertEqual(scheduler.reconcileRequests.count, reconcileCountAfterLoad + 2)
+        XCTAssertEqual(replaySnapshot.dayAcknowledgements.count, 1)
+        XCTAssertEqual(replaySnapshot.dayAcknowledgements.first?.id, firstAcknowledgement.id)
+        XCTAssertTrue(replaySnapshot.activeEntries.isEmpty)
+        XCTAssertEqual(model.dayAcknowledgements.map(\.id), [firstAcknowledgement.id])
+        XCTAssertTrue(model.entryRecords.isEmpty)
+    }
+
+    func testHandleReminderLaterResponseSchedulesFollowUpWhenDayRemainsUncovered() async throws {
+        let now = fixedDate(year: 2026, month: 8, day: 3)
+        let deliveryDate = fixedDate(year: 2026, month: 8, day: 2, hour: 18)
+        let responseDate = deliveryDate.addingTimeInterval(5 * 60)
+        let repository = makeRepository(clock: { now })
+        try await configureLedgerStart(repository, month: MonthKey(year: 2026, month: 7))
+        let scheduler = InspectingReminderScheduler()
+        let model = AppModel(repository: repository, reminderScheduler: scheduler, now: { now })
+        await model.loadInitialSnapshot()
+        let context = makeWeeklyReminderResponseContext(
+            action: .later,
+            reminderID: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
+            deliveryDate: deliveryDate,
+            responseDate: responseDate
+        )
+        let reconcileCountAfterLoad = scheduler.reconcileRequests.count
+
+        await model.handleReminderEvent(.response(context))
+
+        let snapshot = try await repository.ledgerSnapshot()
+        XCTAssertEqual(scheduler.reconcileRequests.count, reconcileCountAfterLoad)
+        XCTAssertEqual(scheduler.scheduledFollowUpContexts, [context])
+        XCTAssertTrue(snapshot.activeEntries.isEmpty)
+        XCTAssertTrue(snapshot.dayAcknowledgements.isEmpty)
+    }
+
+    func testHandleReminderLaterResponseSkipsFollowUpWhenFreshServiceNowCoversDay() async throws {
+        let now = fixedDate(year: 2026, month: 8, day: 3)
+        let deliveryDate = fixedDate(year: 2026, month: 8, day: 2, hour: 18)
+        let responseDate = deliveryDate.addingTimeInterval(5 * 60)
+        let targetDay = LocalDay(year: 2026, month: 8, day: 2)
+        let repository = makeRepository(clock: { now })
+        try await configureLedgerStart(repository, month: MonthKey(year: 2026, month: 7))
+        let scheduler = InspectingReminderScheduler()
+        let model = AppModel(repository: repository, reminderScheduler: scheduler, now: { now })
+        await model.loadInitialSnapshot()
+        let externalEntry = TimeEntry(
+            id: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!,
+            kind: .service,
+            day: targetDay,
+            minutes: 45,
+            note: "External write",
+            createdAt: fixedDate(year: 2026, month: 8, day: 2, hour: 9),
+            updatedAt: fixedDate(year: 2026, month: 8, day: 2, hour: 9)
+        )
+        _ = try await repository.apply(createCommand(for: externalEntry, source: .shortcut))
+        let context = makeWeeklyReminderResponseContext(
+            action: .later,
+            reminderID: UUID(uuidString: "44444444-4444-4444-4444-444444444444")!,
+            deliveryDate: deliveryDate,
+            responseDate: responseDate
+        )
+        let reconcileCountAfterLoad = scheduler.reconcileRequests.count
+
+        await model.handleReminderEvent(.response(context))
+
+        XCTAssertTrue(scheduler.scheduledFollowUpContexts.isEmpty)
+        XCTAssertEqual(scheduler.reconcileRequests.count, reconcileCountAfterLoad + 1)
+        let request = try XCTUnwrap(scheduler.reconcileRequests.last)
+        XCTAssertEqual(
+            request.quietGap.entries.filter { !$0.isDeleted && $0.entry.kind == .service && $0.entry.day == targetDay }
+                .count,
+            1
+        )
+        XCTAssertTrue(request.quietGap.acknowledgements.isEmpty)
+        XCTAssertEqual(model.entryRecords.filter { $0.entry.day == targetDay && $0.entry.kind == .service }.count, 1)
+    }
+
+    func testHandleReminderLaterResponseSkipsFollowUpWhenFreshAcknowledgementNowCoversDay() async throws {
+        let now = fixedDate(year: 2026, month: 8, day: 3)
+        let deliveryDate = fixedDate(year: 2026, month: 8, day: 2, hour: 18)
+        let responseDate = deliveryDate.addingTimeInterval(5 * 60)
+        let targetDay = LocalDay(year: 2026, month: 8, day: 2)
+        let repository = makeRepository(clock: { now })
+        try await configureLedgerStart(repository, month: MonthKey(year: 2026, month: 7))
+        let scheduler = InspectingReminderScheduler()
+        let model = AppModel(repository: repository, reminderScheduler: scheduler, now: { now })
+        await model.loadInitialSnapshot()
+        let acknowledgement = try await repository.acknowledgeNothingToRecord(
+            on: targetDay,
+            source: .quietGap,
+            at: now
+        )
+        let context = makeWeeklyReminderResponseContext(
+            action: .later,
+            reminderID: UUID(uuidString: "55555555-5555-5555-5555-555555555555")!,
+            deliveryDate: deliveryDate,
+            responseDate: responseDate
+        )
+        let reconcileCountAfterLoad = scheduler.reconcileRequests.count
+
+        await model.handleReminderEvent(.response(context))
+
+        XCTAssertTrue(scheduler.scheduledFollowUpContexts.isEmpty)
+        XCTAssertEqual(scheduler.reconcileRequests.count, reconcileCountAfterLoad + 1)
+        let request = try XCTUnwrap(scheduler.reconcileRequests.last)
+        XCTAssertTrue(request.quietGap.entries.isEmpty)
+        XCTAssertEqual(request.quietGap.acknowledgements.map(\.id), [acknowledgement.id])
+        XCTAssertEqual(model.dayAcknowledgements.map(\.id), [acknowledgement.id])
+    }
+
     func testAddCommandRejectsZeroDuration() async throws {
         let repository = makeRepository()
         do {
@@ -1920,6 +2064,24 @@ final class PersistenceAndAppModelTests: XCTestCase {
         )!
     }
 
+    private func makeWeeklyReminderResponseContext(
+        action: ReminderNotificationAction,
+        reminderID: UUID,
+        deliveryDate: Date,
+        responseDate: Date
+    ) -> ReminderNotificationResponseContext {
+        ReminderNotificationResponseContext(
+            action: action,
+            payload: ReminderNotificationPayload(
+                kind: .weekly,
+                reminderID: reminderID
+            ),
+            requestIdentifier: ReminderNotificationRequestID.weekly(reminderID: reminderID),
+            deliveryDate: deliveryDate,
+            responseDate: responseDate
+        )
+    }
+
     private func oneTapDay(_ date: Date, offsetBy days: Int = 0) -> LocalDay {
         let shifted = Calendar.hourleaf.date(byAdding: .day, value: days, to: date) ?? date
         return LocalDay(shifted, calendar: .hourleaf)
@@ -2328,4 +2490,34 @@ private actor GatedLedgerRepository: LedgerRepository {
 private final class TestReminderScheduler: ReminderScheduling {
     func requestAuthorization() async throws -> Bool { true }
     func reschedule(_ reminders: [ReminderSchedule]) async throws {}
+}
+
+@MainActor
+private final class InspectingReminderScheduler: ReminderScheduling {
+    var authorizationStatus: ReminderAuthorizationStatus
+    private(set) var reconcileRequests: [ReminderReconciliationRequest] = []
+    private(set) var scheduledFollowUpContexts: [ReminderNotificationResponseContext] = []
+
+    init(authorizationStatus: ReminderAuthorizationStatus = .authorized) {
+        self.authorizationStatus = authorizationStatus
+    }
+
+    func requestAuthorization() async throws -> Bool {
+        authorizationStatus = .authorized
+        return true
+    }
+
+    func notificationAuthorizationStatus() async -> ReminderAuthorizationStatus {
+        authorizationStatus
+    }
+
+    func reschedule(_ reminders: [ReminderSchedule]) async throws {}
+
+    func reconcile(_ request: ReminderReconciliationRequest) async throws {
+        reconcileRequests.append(request)
+    }
+
+    func scheduleFollowUp(from context: ReminderNotificationResponseContext) async throws {
+        scheduledFollowUpContexts.append(context)
+    }
 }

@@ -36,6 +36,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var lastErrorDiagnostic: String?
     @Published private(set) var undoCandidate: EntryUndoCandidate?
     @Published private(set) var visibleUndoCandidate: EntryUndoCandidate?
+    @Published private(set) var notificationAuthorizationStatus: ReminderAuthorizationStatus = .notDetermined
     @Published private(set) var quickEntryResetGeneration: UInt64 = 0
     @Published private(set) var isRepeatingLastEntry = false
 
@@ -147,6 +148,7 @@ final class AppModel: ObservableObject {
                 waitForPendingSettingsSave: false,
                 selectDefaultReportMonth: true
             )
+            try await reconcileLoadedReminderState()
             initialSnapshotLoaded = true
             errorMessage = nil
             startupState = .ready
@@ -220,6 +222,7 @@ final class AppModel: ObservableObject {
             do {
                 try await loadReconciledSnapshot(selectDefaultReportMonth: false)
                 await refreshUndoCandidate(showBanner: shouldShowUndoBanner)
+                try await reconcileLoadedReminderState()
             } catch {
                 present(error)
             }
@@ -301,13 +304,58 @@ final class AppModel: ObservableObject {
         reportSnapshots = snapshot.reportSnapshots
         reportStates = snapshot.reportStates
         serviceYearArchives = snapshot.serviceYearArchives
-        planningPreferences = PlanningPreferences(
-            isPaceVisible: snapshot.settingsMetadata.planningVisible,
-            isQuietGapEnabled: snapshot.settingsMetadata.quietGapCheckEnabled,
-            quietGapDays: snapshot.settingsMetadata.quietGapDays
-        )
+        planningPreferences = planningPreferences(from: snapshot)
         dayAcknowledgements = snapshot.dayAcknowledgements
         updateSelectedReportMonth(from: snapshot, preferLatestClosed: false)
+    }
+
+    private func planningPreferences(from snapshot: LedgerSnapshot) -> PlanningPreferences {
+        let quietGapDays = snapshot.settingsMetadata.quietGapDays
+        let quietGapConfigurationIsValid = (1...30).contains(quietGapDays)
+        return PlanningPreferences(
+            isPaceVisible: snapshot.settingsMetadata.planningVisible,
+            isQuietGapEnabled: snapshot.settingsMetadata.quietGapCheckEnabled && quietGapConfigurationIsValid,
+            quietGapDays: quietGapConfigurationIsValid ? quietGapDays : 7
+        )
+    }
+
+    private func reminderReconciliationRequest(from snapshot: LedgerSnapshot) -> ReminderReconciliationRequest {
+        let preferences = planningPreferences(from: snapshot)
+        return ReminderReconciliationRequest(
+            reminders: snapshot.reminderSchedules,
+            quietGap: QuietGapSchedulingRequest(
+                isEnabled: preferences.isQuietGapEnabled,
+                gapDays: preferences.quietGapDays,
+                ledgerStartMonth: snapshot.settings.ledgerStartMonth,
+                entries: snapshot.entries,
+                acknowledgements: snapshot.dayAcknowledgements
+            )
+        )
+    }
+
+    private func reconcileLoadedReminderState() async throws {
+        guard let snapshot = latestLedgerSnapshot else { return }
+        try await reminderScheduler.reconcile(reminderReconciliationRequest(from: snapshot))
+        notificationAuthorizationStatus = await reminderScheduler.notificationAuthorizationStatus()
+    }
+
+    func refreshReminderAuthorizationStatus() async {
+        notificationAuthorizationStatus = await reminderScheduler.notificationAuthorizationStatus()
+    }
+
+    private func authorizeReminderSettingsChangeIfNeeded() async throws -> Bool {
+        let status = await reminderScheduler.notificationAuthorizationStatus()
+        notificationAuthorizationStatus = status
+        switch status {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .denied, .unknown:
+            return false
+        case .notDetermined:
+            let granted = try await reminderScheduler.requestAuthorization()
+            notificationAuthorizationStatus = await reminderScheduler.notificationAuthorizationStatus()
+            return granted && notificationAuthorizationStatus.allowsScheduling
+        }
     }
 
     private func updateSelectedReportMonth(
@@ -491,6 +539,7 @@ final class AppModel: ObservableObject {
             let candidate = try await repository.latestUndoCandidate(asOf: now())
             guard generation == undoStateGeneration else { return }
             undoCandidate = candidate
+            try await reconcileLoadedReminderState()
             guard
                 shouldShowUndoBanner,
                 let candidate,
@@ -779,6 +828,7 @@ final class AppModel: ObservableObject {
                 let snapshot = try await repository.ledgerSnapshot()
                 guard generation == self.planningSaveGeneration else { return }
                 self.apply(snapshot)
+                try await self.reconcileLoadedReminderState()
             } catch {
                 guard generation == self.planningSaveGeneration else { return }
                 self.present(error)
@@ -786,6 +836,7 @@ final class AppModel: ObservableObject {
                     let snapshot = try await repository.ledgerSnapshot()
                     guard generation == self.planningSaveGeneration else { return }
                     self.apply(snapshot)
+                    try await self.reconcileLoadedReminderState()
                 } catch {
                     self.present(error)
                 }
@@ -835,6 +886,7 @@ final class AppModel: ObservableObject {
                     waitForPendingSettingsSave: false,
                     onlyIfSettingsGeneration: generation
                 )
+                try await self.reconcileLoadedReminderState()
             } catch {
                 guard generation == self.settingsSaveGeneration else { return }
                 self.present(error)
@@ -843,6 +895,7 @@ final class AppModel: ObservableObject {
                         waitForPendingSettingsSave: false,
                         onlyIfSettingsGeneration: generation
                     )
+                    try await self.reconcileLoadedReminderState()
                 } catch {
                     self.present(error)
                 }
@@ -901,13 +954,13 @@ final class AppModel: ObservableObject {
             minute: components.minute ?? 0
         )
         do {
-            guard try await reminderScheduler.requestAuthorization() else {
-                errorMessage = String(localized: "error.notifications_denied")
+            guard try await authorizeReminderSettingsChangeIfNeeded() else {
                 return
             }
             try await repository.saveReminder(reminder)
-            reminders = try await repository.fetchReminders()
-            try await reminderScheduler.reschedule(reminders)
+            let snapshot = try await repository.ledgerSnapshot()
+            apply(snapshot)
+            try await reconcileLoadedReminderState()
         } catch {
             present(error)
         }
@@ -918,14 +971,14 @@ final class AppModel: ObservableObject {
             var updated = reminder
             updated.isEnabled.toggle()
             if updated.isEnabled {
-                guard try await reminderScheduler.requestAuthorization() else {
-                    errorMessage = String(localized: "error.notifications_denied")
+                guard try await authorizeReminderSettingsChangeIfNeeded() else {
                     return
                 }
             }
             try await repository.saveReminder(updated)
-            reminders = try await repository.fetchReminders()
-            try await reminderScheduler.reschedule(reminders)
+            let snapshot = try await repository.ledgerSnapshot()
+            apply(snapshot)
+            try await reconcileLoadedReminderState()
         } catch {
             present(error)
         }
@@ -934,8 +987,25 @@ final class AppModel: ObservableObject {
     func deleteReminder(_ reminder: ReminderSchedule) async {
         do {
             try await repository.deleteReminder(id: reminder.id)
-            reminders = try await repository.fetchReminders()
-            try await reminderScheduler.reschedule(reminders)
+            let snapshot = try await repository.ledgerSnapshot()
+            apply(snapshot)
+            try await reconcileLoadedReminderState()
+        } catch {
+            present(error)
+        }
+    }
+
+    func updateQuietGapEnabled(_ isEnabled: Bool) async {
+        do {
+            if isEnabled {
+                guard try await authorizeReminderSettingsChangeIfNeeded() else {
+                    return
+                }
+            }
+            var updated = planningPreferences
+            updated.isQuietGapEnabled = isEnabled
+            updated.quietGapDays = 7
+            await enqueuePlanningPreferencesSave(updated).value
         } catch {
             present(error)
         }
@@ -943,9 +1013,92 @@ final class AppModel: ObservableObject {
 
     func rescheduleReminders() async {
         do {
-            try await reminderScheduler.reschedule(reminders)
+            let snapshot: LedgerSnapshot
+            if let latestLedgerSnapshot {
+                snapshot = latestLedgerSnapshot
+            } else {
+                snapshot = try await repository.ledgerSnapshot()
+                apply(snapshot)
+            }
+            try await reminderScheduler.reconcile(reminderReconciliationRequest(from: snapshot))
+            notificationAuthorizationStatus = await reminderScheduler.notificationAuthorizationStatus()
         } catch {
             present(error)
+        }
+    }
+
+    func handleReminderEvent(_ event: ReminderNotificationEvent) async {
+        switch event {
+        case let .response(context):
+            await handleReminderResponse(context)
+        }
+    }
+
+    private func handleReminderResponse(_ context: ReminderNotificationResponseContext) async {
+        do {
+            let snapshot = try await repository.ledgerSnapshot()
+            apply(snapshot)
+
+            switch context.action {
+            case .nothingToRecord:
+                guard let event = context.nothingToRecordEvent(calendar: .hourleaf) else { return }
+                guard !isCovered(day: event.day, in: snapshot) else {
+                    try await reconcileLoadedReminderState()
+                    return
+                }
+                _ = try await repository.acknowledgeNothingToRecord(
+                    on: event.day,
+                    source: acknowledgementSource(for: event.source),
+                    at: context.responseDate
+                )
+                let refreshed = try await repository.ledgerSnapshot()
+                apply(refreshed)
+                try await reconcileLoadedReminderState()
+
+            case .later:
+                guard let targetDay = context.targetDay(calendar: .hourleaf) else { return }
+                guard !isCovered(day: targetDay, in: snapshot) else {
+                    try await reconcileLoadedReminderState()
+                    return
+                }
+                let status = await reminderScheduler.notificationAuthorizationStatus()
+                notificationAuthorizationStatus = status
+                guard status.allowsScheduling else {
+                    try await reconcileLoadedReminderState()
+                    return
+                }
+                try await reminderScheduler.scheduleFollowUp(from: context)
+                notificationAuthorizationStatus = await reminderScheduler.notificationAuthorizationStatus()
+
+            case .open, .addTime, .unknown:
+                return
+            }
+        } catch {
+            present(error)
+        }
+    }
+
+    private func isCovered(day: LocalDay, in snapshot: LedgerSnapshot) -> Bool {
+        if snapshot.entries.contains(where: {
+            $0.deletedAt == nil
+                && $0.entry.kind == .service
+                && $0.entry.day == day
+        }) {
+            return true
+        }
+        return snapshot.dayAcknowledgements.contains(where: {
+            $0.day == day && $0.status == DayAcknowledgementStatus.nothingToday.rawValue
+        })
+    }
+
+    private func acknowledgementSource(
+        for source: ReminderNothingToRecordSource
+    ) -> DayAcknowledgementSource {
+        switch source {
+        case .scheduledReminder:
+            return .scheduledReminder
+        case .quietGap:
+            return .quietGap
         }
     }
 

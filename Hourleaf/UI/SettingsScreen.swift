@@ -1,10 +1,12 @@
 import AppIntents
 import SwiftUI
+import UIKit
 
 struct SettingsScreen: View {
     let dataManagementActions: DataManagementActions
 
     @EnvironmentObject private var model: AppModel
+    @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var backupStatus: BackupConfidenceStatusModel
     @State private var showAddReminder = false
@@ -82,10 +84,44 @@ struct SettingsScreen: View {
                         Label("settings.add_reminder", systemImage: "plus")
                     }
                     .accessibilityIdentifier("addReminderButton")
+
+                    Toggle(
+                        "quiet_gap.toggle",
+                        isOn: Binding(
+                            get: { model.planningPreferences.isQuietGapEnabled },
+                            set: { _ in
+                                Task {
+                                    await model.updateQuietGapEnabled(
+                                        !model.planningPreferences.isQuietGapEnabled
+                                    )
+                                }
+                            }
+                        )
+                    )
+                    .accessibilityHint(String(localized: "quiet_gap.footer"))
+                    .accessibilityIdentifier("quietGapCheckToggle")
+
+                    if model.notificationAuthorizationStatus.showsInlineGuidance {
+                        Text("notifications.off")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("notificationAuthorizationStatus")
+
+                        Button("notifications.open_settings") {
+                            guard let url = URL(string: UIApplication.openSettingsURLString) else {
+                                return
+                            }
+                            openURL(url)
+                        }
+                        .accessibilityIdentifier("openNotificationSettingsButton")
+                    }
                 } header: {
                     Text("settings.reminders")
                 } footer: {
-                    Text("settings.reminders_footer")
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("settings.reminders_footer")
+                        Text("quiet_gap.footer")
+                    }
                 }
 
                 Section {
@@ -152,6 +188,7 @@ struct SettingsScreen: View {
             .onAppear {
                 synchronizeCreditLabelDraft()
                 backupStatus.requestRefresh()
+                Task { await model.refreshReminderAuthorizationStatus() }
             }
             .onChange(of: creditLabelIsFocused) { _, isFocused in
                 if !isFocused { saveCreditLabelDraft() }
@@ -159,6 +196,7 @@ struct SettingsScreen: View {
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
                 backupStatus.requestRefresh()
+                Task { await model.refreshReminderAuthorizationStatus() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
                 backupStatus.requestRefresh()
