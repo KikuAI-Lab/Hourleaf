@@ -77,6 +77,66 @@ final class BackupEvidenceStoreTests: XCTestCase {
         XCTAssertEqual(preserved, first)
     }
 
+    func testPartialWriteFailurePreservesPriorValidEvidence() async throws {
+        let sandbox = try makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+
+        let first = sampleEvidence(verifiedAt: Date(timeIntervalSinceReferenceDate: 200))
+        let initialStore = makeStore(root: sandbox)
+        try await initialStore.replace(with: first)
+
+        let failingStore = makeStore(
+            root: sandbox,
+            dataWriter: { _, _, _ in throw TestEvidenceStoreError.writeFailed }
+        )
+        let second = sampleEvidence(
+            verifiedAt: Date(timeIntervalSinceReferenceDate: 500),
+            checksum: String(repeating: "d", count: 64),
+            digest: String(repeating: "e", count: 64)
+        )
+
+        await assertThrowsErrorAsync(try await failingStore.replace(with: second)) {
+            XCTAssertEqual($0 as? VerifiedExportEvidenceStoreError, .writeFailed)
+        }
+
+        let preserved = try await initialStore.read()
+        XCTAssertEqual(preserved, first)
+    }
+
+    func testStoredReceiptContainsOnlyVersionedPrivacySafeFields() async throws {
+        let sandbox = try makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+
+        let store = makeStore(root: sandbox)
+        let evidence = sampleEvidence(verifiedAt: Date(timeIntervalSinceReferenceDate: 200))
+        try await store.replace(with: evidence)
+
+        let data = try Data(
+            contentsOf: sandbox
+                .appendingPathComponent("Hourleaf", isDirectory: true)
+                .appendingPathComponent("BackupEvidence", isDirectory: true)
+                .appendingPathComponent("last-verified-export-v1.json", isDirectory: false)
+        )
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        XCTAssertEqual(
+            Set(object.keys),
+            [
+                "artifactChecksum",
+                "byteCount",
+                "exportedAt",
+                "recordsDigest",
+                "schemaVersion",
+                "totalRecordCount",
+                "verifiedAt"
+            ]
+        )
+        XCTAssertNil(object["url"])
+        XCTAssertNil(object["account"])
+        XCTAssertNil(object["note"])
+        XCTAssertNil(object["reportText"])
+    }
+
     private func makeSandbox() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("BackupEvidenceStoreTests-\(UUID().uuidString.lowercased())", isDirectory: true)
@@ -86,11 +146,15 @@ final class BackupEvidenceStoreTests: XCTestCase {
 
     private func makeStore(
         root: URL,
-        dataReader: @escaping @Sendable (URL) throws -> Data = { try Data(contentsOf: $0) }
+        dataReader: @escaping @Sendable (URL) throws -> Data = { try Data(contentsOf: $0) },
+        dataWriter: @escaping @Sendable (Data, URL, Data.WritingOptions) throws -> Void = { data, url, options in
+            try data.write(to: url, options: options)
+        }
     ) -> VerifiedExportEvidenceStore {
         VerifiedExportEvidenceStore(
             applicationSupportDirectory: { root },
-            dataReader: dataReader
+            dataReader: dataReader,
+            dataWriter: dataWriter
         )
     }
 
@@ -109,6 +173,10 @@ final class BackupEvidenceStoreTests: XCTestCase {
             totalRecordCount: 42
         )
     }
+}
+
+private enum TestEvidenceStoreError: Error {
+    case writeFailed
 }
 
 private func assertThrowsErrorAsync<T>(
