@@ -1676,6 +1676,26 @@ private actor GatedLedgerRepository: LedgerRepository {
     func saveReceipt(_ receipt: ReportReceipt, details: ReportSnapshotDetails?) async throws {
         try await base.saveReceipt(receipt, details: details)
     }
+
+    func reconcileReportLifecycle(asOf now: Date) async throws -> LedgerSnapshot {
+        try await base.reconcileReportLifecycle(asOf: now)
+    }
+
+    func reviewReport(_ request: ReviewReportRequest) async throws -> LedgerSnapshot {
+        try await base.reviewReport(request)
+    }
+
+    func prepareReport(_ request: PrepareReportRequest) async throws -> PreparedReportResult {
+        try await base.prepareReport(request)
+    }
+
+    func markReportSent(_ request: MarkReportSentRequest) async throws -> LedgerSnapshot {
+        try await base.markReportSent(request)
+    }
+
+    func closeServiceYear(_ request: CloseServiceYearRequest) async throws -> ServiceYearArchiveResult {
+        try await base.closeServiceYear(request)
+    }
 }
 
 @MainActor

@@ -16,6 +16,11 @@ protocol LedgerRepository: Sendable {
     func deleteReminder(id: UUID) async throws
     func fetchReceipts() async throws -> [ReportReceipt]
     func saveReceipt(_ receipt: ReportReceipt, details: ReportSnapshotDetails?) async throws
+    func reconcileReportLifecycle(asOf now: Date) async throws -> LedgerSnapshot
+    func reviewReport(_ request: ReviewReportRequest) async throws -> LedgerSnapshot
+    func prepareReport(_ request: PrepareReportRequest) async throws -> PreparedReportResult
+    func markReportSent(_ request: MarkReportSentRequest) async throws -> LedgerSnapshot
+    func closeServiceYear(_ request: CloseServiceYearRequest) async throws -> ServiceYearArchiveResult
 }
 
 actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
@@ -359,6 +364,305 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
                 state.updatedAt = Date()
             }
             try Self.saveIfNeeded(context)
+        }
+    }
+
+    func reconcileReportLifecycle(asOf now: Date) async throws -> LedgerSnapshot {
+        try requireAvailable()
+        try ensureNormalized()
+        return try performMutation { context in
+            let snapshot = try Self.snapshot(in: context)
+            try Self.reconcileLifecycleStateEntities(in: context, snapshot: snapshot, asOf: now)
+            try Self.saveIfNeeded(context)
+            context.refreshAllObjects()
+            return try Self.snapshot(in: context)
+        }
+    }
+
+    func reviewReport(_ request: ReviewReportRequest) async throws -> LedgerSnapshot {
+        try requireAvailable()
+        try ensureNormalized()
+        return try performMutation { context in
+            let snapshot = try Self.snapshot(in: context)
+            let currentMonth = ReportReadiness.currentMonth(asOf: request.reviewedAt)
+            guard request.month >= snapshot.settings.ledgerStartMonth else {
+                throw ReportLifecycleError.beforeLedgerStart
+            }
+            guard request.month < currentMonth else {
+                throw ReportLifecycleError.monthStillOpen
+            }
+            let draft = try Self.requireReportDraft(for: request.month, in: snapshot)
+            guard
+                draft.calculationFingerprint == request.expectedCalculationFingerprint,
+                draft.presentationFingerprint == request.expectedPresentationFingerprint
+            else {
+                throw ReportLifecycleError.reportChanged
+            }
+
+            let existingRecord = Self.stateRecord(for: request.month, in: snapshot)
+            if existingRecord?.state == .reviewed,
+               existingRecord?.reviewedCalculationFingerprint == draft.calculationFingerprint,
+               existingRecord?.reviewedPresentationFingerprint == draft.presentationFingerprint {
+                return snapshot
+            }
+
+            let allowedStates: Set<ReportLifecycleState> = [.ready, .changed]
+            let effectiveState = Self.effectiveLifecycleState(
+                for: request.month,
+                snapshot: snapshot,
+                asOf: request.reviewedAt
+            )
+            guard allowedStates.contains(effectiveState) else {
+                throw ReportLifecycleError.reportChanged
+            }
+
+            let state = try Self.reportState(in: context, monthKey: request.month.key)
+                ?? Self.insertState(month: request.month, in: context, at: request.reviewedAt)
+            state.state = ReportLifecycleState.reviewed.rawValue
+            state.lastStableState = nil
+            state.changedAt = nil
+            state.reviewedCalculationFingerprint = draft.calculationFingerprint
+            state.reviewedPresentationFingerprint = draft.presentationFingerprint
+            state.updatedAt = request.reviewedAt
+
+            try Self.saveIfNeeded(context)
+            context.refreshAllObjects()
+            return try Self.snapshot(in: context)
+        }
+    }
+
+    func prepareReport(_ request: PrepareReportRequest) async throws -> PreparedReportResult {
+        try requireAvailable()
+        try ensureNormalized()
+        return try performMutation { context in
+            if let existing = try Self.reportSnapshotEntity(in: context, id: request.snapshotID) {
+                let series = try Self.reportSnapshotSeries(in: context, month: request.month)
+                let priorSeries = series.filter { $0.version < existing.version }
+                let expectedPreparedAt = Self.clampedTimestamp(
+                    requested: request.preparedAt,
+                    existing: priorSeries.compactMap(\.preparedAt)
+                )
+                let expectedVersion = try Self.nextVersion(
+                    in: priorSeries.map(\.version),
+                    exhaustedError: .receiptVersionExhausted
+                )
+                guard
+                    existing.schemaVersion == 2,
+                    existing.monthKey == request.month.key,
+                    existing.version == expectedVersion,
+                    existing.supersedesID == Self.nextSupersedesID(for: priorSeries),
+                    existing.preparedAt == expectedPreparedAt,
+                    existing.calculationFingerprint == request.expectedCalculationFingerprint,
+                    existing.presentationFingerprint == request.expectedPresentationFingerprint,
+                    existing.createdBySource == ReportReadiness.reportSnapshotSource
+                else {
+                    throw ReportLifecycleError.invalidSnapshotHistory
+                }
+                let refreshed = try Self.snapshot(in: context)
+                guard let replay = refreshed.reportSnapshots.first(where: { $0.id == request.snapshotID }) else {
+                    throw LedgerRepositoryError.invalidManagedObject("Hourleaf could not verify the saved report snapshot.")
+                }
+                return PreparedReportResult(snapshot: replay, ledger: refreshed, wasReplay: true)
+            }
+
+            let snapshot = try Self.snapshot(in: context)
+            let currentMonth = ReportReadiness.currentMonth(asOf: request.preparedAt)
+            guard request.month >= snapshot.settings.ledgerStartMonth else {
+                throw ReportLifecycleError.beforeLedgerStart
+            }
+            guard request.month < currentMonth else {
+                throw ReportLifecycleError.monthStillOpen
+            }
+
+            let draft = try Self.requireReportDraft(for: request.month, in: snapshot)
+            guard
+                draft.calculationFingerprint == request.expectedCalculationFingerprint,
+                draft.presentationFingerprint == request.expectedPresentationFingerprint
+            else {
+                throw ReportLifecycleError.reportChanged
+            }
+
+            let state = try Self.reportState(in: context, monthKey: request.month.key)
+            guard
+                let state,
+                ReportLifecycleState(rawValue: state.state ?? "") == .reviewed,
+                state.reviewedCalculationFingerprint == request.expectedCalculationFingerprint,
+                state.reviewedPresentationFingerprint == request.expectedPresentationFingerprint
+            else {
+                throw ReportLifecycleError.reviewRequired
+            }
+
+            let series = try Self.reportSnapshotSeries(in: context, month: request.month)
+            let version = try Self.nextVersion(
+                in: series.map(\.version),
+                exhaustedError: .receiptVersionExhausted
+            )
+            let effectivePreparedAt = Self.clampedTimestamp(
+                requested: request.preparedAt,
+                existing: series.compactMap(\.preparedAt)
+            )
+            let object = context.insert(ReportReceiptEntity.self)
+            object.id = request.snapshotID
+            object.monthKey = request.month.key
+            object.reportText = draft.text
+            object.serviceHours = Int32(draft.report.serviceHours)
+            object.creditHours = Int32(draft.report.creditHours)
+            object.serviceCarryOut = Int32(draft.report.serviceCarryOut)
+            object.creditCarryOut = Int32(draft.report.creditCarryOut)
+            object.preparedAt = effectivePreparedAt
+            object.confirmedSentAt = nil
+            object.schemaVersion = 2
+            object.version = version
+            object.supersedesID = Self.nextSupersedesID(for: series)
+            object.rawServiceMinutes = Int64(draft.report.rawServiceMinutes)
+            object.rawCreditMinutes = Int64(draft.report.rawCreditMinutes)
+            object.serviceCarryIn = Int32(draft.report.serviceCarryIn)
+            object.creditCarryIn = Int32(draft.report.creditCarryIn)
+            object.reportingMode = draft.reportingMode.rawValue
+            object.reportLanguage = draft.reportLanguage.rawValue
+            object.creditLabel = draft.creditLabel
+            object.templateID = draft.templateID
+            object.calculationFingerprint = draft.calculationFingerprint
+            object.presentationFingerprint = draft.presentationFingerprint
+            object.createdBySource = ReportReadiness.reportSnapshotSource
+            object.legacyCalculationUnavailable = false
+
+            state.currentSnapshotID = request.snapshotID
+            state.state = ReportLifecycleState.prepared.rawValue
+            state.lastStableState = nil
+            state.changedAt = nil
+            state.reviewedCalculationFingerprint = nil
+            state.reviewedPresentationFingerprint = nil
+            state.updatedAt = effectivePreparedAt
+
+            try Self.saveIfNeeded(context)
+            context.refreshAllObjects()
+            let refreshed = try Self.snapshot(in: context)
+            guard let prepared = refreshed.reportSnapshots.first(where: { $0.id == request.snapshotID }) else {
+                throw LedgerRepositoryError.invalidManagedObject("Hourleaf could not verify the saved report snapshot.")
+            }
+            return PreparedReportResult(snapshot: prepared, ledger: refreshed, wasReplay: false)
+        }
+    }
+
+    func markReportSent(_ request: MarkReportSentRequest) async throws -> LedgerSnapshot {
+        try requireAvailable()
+        try ensureNormalized()
+        return try performMutation { context in
+            let target = try Self.reportSnapshotEntity(in: context, id: request.snapshotID)
+            guard let target, let monthKey = target.monthKey, let month = MonthKey(key: monthKey) else {
+                throw ReportLifecycleError.snapshotNotFound
+            }
+            if target.confirmedSentAt != nil {
+                return try Self.snapshot(in: context)
+            }
+            let preSaveSnapshot = try Self.snapshot(in: context)
+            target.confirmedSentAt = request.confirmedAt
+            if let state = try Self.reportState(in: context, monthKey: month.key),
+               state.currentSnapshotID == request.snapshotID {
+                if let draft = ReportReadiness.draft(for: month, in: preSaveSnapshot),
+                   let current = preSaveSnapshot.reportSnapshots.first(where: { $0.id == request.snapshotID }),
+                   ReportReadiness.snapshotMatchesDraft(current, draft: draft, ledger: preSaveSnapshot) {
+                    state.state = ReportLifecycleState.sent.rawValue
+                    state.lastStableState = nil
+                    state.changedAt = nil
+                    state.updatedAt = request.confirmedAt
+                } else if ReportLifecycleState(rawValue: state.state ?? "") == .changed {
+                    if state.lastStableState == ReportLifecycleState.prepared.rawValue {
+                        state.lastStableState = ReportLifecycleState.sent.rawValue
+                    }
+                    state.updatedAt = request.confirmedAt
+                }
+            }
+
+            try Self.saveIfNeeded(context)
+            context.refreshAllObjects()
+            return try Self.snapshot(in: context)
+        }
+    }
+
+    func closeServiceYear(_ request: CloseServiceYearRequest) async throws -> ServiceYearArchiveResult {
+        try requireAvailable()
+        try ensureNormalized()
+        return try performMutation { context in
+            if let existing = try Self.serviceYearArchiveEntity(in: context, id: request.archiveID) {
+                guard
+                    let existingStart = existing.startMonthKey.flatMap(MonthKey.init(key:)),
+                    let existingEnd = existing.endMonthKey.flatMap(MonthKey.init(key:))
+                else {
+                    throw ReportLifecycleError.invalidSnapshotHistory
+                }
+                let series = try Self.serviceYearArchiveSeries(
+                    in: context,
+                    startMonth: existingStart,
+                    endMonth: existingEnd
+                )
+                let priorSeries = series.filter { $0.version < existing.version }
+                let expectedCreatedAt = Self.clampedTimestamp(
+                    requested: request.createdAt,
+                    existing: priorSeries.compactMap(\.createdAt)
+                )
+                let expectedVersion = try Self.nextVersion(
+                    in: priorSeries.map(\.version),
+                    exhaustedError: .archiveVersionExhausted
+                )
+                guard
+                    existing.startMonthKey == request.startMonth.key,
+                    existing.endMonthKey == request.startMonth.advanced(by: 11, calendar: .hourleaf).key,
+                    existing.version == expectedVersion,
+                    existing.supersedesID == Self.nextSupersedesID(for: priorSeries),
+                    existing.createdAt == expectedCreatedAt,
+                    existing.calculationFingerprint == request.expectedCalculationFingerprint
+                else {
+                    throw ReportLifecycleError.invalidSnapshotHistory
+                }
+                let refreshed = try Self.snapshot(in: context)
+                guard let replay = refreshed.serviceYearArchives.first(where: { $0.id == request.archiveID }) else {
+                    throw LedgerRepositoryError.invalidManagedObject("Hourleaf could not verify the saved archive snapshot.")
+                }
+                return ServiceYearArchiveResult(archive: replay, ledger: refreshed, wasReplay: true)
+            }
+
+            let snapshot = try Self.snapshot(in: context)
+            guard let draft = ReportReadiness.serviceYearDraft(starting: request.startMonth, in: snapshot) else {
+                throw ReportLifecycleError.beforeLedgerStart
+            }
+            let currentMonth = ReportReadiness.currentMonth(asOf: request.createdAt)
+            guard draft.endMonth < currentMonth else {
+                throw ReportLifecycleError.serviceYearStillOpen
+            }
+            guard draft.calculationFingerprint == request.expectedCalculationFingerprint else {
+                throw ReportLifecycleError.archiveChanged
+            }
+
+            let series = try Self.serviceYearArchiveSeries(in: context, startMonth: draft.startMonth, endMonth: draft.endMonth)
+            let version = try Self.nextVersion(
+                in: series.map(\.version),
+                exhaustedError: .archiveVersionExhausted
+            )
+            let effectiveCreatedAt = Self.clampedTimestamp(
+                requested: request.createdAt,
+                existing: series.compactMap(\.createdAt)
+            )
+            let object = context.insert(ServiceYearArchiveEntity.self)
+            object.id = request.archiveID
+            object.startMonthKey = draft.startMonth.key
+            object.endMonthKey = draft.endMonth.key
+            object.actualServiceMinutes = Int64(draft.actualServiceMinutes)
+            object.baselineServiceMinutes = Int64(draft.baselineServiceMinutes)
+            object.targetMinutes = Int64(draft.targetMinutes)
+            object.calculationFingerprint = draft.calculationFingerprint
+            object.version = version
+            object.supersedesID = Self.nextSupersedesID(for: series)
+            object.createdAt = effectiveCreatedAt
+
+            try Self.saveIfNeeded(context)
+            context.refreshAllObjects()
+            let refreshed = try Self.snapshot(in: context)
+            guard let archive = refreshed.serviceYearArchives.first(where: { $0.id == request.archiveID }) else {
+                throw LedgerRepositoryError.invalidManagedObject("Hourleaf could not verify the saved archive snapshot.")
+            }
+            return ServiceYearArchiveResult(archive: archive, ledger: refreshed, wasReplay: false)
         }
     }
 
@@ -1323,6 +1627,7 @@ private extension CoreDataLedgerRepository {
         ).sorted {
             ($0.startMonth, $0.version, $0.id.uuidString) < ($1.startMonth, $1.version, $1.id.uuidString)
         }
+        try validateServiceYearArchiveGraph(archives: archives)
 
         return LedgerSnapshot(
             entries: entries,
@@ -1694,14 +1999,27 @@ private extension CoreDataLedgerRepository {
         states: [ReportStateRecord]
     ) throws {
         var snapshotsByID: [UUID: ReportSnapshotMetadata] = [:]
-        var versionsByMonth: [MonthKey: Set<Int>] = [:]
+        var snapshotsByMonth: [MonthKey: [ReportSnapshotMetadata]] = [:]
         for snapshot in snapshots {
             guard snapshotsByID.updateValue(snapshot, forKey: snapshot.id) == nil else {
                 throw LedgerRepositoryError.invalidManagedObject("Saved reports contain a duplicate identifier.")
             }
-            guard versionsByMonth[snapshot.receipt.month, default: []].insert(snapshot.version).inserted else {
-                throw LedgerRepositoryError.invalidManagedObject("Saved reports contain a duplicate month version.")
+            snapshotsByMonth[snapshot.receipt.month, default: []].append(snapshot)
+        }
+
+        var newestSnapshotIDByMonth: [MonthKey: UUID] = [:]
+        for (month, monthSnapshots) in snapshotsByMonth {
+            try validateVersionSeries(
+                monthSnapshots.sorted { ($0.version, $0.id.uuidString) < ($1.version, $1.id.uuidString) },
+                seriesDescription: "Saved reports for \(month.key)",
+                id: \.id,
+                version: \.version,
+                supersedesID: \.supersedesID
+            )
+            guard let newest = monthSnapshots.max(by: reportSnapshotOrder) else {
+                throw LedgerRepositoryError.invalidManagedObject("Saved reports are missing a newest version.")
             }
+            newestSnapshotIDByMonth[month] = newest.id
         }
 
         var stateMonths = Set<MonthKey>()
@@ -1728,12 +2046,270 @@ private extension CoreDataLedgerRepository {
                         "A prepared report state points to a sent report snapshot."
                     )
                 }
+                if newestSnapshotIDByMonth[state.month] != currentSnapshotID {
+                    throw LedgerRepositoryError.invalidManagedObject(
+                        "Saved report state does not point to the newest report snapshot."
+                    )
+                }
             } else if state.state == .prepared || state.state == .sent {
                 throw LedgerRepositoryError.invalidManagedObject(
                     "Prepared and sent report states require a current report snapshot."
                 )
             }
         }
+        for (month, newestSnapshotID) in newestSnapshotIDByMonth {
+            guard states.contains(where: { $0.month == month && $0.currentSnapshotID == newestSnapshotID }) else {
+                throw LedgerRepositoryError.invalidManagedObject(
+                    "Saved report state does not point to the newest report snapshot."
+                )
+            }
+        }
+    }
+
+    static func validateServiceYearArchiveGraph(
+        archives: [ServiceYearArchiveRecord]
+    ) throws {
+        var archiveIDs = Set<UUID>()
+        let grouped = Dictionary(grouping: archives) { "\($0.startMonth.key)|\($0.endMonth.key)" }
+        for archive in archives {
+            guard archiveIDs.insert(archive.id).inserted else {
+                throw LedgerRepositoryError.invalidManagedObject("Saved service-year archives contain a duplicate identifier.")
+            }
+            if archive.calculationFingerprint.hasPrefix("service-year-v1:") {
+                guard archive.startMonth.month == GoalPolicy.regularPioneer.startMonth else {
+                    throw LedgerRepositoryError.invalidManagedObject("A saved service-year archive has an invalid start month.")
+                }
+                guard archive.endMonth == archive.startMonth.advanced(by: 11, calendar: .hourleaf) else {
+                    throw LedgerRepositoryError.invalidManagedObject("A saved service-year archive has an invalid end month.")
+                }
+            }
+        }
+        for (series, members) in grouped {
+            try validateVersionSeries(
+                members.sorted { ($0.version, $0.id.uuidString) < ($1.version, $1.id.uuidString) },
+                seriesDescription: "Saved archive series \(series)",
+                id: \.id,
+                version: \.version,
+                supersedesID: \.supersedesID
+            )
+        }
+    }
+
+    static func validateVersionSeries<Record>(
+        _ ordered: [Record],
+        seriesDescription: String,
+        id: (Record) -> UUID,
+        version: (Record) -> Int,
+        supersedesID: (Record) -> UUID?
+    ) throws {
+        let hasSupersedesEdges = ordered.contains { supersedesID($0) != nil }
+        var priorID: UUID?
+        for (offset, record) in ordered.enumerated() {
+            let expected = offset + 1
+            guard version(record) == expected else {
+                throw LedgerRepositoryError.invalidManagedObject("\(seriesDescription) do not have contiguous versions.")
+            }
+            if hasSupersedesEdges {
+                guard supersedesID(record) == priorID else {
+                    throw LedgerRepositoryError.invalidManagedObject(
+                        "\(seriesDescription) do not supersede the immediate prior version."
+                    )
+                }
+            }
+            priorID = id(record)
+        }
+    }
+
+    static func stateRecord(
+        for month: MonthKey,
+        in snapshot: LedgerSnapshot
+    ) -> ReportStateRecord? {
+        snapshot.reportStates.first { $0.month == month }
+    }
+
+    static func effectiveLifecycleState(
+        for month: MonthKey,
+        snapshot: LedgerSnapshot,
+        asOf now: Date
+    ) -> ReportLifecycleState {
+        if !ReportReadiness.isClosedMonth(month, asOf: now) {
+            return .draft
+        }
+        if let state = stateRecord(for: month, in: snapshot) {
+            if state.state == .draft {
+                return .ready
+            }
+            return state.state
+        }
+        if let head = newestSnapshot(for: month, in: snapshot) {
+            return head.receipt.confirmedSentAt == nil ? .prepared : .sent
+        }
+        return .ready
+    }
+
+    static func newestSnapshot(
+        for month: MonthKey,
+        in snapshot: LedgerSnapshot
+    ) -> ReportSnapshotMetadata? {
+        snapshot.reportSnapshots
+            .filter { $0.receipt.month == month }
+            .max(by: reportSnapshotOrder)
+    }
+
+    static func reconcileLifecycleStateEntities(
+        in context: NSManagedObjectContext,
+        snapshot: LedgerSnapshot,
+        asOf now: Date
+    ) throws {
+        let currentMonth = ReportReadiness.currentMonth(asOf: now)
+        let previousMonth = currentMonth.advanced(by: -1, calendar: .hourleaf)
+
+        for record in snapshot.reportStates {
+            guard let state = try reportState(in: context, monthKey: record.month.key) else { continue }
+            if record.month >= currentMonth {
+                state.state = ReportLifecycleState.draft.rawValue
+                state.updatedAt = now
+                continue
+            }
+            if record.state == .draft {
+                state.state = ReportLifecycleState.ready.rawValue
+                state.updatedAt = now
+            }
+        }
+
+        guard previousMonth >= snapshot.settings.ledgerStartMonth else { return }
+        if try reportState(in: context, monthKey: previousMonth.key) == nil {
+            let state = insertState(month: previousMonth, in: context, at: now)
+            if let newest = newestSnapshot(for: previousMonth, in: snapshot) {
+                state.currentSnapshotID = newest.id
+                state.state = newest.receipt.confirmedSentAt == nil
+                    ? ReportLifecycleState.prepared.rawValue
+                    : ReportLifecycleState.sent.rawValue
+            } else {
+                state.state = ReportLifecycleState.ready.rawValue
+            }
+        }
+    }
+
+    static func insertState(
+        month: MonthKey,
+        in context: NSManagedObjectContext,
+        at timestamp: Date
+    ) -> ReportStateEntity {
+        let state = context.insert(ReportStateEntity.self)
+        state.id = UUID()
+        state.monthKey = month.key
+        state.updatedAt = timestamp
+        return state
+    }
+
+    static func requireReportDraft(
+        for month: MonthKey,
+        in snapshot: LedgerSnapshot
+    ) throws -> ReportDraft {
+        guard let draft = ReportReadiness.draft(for: month, in: snapshot) else {
+            throw ReportLifecycleError.beforeLedgerStart
+        }
+        return draft
+    }
+
+    static func reportSnapshotEntity(
+        in context: NSManagedObjectContext,
+        id: UUID
+    ) throws -> ReportReceiptEntity? {
+        let request: NSFetchRequest<ReportReceiptEntity> = ReportReceiptEntity.request()
+        request.fetchLimit = 1
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        let objects = try context.fetch(request)
+        _ = try decodeRequired(objects, entity: "ReportReceiptEntity", using: reportSnapshotMetadata)
+        return objects.first
+    }
+
+    static func reportSnapshotSeries(
+        in context: NSManagedObjectContext,
+        month: MonthKey
+    ) throws -> [ReportReceiptEntity] {
+        let request: NSFetchRequest<ReportReceiptEntity> = ReportReceiptEntity.request()
+        request.predicate = NSPredicate(format: "monthKey == %@", month.key)
+        let objects = try context.fetch(request)
+        _ = try decodeRequired(objects, entity: "ReportReceiptEntity", using: reportSnapshotMetadata)
+        return objects.sorted { ($0.version, $0.id?.uuidString ?? "") < ($1.version, $1.id?.uuidString ?? "") }
+    }
+
+    static func serviceYearArchiveEntity(
+        in context: NSManagedObjectContext,
+        id: UUID
+    ) throws -> ServiceYearArchiveEntity? {
+        let request: NSFetchRequest<ServiceYearArchiveEntity> = ServiceYearArchiveEntity.request()
+        request.fetchLimit = 1
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        let objects = try context.fetch(request)
+        _ = try decodeRequired(objects, entity: "ServiceYearArchiveEntity", using: serviceYearArchiveRecord)
+        return objects.first
+    }
+
+    static func serviceYearArchiveSeries(
+        in context: NSManagedObjectContext,
+        startMonth: MonthKey,
+        endMonth: MonthKey
+    ) throws -> [ServiceYearArchiveEntity] {
+        let request: NSFetchRequest<ServiceYearArchiveEntity> = ServiceYearArchiveEntity.request()
+        request.predicate = NSPredicate(
+            format: "startMonthKey == %@ AND endMonthKey == %@",
+            startMonth.key,
+            endMonth.key
+        )
+        let objects = try context.fetch(request)
+        _ = try decodeRequired(objects, entity: "ServiceYearArchiveEntity", using: serviceYearArchiveRecord)
+        return objects.sorted { ($0.version, $0.id?.uuidString ?? "") < ($1.version, $1.id?.uuidString ?? "") }
+    }
+
+    static func serviceYearArchiveEntityMatchesDraft(
+        _ object: ServiceYearArchiveEntity,
+        draft: ServiceYearDraft
+    ) -> Bool {
+        guard let record = serviceYearArchiveRecord(from: object) else { return false }
+        return ReportReadiness.archiveMatchesDraft(record, draft: draft)
+    }
+
+    static func nextVersion(
+        in versions: [Int32],
+        exhaustedError: ReportLifecycleError
+    ) throws -> Int32 {
+        let current = versions.max() ?? 0
+        guard current < Int32.max else { throw exhaustedError }
+        return current + 1
+    }
+
+    static func nextSupersedesID<Record>(
+        for orderedSeries: [Record]
+    ) -> UUID? where Record: NSManagedObject {
+        guard !orderedSeries.isEmpty else { return nil }
+        let idsAndSupersedes: [(UUID, UUID?)] = orderedSeries.compactMap { record in
+            switch record {
+            case let receipt as ReportReceiptEntity:
+                guard let id = receipt.id else { return nil }
+                return (id, receipt.supersedesID)
+            case let archive as ServiceYearArchiveEntity:
+                guard let id = archive.id else { return nil }
+                return (id, archive.supersedesID)
+            default:
+                return nil
+            }
+        }
+        guard idsAndSupersedes.count == orderedSeries.count else { return nil }
+        let allNil = idsAndSupersedes.count > 1 && idsAndSupersedes.allSatisfy { $0.1 == nil }
+        if allNil { return nil }
+        return idsAndSupersedes.last?.0
+    }
+
+    static func clampedTimestamp(
+        requested: Date,
+        existing: [Date]
+    ) -> Date {
+        guard let maximum = existing.max() else { return requested }
+        let minimumNext = maximum.addingTimeInterval(0.001)
+        return requested > maximum ? requested : minimumNext
     }
 
     static func write(_ settings: AppSettings, to object: SettingsEntity) {
@@ -1828,6 +2404,12 @@ private extension CoreDataLedgerRepository {
     static func receiptOrder(_ lhs: ReportReceiptEntity, _ rhs: ReportReceiptEntity) -> Bool {
         let lhsKey = (lhs.preparedAt ?? .distantPast, lhs.id?.uuidString ?? "")
         let rhsKey = (rhs.preparedAt ?? .distantPast, rhs.id?.uuidString ?? "")
+        return lhsKey < rhsKey
+    }
+
+    static func reportSnapshotOrder(_ lhs: ReportSnapshotMetadata, _ rhs: ReportSnapshotMetadata) -> Bool {
+        let lhsKey = (lhs.receipt.preparedAt, lhs.id.uuidString)
+        let rhsKey = (rhs.receipt.preparedAt, rhs.id.uuidString)
         return lhsKey < rhsKey
     }
 
