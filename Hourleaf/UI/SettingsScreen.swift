@@ -72,15 +72,10 @@ struct SettingsScreen: View {
                 Section {
                     NavigationLink("settings.opening_balances") { StartingBalancesView() }
                         .accessibilityIdentifier("existingTimeButton")
-                    LabeledContent("settings.storage", value: String(localized: "settings.storage_value"))
-                        .accessibilityIdentifier("storageStatus")
                 } header: {
                     Text("settings.data")
                 } footer: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("settings.opening_balances_help")
-                        Text("settings.sync_planned")
-                    }
+                    Text("settings.opening_balances_help")
                 }
 
                 Section("settings.privacy") {
