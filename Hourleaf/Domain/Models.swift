@@ -181,11 +181,20 @@ struct ReportSnapshotDetails: Equatable, Sendable {
     let presentationFingerprint: String
 }
 
+enum ReportLifecycleState: String, Codable, CaseIterable, Sendable {
+    case draft
+    case ready
+    case reviewed
+    case prepared
+    case sent
+    case changed
+}
+
 struct ReportStateRecord: Identifiable, Equatable, Sendable {
     let id: UUID
     let month: MonthKey
-    let state: String
-    let lastStableState: String?
+    let state: ReportLifecycleState
+    let lastStableState: ReportLifecycleState?
     let currentSnapshotID: UUID?
     let reviewedCalculationFingerprint: String?
     let reviewedPresentationFingerprint: String?

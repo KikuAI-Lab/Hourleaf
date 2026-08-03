@@ -1548,15 +1548,21 @@ private extension CoreDataLedgerRepository {
         guard
             let id = object.id,
             let month = object.monthKey.flatMap(MonthKey.init(key:)),
-            let state = object.state,
-            let updatedAt = object.updatedAt,
-            ["draft", "ready", "reviewed", "prepared", "sent", "changed"].contains(state)
+            let state = object.state.flatMap(ReportLifecycleState.init(rawValue:)),
+            let updatedAt = object.updatedAt
         else { return nil }
+        let lastStableState: ReportLifecycleState?
+        if let rawLastStableState = object.lastStableState {
+            guard let parsed = ReportLifecycleState(rawValue: rawLastStableState) else { return nil }
+            lastStableState = parsed
+        } else {
+            lastStableState = nil
+        }
         return ReportStateRecord(
             id: id,
             month: month,
             state: state,
-            lastStableState: object.lastStableState,
+            lastStableState: lastStableState,
             currentSnapshotID: object.currentSnapshotID,
             reviewedCalculationFingerprint: object.reviewedCalculationFingerprint,
             reviewedPresentationFingerprint: object.reviewedPresentationFingerprint,
@@ -1712,17 +1718,17 @@ private extension CoreDataLedgerRepository {
                         "Saved report state points to a missing report snapshot."
                     )
                 }
-                if state.state == "sent", current.receipt.confirmedSentAt == nil {
+                if state.state == .sent, current.receipt.confirmedSentAt == nil {
                     throw LedgerRepositoryError.invalidManagedObject(
                         "A sent report state points to a report that was not confirmed sent."
                     )
                 }
-                if state.state == "prepared", current.receipt.confirmedSentAt != nil {
+                if state.state == .prepared, current.receipt.confirmedSentAt != nil {
                     throw LedgerRepositoryError.invalidManagedObject(
                         "A prepared report state points to a sent report snapshot."
                     )
                 }
-            } else if state.state == "prepared" || state.state == "sent" {
+            } else if state.state == .prepared || state.state == .sent {
                 throw LedgerRepositoryError.invalidManagedObject(
                     "Prepared and sent report states require a current report snapshot."
                 )

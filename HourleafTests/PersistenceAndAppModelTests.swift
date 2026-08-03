@@ -928,7 +928,7 @@ final class PersistenceAndAppModelTests: XCTestCase {
         XCTAssertEqual(receiptMetadata.createdBySource, "migration")
         let state = try XCTUnwrap(snapshot.reportStates.first)
         XCTAssertEqual(state.month, fixture.receipt.month)
-        XCTAssertEqual(state.state, "sent")
+        XCTAssertEqual(state.state, .sent)
         XCTAssertEqual(state.currentSnapshotID, fixture.receipt.id)
 
         let secondRepository = CoreDataLedgerRepository(persistence: persistence)
@@ -1003,7 +1003,7 @@ final class PersistenceAndAppModelTests: XCTestCase {
 
         let snapshot = try await repository.ledgerSnapshot()
         let state = try XCTUnwrap(snapshot.reportStates.first { $0.month == month })
-        XCTAssertEqual(state.state, "prepared")
+        XCTAssertEqual(state.state, .prepared)
         XCTAssertEqual(state.currentSnapshotID, newer.id)
     }
 
@@ -1148,7 +1148,7 @@ final class PersistenceAndAppModelTests: XCTestCase {
         let repository = CoreDataLedgerRepository(persistence: persistence)
         let snapshot = try await repository.ledgerSnapshot()
         let state = try XCTUnwrap(snapshot.reportStates.first)
-        XCTAssertEqual(state.state, "prepared")
+        XCTAssertEqual(state.state, .prepared)
         XCTAssertEqual(state.currentSnapshotID, newerID)
         XCTAssertEqual(snapshot.reportStates.count, 1)
         XCTAssertTrue(snapshot.reportSnapshots.allSatisfy(\.legacyCalculationUnavailable))
