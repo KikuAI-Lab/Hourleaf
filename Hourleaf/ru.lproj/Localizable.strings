@@ -28,9 +28,12 @@
 "error.mutation_saved_refresh_failed" = "Изменение сохранено, но Hourleaf не удалось обновить данные. Закройте и снова откройте приложение, прежде чем вносить ещё изменения.";
 "error.local_data" = "Не удалось открыть или сохранить данные Hourleaf на этом устройстве.";
 "error.report_changed" = "Отчёт изменился до подготовки. Проверьте его и попробуйте снова.";
+"error.restore_in_progress" = "Hourleaf восстанавливает данные. Подождите немного и попробуйте снова.";
 "startup.loading" = "Загружаем часы…";
 "startup.failed.title" = "Не удалось открыть часы";
 "startup.failed.message" = "Закройте Hourleaf и откройте его снова.";
+"startup.recovery.title" = "Hourleaf защищает ваши данные";
+"startup.recovery.message" = "Hourleaf обнаружил незавершённое восстановление и не смог безопасно его закончить. Не удаляйте приложение. Закройте его и попробуйте снова; если этот экран появится опять, свяжитесь с разработчиком.";
 "error.empty_duration" = "Выберите хотя бы одну минуту.";
 "error.invalid_hours" = "Часы не могут быть отрицательными.";
 "error.invalid_minutes" = "Минуты должны быть от 0 до 59.";
@@ -104,6 +107,7 @@
 "settings.shortcuts" = "Быстрые команды";
 "settings.shortcuts_footer" = "Нажмите, чтобы увидеть три команды Hourleaf: добавить служение, добавить кредит и открыть «Добавить время». Для кнопки действия выберите команду Hourleaf: «Настройки» → «Кнопка действия» → «Быстрые команды».";
 "settings.data" = "Данные";
+"settings.data_help" = "Здесь можно создать резервную копию или CSV, восстановить данные и указать время до Hourleaf.";
 "settings.opening_balances" = "Время до начала Hourleaf";
 "settings.opening_balances_help" = "Нужно только если вы служили до первой записи в Hourleaf или переносите минуты из прошлого отчёта.";
 "settings.privacy" = "Приватность";
@@ -171,6 +175,10 @@
 "data_management.restore.replace" = "Восстановление заменит все текущие данные Hourleaf на этом iPhone. Записи не объединяются.";
 "data_management.restore.confirmation" = "Я понимаю, что восстановление заменит мои текущие данные.";
 "data_management.restore.confirm" = "Восстановить из копии";
+"data_management.restore.preview_exported" = "Копия от %@";
+"data_management.restore.preview_entries" = "Записи: %lld действующих, %lld удалённых";
+"data_management.restore.preview_period" = "Период: %@ – %@";
+"data_management.restore.preview_details" = "Заметки: %lld · Напоминания: %lld · Отчёты: %lld · Архивы служебных лет: %lld";
 "data_management.restore.unavailable_cloud" = "Восстановление недоступно, пока включена синхронизация iCloud. Данные не изменяются.";
 "data_management.csv" = "CSV";
 "data_management.csv.include_notes" = "Включить заметки";

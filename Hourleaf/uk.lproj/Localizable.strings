@@ -28,9 +28,12 @@
 "error.mutation_saved_refresh_failed" = "Зміну збережено, але Hourleaf не вдалося оновити дані. Закрийте й знову відкрийте застосунок, перш ніж вносити ще зміни.";
 "error.local_data" = "Не вдалося відкрити або зберегти дані Hourleaf на цьому пристрої.";
 "error.report_changed" = "Звіт змінився до підготовки. Перевірте його й спробуйте знову.";
+"error.restore_in_progress" = "Hourleaf відновлює дані. Зачекайте трохи й спробуйте знову.";
 "startup.loading" = "Завантажуємо години…";
 "startup.failed.title" = "Не вдалося відкрити години";
 "startup.failed.message" = "Закрийте Hourleaf і відкрийте його знову.";
+"startup.recovery.title" = "Hourleaf захищає ваші дані";
+"startup.recovery.message" = "Hourleaf виявив незавершене відновлення й не зміг безпечно його закінчити. Не видаляйте застосунок. Закрийте його й спробуйте знову; якщо цей екран з’явиться ще раз, зв’яжіться з розробником.";
 "error.empty_duration" = "Виберіть принаймні одну хвилину.";
 "error.invalid_hours" = "Години не можуть бути від’ємними.";
 "error.invalid_minutes" = "Хвилини мають бути від 0 до 59.";
@@ -104,6 +107,7 @@
 "settings.shortcuts" = "Швидкі команди";
 "settings.shortcuts_footer" = "Натисніть, щоб побачити три команди Hourleaf: додати служіння, додати кредит і відкрити «Додати час». Для кнопки дії виберіть команду Hourleaf: «Налаштування» → «Кнопка дії» → «Швидкі команди».";
 "settings.data" = "Дані";
+"settings.data_help" = "Тут можна створити резервну копію або CSV, відновити дані та вказати час до Hourleaf.";
 "settings.opening_balances" = "Час до початку Hourleaf";
 "settings.opening_balances_help" = "Потрібно лише якщо ви служили до першого запису в Hourleaf або переносите хвилини з попереднього звіту.";
 "settings.privacy" = "Приватність";
@@ -171,6 +175,10 @@
 "data_management.restore.replace" = "Відновлення замінить усі поточні дані Hourleaf на цьому iPhone. Записи не об’єднуються.";
 "data_management.restore.confirmation" = "Я розумію, що відновлення замінить мої поточні дані.";
 "data_management.restore.confirm" = "Відновити з копії";
+"data_management.restore.preview_exported" = "Копія від %@";
+"data_management.restore.preview_entries" = "Записи: %lld активних, %lld видалених";
+"data_management.restore.preview_period" = "Період: %@ – %@";
+"data_management.restore.preview_details" = "Нотатки: %lld · Нагадування: %lld · Звіти: %lld · Архіви службових років: %lld";
 "data_management.restore.unavailable_cloud" = "Відновлення недоступне, доки ввімкнено синхронізацію iCloud. Дані не змінюються.";
 "data_management.csv" = "CSV";
 "data_management.csv.include_notes" = "Додати нотатки";

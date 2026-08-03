@@ -752,6 +752,52 @@ final class EntryMutationTests: XCTestCase {
         XCTAssertNotNil(model.visibleUndoCandidate)
     }
 
+    func testRefreshAfterRestoreReplacesSnapshotAndClearsUndoState() async throws {
+        let repository = try await makeRepository()
+        let model = AppModel(repository: repository, reminderScheduler: NoopReminderScheduler())
+        await model.loadInitialSnapshot()
+
+        let added = await model.addEntry(
+            kind: .service,
+            date: Date(),
+            hours: 1,
+            minutes: 15,
+            note: nil
+        )
+        XCTAssertTrue(added)
+        let staleRecord = try XCTUnwrap(model.entryRecords.first)
+        XCTAssertNotNil(model.undoCandidate)
+        XCTAssertNotNil(model.visibleUndoCandidate)
+
+        _ = try await repository.apply(updateCommand(
+            entryID: staleRecord.id,
+            expectedRevision: staleRecord.revision,
+            minutes: 30,
+            note: "Restored"
+        ))
+        XCTAssertEqual(model.entries.first?.minutes, 75)
+
+        try await model.refreshAfterRestore()
+
+        XCTAssertEqual(model.entries.first?.minutes, 30)
+        XCTAssertEqual(model.entryRecords.first?.revision, staleRecord.revision + 1)
+        XCTAssertNil(model.undoCandidate)
+        XCTAssertNil(model.visibleUndoCandidate)
+        XCTAssertEqual(model.startupState, .ready)
+    }
+
+    func testAppModelExplainsMaintenanceInsteadOfShowingAGenericDataError() async throws {
+        let repository = try await makeRepository()
+        let model = AppModel(repository: repository, reminderScheduler: NoopReminderScheduler())
+        await model.loadInitialSnapshot()
+        let lease = try await repository.acquireMaintenanceLease()
+
+        await model.reload()
+
+        XCTAssertEqual(model.errorMessage, String(localized: "error.restore_in_progress"))
+        try await repository.releaseMaintenanceLease(lease)
+    }
+
     func testAppModelRejectsInvalidUpdateComponentsWithoutChangingTheRecord() async throws {
         let repository = try await makeRepository()
         let model = AppModel(repository: repository, reminderScheduler: NoopReminderScheduler())

@@ -72,6 +72,55 @@ final class AppModel: ObservableObject {
         await refreshFromStore(showUndoBanner: false)
     }
 
+    /// Drains the only queued model-owned writer before restore acquires its
+    /// repository lease. This prevents an old settings draft from resuming
+    /// after a successful whole-store replacement and overwriting restored
+    /// settings.
+    func prepareForWholeStoreRestore() async {
+        while let pendingSettingsSave = settingsSaveTask {
+            await pendingSettingsSave.value
+        }
+        while isStoreRefreshInFlight {
+            await Task.yield()
+        }
+        undoBannerTask?.cancel()
+        undoBannerTask = nil
+        visibleUndoCandidate = nil
+        undoCandidate = nil
+        undoStateGeneration &+= 1
+    }
+
+    /// Reads every published value from the fresh container returned by the
+    /// restore coordinator. Imported mutation history is intentionally not
+    /// offered as a current-session Undo action.
+    func refreshAfterRestore() async throws {
+        startupState = .loading
+        startupDiagnostic = nil
+        settingsSaveGeneration &+= 1
+        settingsSaveTask = nil
+        storeRefreshRequested = false
+        storeRefreshShouldShowUndo = false
+        reportPreparationsInFlight.removeAll()
+        restoringEntryIDs.removeAll()
+        isUndoing = false
+        undoBannerTask?.cancel()
+        undoBannerTask = nil
+        visibleUndoCandidate = nil
+        undoCandidate = nil
+        undoStateGeneration &+= 1
+
+        do {
+            try await loadSnapshot(waitForPendingSettingsSave: false)
+            initialSnapshotLoaded = true
+            errorMessage = nil
+            startupState = .ready
+        } catch {
+            startupDiagnostic = error.localizedDescription
+            startupState = .failed
+            throw error
+        }
+    }
+
     /// Refreshes the one live app model after the scene becomes active. This
     /// is the fallback for a shortcut write that happened while the scene was
     /// suspended and therefore could not deliver its retained router signal.
@@ -654,6 +703,9 @@ final class AppModel: ObservableObject {
             errorMessage = validationError.localizedDescription
         } else if let mutationError = error as? EntryMutationError {
             errorMessage = mutationError.localizedDescription
+        } else if let repositoryError = error as? LedgerRepositoryError,
+                  repositoryError == .maintenanceInProgress {
+            errorMessage = String(localized: "error.restore_in_progress")
         } else if error is LedgerRepositoryError || error is PersistenceStartupError {
             errorMessage = String(localized: "error.local_data")
         } else {

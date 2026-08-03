@@ -272,6 +272,15 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["shortcutsFooter"].exists)
     }
 
+    func testSettingsOpensDataManagement() {
+        let app = launchApp()
+        app.tabBars.buttons["Settings"].tap()
+        app.buttons["dataManagementButton"].tap()
+
+        XCTAssertTrue(app.buttons["createBackupButton"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["chooseRestoreBackupButton"].waitForExistence(timeout: 5))
+    }
+
     func testRussianInterfaceLaunches() {
         let app = XCUIApplication()
         app.launchArguments = ["-uiTesting", "-AppleLanguages", "(ru)"]

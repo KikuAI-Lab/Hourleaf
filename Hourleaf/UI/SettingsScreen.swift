@@ -2,6 +2,8 @@ import AppIntents
 import SwiftUI
 
 struct SettingsScreen: View {
+    let dataManagementActions: DataManagementActions
+
     @EnvironmentObject private var model: AppModel
     @State private var showAddReminder = false
     @State private var creditLabelDraft = ""
@@ -70,12 +72,19 @@ struct SettingsScreen: View {
                 }
 
                 Section {
+                    NavigationLink {
+                        DataManagementView(actions: dataManagementActions)
+                    } label: {
+                        Label("data_management.title", systemImage: "externaldrive")
+                    }
+                    .accessibilityIdentifier("dataManagementButton")
+
                     NavigationLink("settings.opening_balances") { StartingBalancesView() }
                         .accessibilityIdentifier("existingTimeButton")
                 } header: {
                     Text("settings.data")
                 } footer: {
-                    Text("settings.opening_balances_help")
+                    Text("settings.data_help")
                 }
 
                 Section("settings.privacy") {

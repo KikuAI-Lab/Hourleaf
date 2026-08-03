@@ -55,10 +55,6 @@ struct DataManagementView: View {
             Text("data_management.backup.readable")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text("data_management.backup.cloud_gate")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
             if busyOperation == .backup {
                 progressRow(for: .backup)
             }

@@ -5,10 +5,18 @@ import Foundation
 struct DataManagementRestorePreview: Identifiable, Equatable, Sendable {
     let id: UUID
     let summary: String
+    fileprivate let candidateID: RestoreCandidateID?
 
     init(id: UUID = UUID(), summary: String) {
         self.id = id
         self.summary = summary
+        candidateID = nil
+    }
+
+    fileprivate init(candidateID: RestoreCandidateID, summary: String) {
+        id = UUID()
+        self.summary = summary
+        self.candidateID = candidateID
     }
 }
 
@@ -70,4 +78,117 @@ struct DataManagementActions {
     let restore: (DataManagementRestorePreview) async throws -> Void
     let discardRestorePreview: (DataManagementRestorePreview) async -> Void
     let exportCSV: (Bool) async throws -> FileSharePayload
+
+    static func live(
+        repository: CoreDataLedgerRepository,
+        restoreCoordinator: HourleafRestoreCoordinator,
+        appModel: AppModel
+    ) -> Self {
+        Self(
+            restoreAvailability: .available,
+            createBackup: {
+                let directory = try makeShareDirectory()
+                do {
+                    let artifact = try await HourleafBackupExporter(source: repository)
+                        .createVerifiedBackup(in: directory)
+                    return sharePayload(for: artifact.url, cleaning: directory)
+                } catch {
+                    try? FileManager.default.removeItem(at: directory)
+                    throw error
+                }
+            },
+            previewRestore: { url in
+                let preview = try await restoreCoordinator.prepare(from: url)
+                return DataManagementRestorePreview(
+                    candidateID: preview.candidateID,
+                    summary: restoreSummary(preview)
+                )
+            },
+            restore: { preview in
+                guard let candidateID = preview.candidateID else {
+                    throw HourleafRestoreError.candidateUnavailable
+                }
+                await appModel.prepareForWholeStoreRestore()
+                _ = try await restoreCoordinator.confirm(candidateID)
+                do {
+                    try await appModel.refreshAfterRestore()
+                } catch {
+                    // The store replacement is already durable. AppModel marks
+                    // itself failed so RootView blocks instead of presenting a
+                    // retry that could no longer refer to this candidate.
+                }
+            },
+            discardRestorePreview: { preview in
+                guard let candidateID = preview.candidateID else { return }
+                try? await restoreCoordinator.discardCandidate(candidateID)
+            },
+            exportCSV: { includeNotes in
+                let directory = try makeShareDirectory()
+                do {
+                    let records = try await repository.fetchAllEntries()
+                    let artifact = try CSVExporter().export(
+                        records: records,
+                        includeNotes: includeNotes,
+                        in: directory
+                    )
+                    return sharePayload(for: artifact.url, cleaning: directory)
+                } catch {
+                    try? FileManager.default.removeItem(at: directory)
+                    throw error
+                }
+            }
+        )
+    }
+
+    private static func makeShareDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "Hourleaf-Share-\(UUID().uuidString.lowercased())",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: false,
+            attributes: [
+                .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication
+            ]
+        )
+        return directory
+    }
+
+    private static func sharePayload(for url: URL, cleaning directory: URL) -> FileSharePayload {
+        FileSharePayload(url: url) {
+            try? FileManager.default.removeItem(at: directory)
+        }
+    }
+
+    private static func restoreSummary(_ preview: RestorePreview) -> String {
+        var lines = [String(
+            format: String(localized: "data_management.restore.preview_exported"),
+            locale: .current,
+            preview.exportedAt.formatted(date: .abbreviated, time: .shortened)
+        )]
+        lines.append(String(
+            format: String(localized: "data_management.restore.preview_entries"),
+            locale: .current,
+            Int64(preview.activeEntryCount),
+            Int64(preview.deletedEntryCount)
+        ))
+        if let range = preview.entryDateRange {
+            lines.append(String(
+                format: String(localized: "data_management.restore.preview_period"),
+                locale: .current,
+                range.firstLocalDay,
+                range.lastLocalDay
+            ))
+        }
+        lines.append(String(
+            format: String(localized: "data_management.restore.preview_details"),
+            locale: .current,
+            Int64(preview.noteCount),
+            Int64(preview.reminderCount),
+            Int64(preview.receiptCount),
+            Int64(preview.archiveCount)
+        ))
+        return lines.joined(separator: "\n")
+    }
 }

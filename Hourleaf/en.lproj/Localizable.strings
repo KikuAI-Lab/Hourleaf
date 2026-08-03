@@ -28,9 +28,12 @@
 "error.mutation_saved_refresh_failed" = "Your change was saved, but Hourleaf could not refresh it. Close and reopen the app before making another change.";
 "error.local_data" = "Hourleaf could not open or save your data on this device.";
 "error.report_changed" = "The report changed before it was prepared. Review it and try again.";
+"error.restore_in_progress" = "Hourleaf is restoring your data. Wait a moment, then try again.";
 "startup.loading" = "Loading your hours…";
 "startup.failed.title" = "Your hours could not be opened";
 "startup.failed.message" = "Close Hourleaf and open it again.";
+"startup.recovery.title" = "Hourleaf is protecting your data";
+"startup.recovery.message" = "Hourleaf found an unfinished restore and could not safely complete it. Do not delete the app. Close it and try again; if this screen returns, contact the developer.";
 "error.empty_duration" = "Choose at least one minute.";
 "error.invalid_hours" = "Hours cannot be negative.";
 "error.invalid_minutes" = "Minutes must be between 0 and 59.";
@@ -104,6 +107,7 @@
 "settings.shortcuts" = "Shortcuts";
 "settings.shortcuts_footer" = "Tap to see Hourleaf’s three commands: Add Service, Add Credit, and Open Add Time. For the Action Button, choose an Hourleaf command in Settings > Action Button > Shortcut.";
 "settings.data" = "Data";
+"settings.data_help" = "Create a backup or CSV, restore a backup, or adjust time from before Hourleaf.";
 "settings.opening_balances" = "Time before Hourleaf";
 "settings.opening_balances_help" = "Use this only if you served before your first Hourleaf entry or have minutes carried from an earlier report.";
 "settings.privacy" = "Privacy";
@@ -171,6 +175,10 @@
 "data_management.restore.replace" = "Restore replaces all current Hourleaf data on this iPhone. It does not merge entries.";
 "data_management.restore.confirmation" = "I understand that restore replaces my current data.";
 "data_management.restore.confirm" = "Restore from backup";
+"data_management.restore.preview_exported" = "Backup from %@";
+"data_management.restore.preview_entries" = "Entries: %lld active, %lld deleted";
+"data_management.restore.preview_period" = "Period: %@ – %@";
+"data_management.restore.preview_details" = "Notes: %lld · Reminders: %lld · Reports: %lld · Year archives: %lld";
 "data_management.restore.unavailable_cloud" = "Restore is unavailable while iCloud sync is on. Your data remains unchanged.";
 "data_management.csv" = "CSV";
 "data_management.csv.include_notes" = "Include notes";

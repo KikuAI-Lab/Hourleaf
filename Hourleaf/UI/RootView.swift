@@ -3,6 +3,8 @@ import CoreData
 import SwiftUI
 
 struct RootView: View {
+    let dataManagementActions: DataManagementActions
+
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var router: AppRouter
     @Environment(\.scenePhase) private var scenePhase
@@ -87,7 +89,7 @@ struct RootView: View {
             ProgressScreen()
                 .tabItem { Label("tab.progress", systemImage: "chart.bar.fill") }
                 .tag(AppModel.Tab.progress)
-            SettingsScreen()
+            SettingsScreen(dataManagementActions: dataManagementActions)
                 .tabItem { Label("tab.settings", systemImage: "gearshape.fill") }
                 .tag(AppModel.Tab.settings)
         }
