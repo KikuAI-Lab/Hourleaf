@@ -273,6 +273,555 @@ final class PersistenceAndAppModelTests: XCTestCase {
         }
     }
 
+    func testOneTapSelectsLatestActiveByCreatedAtThenGreatestUUID() throws {
+        let day = LocalDay(year: 2026, month: 8, day: 3)
+        let createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let records = [
+            makeOneTapRecord(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!,
+                day: day,
+                minutes: 15,
+                createdAt: createdAt.addingTimeInterval(-1)
+            ),
+            makeOneTapRecord(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+                kind: .credit,
+                day: day,
+                minutes: 30,
+                createdAt: createdAt
+            ),
+            makeOneTapRecord(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+                day: day,
+                minutes: 75,
+                createdAt: createdAt
+            )
+        ]
+
+        let proposal = try XCTUnwrap(RepeatLastEntryCommand.proposal(from: records))
+        XCTAssertEqual(
+            proposal.sourceEntryID,
+            UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+        )
+        XCTAssertEqual(proposal.sourceCreatedAt, createdAt)
+        XCTAssertEqual(proposal.minutes, 75)
+    }
+
+    func testOneTapIgnoresDeletedNewerRecord() throws {
+        let day = LocalDay(year: 2026, month: 8, day: 3)
+        let createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let activeID = UUID(uuidString: "10000000-0000-0000-0000-000000000001")!
+        let records = [
+            makeOneTapRecord(
+                id: activeID,
+                day: day,
+                minutes: 45,
+                createdAt: createdAt
+            ),
+            makeOneTapRecord(
+                id: UUID(uuidString: "20000000-0000-0000-0000-000000000002")!,
+                kind: .credit,
+                day: day,
+                minutes: 90,
+                createdAt: createdAt.addingTimeInterval(1),
+                deletedAt: createdAt.addingTimeInterval(2)
+            )
+        ]
+
+        let proposal = try XCTUnwrap(RepeatLastEntryCommand.proposal(from: records))
+        XCTAssertEqual(proposal.sourceEntryID, activeID)
+        XCTAssertEqual(proposal.kind, .service)
+        XCTAssertEqual(proposal.minutes, 45)
+    }
+
+    func testOneTapIgnoresUpdatedAtAndOriginalEntryDay() throws {
+        let createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let olderEditedRecently = makeOneTapRecord(
+            id: UUID(uuidString: "30000000-0000-0000-0000-000000000003")!,
+            kind: .credit,
+            day: LocalDay(year: 2026, month: 7, day: 1),
+            minutes: 20,
+            createdAt: createdAt,
+            updatedAt: createdAt.addingTimeInterval(100)
+        )
+        let newer = makeOneTapRecord(
+            id: UUID(uuidString: "40000000-0000-0000-0000-000000000004")!,
+            kind: .service,
+            day: LocalDay(year: 2026, month: 7, day: 2),
+            minutes: 75,
+            createdAt: createdAt.addingTimeInterval(1),
+            updatedAt: createdAt.addingTimeInterval(2)
+        )
+
+        let proposal = try XCTUnwrap(
+            RepeatLastEntryCommand.proposal(from: [olderEditedRecently, newer])
+        )
+        XCTAssertEqual(proposal.sourceEntryID, newer.id)
+        XCTAssertEqual(proposal.sourceCreatedAt, newer.entry.createdAt)
+        XCTAssertEqual(proposal.kind, .service)
+        XCTAssertEqual(proposal.minutes, 75)
+    }
+
+    func testOneTapIsUnavailableWhenNoActiveEntries() {
+        let deleted = makeOneTapRecord(
+            id: UUID(uuidString: "50000000-0000-0000-0000-000000000005")!,
+            day: LocalDay(year: 2026, month: 8, day: 3),
+            minutes: 30,
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            deletedAt: Date(timeIntervalSince1970: 1_700_000_001)
+        )
+
+        XCTAssertNil(RepeatLastEntryCommand.proposal(from: [deleted]))
+    }
+
+    func testOneTapCopiesOnlyKindAndMinutesForToday() async throws {
+        let tappedAt = Date().addingTimeInterval(-2)
+        let sourceDay = oneTapDay(tappedAt, offsetBy: -1)
+        let sourceCreatedAt = tappedAt.addingTimeInterval(-1)
+        let repository = makeRepository()
+        try await configureOneTapLedgerStart(repository, for: sourceDay)
+
+        let source = TimeEntry(
+            id: UUID(uuidString: "60000000-0000-0000-0000-000000000006")!,
+            kind: .service,
+            day: sourceDay,
+            minutes: 75,
+            note: "Private source note",
+            createdAt: sourceCreatedAt,
+            updatedAt: sourceCreatedAt
+        )
+        _ = try await repository.apply(createCommand(for: source))
+        let initialSnapshot = try await repository.ledgerSnapshot()
+        let expected = try XCTUnwrap(RepeatLastEntryCommand.proposal(from: initialSnapshot.entries))
+        let repeatedID = UUID(uuidString: "70000000-0000-0000-0000-000000000007")!
+        let receipt = try await RepeatLastEntryCommand(repository: repository).execute(
+            expected: expected,
+            at: tappedAt,
+            mutationID: UUID(uuidString: "80000000-0000-0000-0000-000000000008")!,
+            entryID: repeatedID
+        )
+
+        let snapshot = try await repository.ledgerSnapshot()
+        let repeated = try XCTUnwrap(snapshot.entries.first { $0.id == repeatedID })
+        XCTAssertFalse(receipt.wasReplay)
+        XCTAssertEqual(repeated.entry.kind, .service)
+        XCTAssertEqual(repeated.entry.minutes, 75)
+        XCTAssertEqual(repeated.entry.day, LocalDay(tappedAt, calendar: .hourleaf))
+        XCTAssertEqual(repeated.entry.createdAt, tappedAt)
+        XCTAssertEqual(repeated.entry.updatedAt, tappedAt)
+        XCTAssertNil(repeated.entry.note)
+        XCTAssertEqual(repeated.source, EntryMutationSource.appOneTap.rawValue)
+    }
+
+    func testOneTapNeverCopiesTheSourceNote() async throws {
+        let tappedAt = Date().addingTimeInterval(-2)
+        let sourceDay = oneTapDay(tappedAt, offsetBy: -1)
+        let repository = makeRepository()
+        try await configureOneTapLedgerStart(repository, for: sourceDay)
+
+        let source = TimeEntry(
+            id: UUID(uuidString: "90000000-0000-0000-0000-000000000009")!,
+            kind: .service,
+            day: sourceDay,
+            minutes: 30,
+            note: "Never copy this",
+            createdAt: tappedAt.addingTimeInterval(-1),
+            updatedAt: tappedAt.addingTimeInterval(-1)
+        )
+        _ = try await repository.apply(createCommand(for: source))
+        let snapshot = try await repository.ledgerSnapshot()
+        let expected = try XCTUnwrap(RepeatLastEntryCommand.proposal(from: snapshot.entries))
+
+        let receipt = try await RepeatLastEntryCommand(repository: repository).execute(
+            expected: expected,
+            at: tappedAt
+        )
+
+        XCTAssertNil(receipt.entry.entry.note)
+        let afterSnapshot = try await repository.ledgerSnapshot()
+        let sourceAfter = try XCTUnwrap(afterSnapshot.entries.first { $0.id == source.id })
+        XCTAssertEqual(sourceAfter.entry.note, "Never copy this")
+    }
+
+    func testOneTapPreservesCreditAsCredit() async throws {
+        let tappedAt = Date().addingTimeInterval(-2)
+        let sourceDay = oneTapDay(tappedAt, offsetBy: -1)
+        let repository = makeRepository()
+        try await configureOneTapLedgerStart(repository, for: sourceDay)
+
+        let source = TimeEntry(
+            id: UUID(uuidString: "A0000000-0000-0000-0000-00000000000A")!,
+            kind: .credit,
+            day: sourceDay,
+            minutes: 45,
+            createdAt: tappedAt.addingTimeInterval(-1),
+            updatedAt: tappedAt.addingTimeInterval(-1)
+        )
+        _ = try await repository.apply(createCommand(for: source))
+        let initialSnapshot = try await repository.ledgerSnapshot()
+        let expected = try XCTUnwrap(RepeatLastEntryCommand.proposal(from: initialSnapshot.entries))
+        let receipt = try await RepeatLastEntryCommand(repository: repository).execute(
+            expected: expected,
+            at: tappedAt
+        )
+
+        XCTAssertEqual(receipt.entry.entry.kind, .credit)
+        XCTAssertEqual(receipt.entry.entry.minutes, 45)
+        XCTAssertEqual(
+            ServiceYearCalculator.progressMinutes(
+                entries: [receipt.entry.entry],
+                containing: LocalDay(tappedAt, calendar: .hourleaf),
+                baselineMinutes: 0
+            ),
+            0
+        )
+    }
+
+    func testOneTapAllowsServiceProgressAboveSixHundredHours() async throws {
+        let tappedAt = Date().addingTimeInterval(-2)
+        let sourceDay = oneTapDay(tappedAt, offsetBy: -1)
+        let repository = makeRepository()
+        try await configureOneTapLedgerStart(repository, for: sourceDay)
+
+        let source = TimeEntry(
+            id: UUID(uuidString: "B0000000-0000-0000-0000-00000000000B")!,
+            kind: .service,
+            day: sourceDay,
+            minutes: 60,
+            createdAt: tappedAt.addingTimeInterval(-1),
+            updatedAt: tappedAt.addingTimeInterval(-1)
+        )
+        _ = try await repository.apply(createCommand(for: source))
+        let initialSnapshot = try await repository.ledgerSnapshot()
+        let expected = try XCTUnwrap(RepeatLastEntryCommand.proposal(from: initialSnapshot.entries))
+        _ = try await RepeatLastEntryCommand(repository: repository).execute(
+            expected: expected,
+            at: tappedAt
+        )
+
+        let snapshot = try await repository.ledgerSnapshot()
+        let progress = ServiceYearCalculator.progressMinutes(
+            entries: snapshot.activeEntries,
+            containing: LocalDay(tappedAt, calendar: .hourleaf),
+            baselineMinutes: GoalPolicy.regularPioneer.targetMinutes
+        )
+        XCTAssertGreaterThan(progress, GoalPolicy.regularPioneer.targetMinutes)
+    }
+
+    func testOneTapRejectsChangedProposalWithoutWriting() async throws {
+        let tappedAt = Date().addingTimeInterval(-3)
+        let sourceDay = oneTapDay(tappedAt, offsetBy: -1)
+        let repository = makeRepository()
+        try await configureOneTapLedgerStart(repository, for: sourceDay)
+
+        let firstCreatedAt = tappedAt.addingTimeInterval(-2)
+        let first = TimeEntry(
+            id: UUID(uuidString: "C0000000-0000-0000-0000-00000000000C")!,
+            kind: .service,
+            day: sourceDay,
+            minutes: 30,
+            createdAt: firstCreatedAt,
+            updatedAt: firstCreatedAt
+        )
+        _ = try await repository.apply(createCommand(for: first))
+        let initialSnapshot = try await repository.ledgerSnapshot()
+        let expected = try XCTUnwrap(RepeatLastEntryCommand.proposal(from: initialSnapshot.entries))
+
+        let secondCreatedAt = tappedAt.addingTimeInterval(-1)
+        let second = TimeEntry(
+            id: UUID(uuidString: "D0000000-0000-0000-0000-00000000000D")!,
+            kind: .credit,
+            day: sourceDay,
+            minutes: 45,
+            createdAt: secondCreatedAt,
+            updatedAt: secondCreatedAt
+        )
+        _ = try await repository.apply(createCommand(for: second))
+
+        do {
+            _ = try await RepeatLastEntryCommand(repository: repository).execute(
+                expected: expected,
+                at: tappedAt,
+                mutationID: UUID(uuidString: "E0000000-0000-0000-0000-00000000000E")!,
+                entryID: UUID(uuidString: "F0000000-0000-0000-0000-00000000000F")!
+            )
+            XCTFail("A changed proposal must not write a repeated entry.")
+        } catch let error as OneTapEntryError {
+            XCTAssertEqual(error, .proposalChanged)
+        }
+
+        let snapshot = try await repository.ledgerSnapshot()
+        XCTAssertEqual(snapshot.entries.count, 2)
+        XCTAssertEqual(snapshot.entryRevisions.count, 2)
+        XCTAssertTrue(snapshot.entries.allSatisfy { $0.source != EntryMutationSource.appOneTap.rawValue })
+    }
+
+    func testOneTapRejectsDeletedProposalWithoutWriting() async throws {
+        let tappedAt = Date().addingTimeInterval(-3)
+        let sourceDay = oneTapDay(tappedAt, offsetBy: -1)
+        let repository = makeRepository()
+        try await configureOneTapLedgerStart(repository, for: sourceDay)
+
+        let sourceCreatedAt = tappedAt.addingTimeInterval(-2)
+        let source = TimeEntry(
+            id: UUID(uuidString: "11000000-0000-0000-0000-000000000011")!,
+            kind: .service,
+            day: sourceDay,
+            minutes: 30,
+            createdAt: sourceCreatedAt,
+            updatedAt: sourceCreatedAt
+        )
+        _ = try await repository.apply(createCommand(for: source))
+        let initialSnapshot = try await repository.ledgerSnapshot()
+        let expected = try XCTUnwrap(RepeatLastEntryCommand.proposal(from: initialSnapshot.entries))
+        let sourceRecord = try XCTUnwrap(initialSnapshot.entries.first { $0.id == source.id })
+        _ = try await repository.apply(
+            EntryMutationCommand(
+                entryID: source.id,
+                expectedRevision: sourceRecord.revision,
+                operation: .delete,
+                occurredAt: tappedAt.addingTimeInterval(-1),
+                source: .appHistory
+            )
+        )
+
+        do {
+            _ = try await RepeatLastEntryCommand(repository: repository).execute(
+                expected: expected,
+                at: tappedAt,
+                mutationID: UUID(uuidString: "12000000-0000-0000-0000-000000000012")!,
+                entryID: UUID(uuidString: "13000000-0000-0000-0000-000000000013")!
+            )
+            XCTFail("A deleted proposal must not write a repeated entry.")
+        } catch let error as OneTapEntryError {
+            XCTAssertEqual(error, .unavailable)
+        }
+
+        let snapshot = try await repository.ledgerSnapshot()
+        XCTAssertEqual(snapshot.entries.count, 1)
+        XCTAssertTrue(snapshot.entries[0].isDeleted)
+        XCTAssertEqual(snapshot.entryRevisions.map(\.operation), ["create", "delete"])
+    }
+
+    func testOneTapExactReplayCreatesOneEntryAndOneCreateRevision() async throws {
+        let tappedAt = Date().addingTimeInterval(-5)
+        let sourceDay = oneTapDay(tappedAt)
+        let repository = makeRepository()
+        try await configureOneTapLedgerStart(repository, for: sourceDay)
+
+        let source = TimeEntry(
+            id: UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")!,
+            kind: .service,
+            day: sourceDay,
+            minutes: 60,
+            note: "Source note",
+            createdAt: tappedAt,
+            updatedAt: tappedAt
+        )
+        _ = try await repository.apply(createCommand(for: source))
+        let initialSnapshot = try await repository.ledgerSnapshot()
+        let expected = try XCTUnwrap(RepeatLastEntryCommand.proposal(from: initialSnapshot.entries))
+        let mutationID = UUID(uuidString: "14000000-0000-0000-0000-000000000014")!
+        let entryID = UUID(uuidString: "00000000-0000-0000-0000-000000000015")!
+        let command = RepeatLastEntryCommand(repository: repository)
+
+        let first = try await command.execute(
+            expected: expected,
+            at: tappedAt,
+            mutationID: mutationID,
+            entryID: entryID
+        )
+        let replay = try await command.execute(
+            expected: expected,
+            at: tappedAt,
+            mutationID: mutationID,
+            entryID: entryID
+        )
+
+        XCTAssertFalse(first.wasReplay)
+        XCTAssertTrue(replay.wasReplay)
+        XCTAssertEqual(replay.entry, first.entry)
+        let snapshot = try await repository.ledgerSnapshot()
+        XCTAssertEqual(snapshot.entries.count, 2)
+        let repeatedRevisions = snapshot.entryRevisions.filter { $0.entryID == entryID }
+        XCTAssertEqual(repeatedRevisions.count, 1)
+        XCTAssertEqual(repeatedRevisions.first?.operation, EntryMutationOperation.create.rawValue)
+        XCTAssertEqual(repeatedRevisions.first?.revision, 1)
+        XCTAssertEqual(snapshot.entries.filter { $0.id == entryID }.count, 1)
+    }
+
+    func testAppModelPreventsConcurrentOneTapRequests() async throws {
+        let baseRepository = makeRepository()
+        let source = TimeEntry(
+            kind: .service,
+            day: LocalDay(Date(), calendar: .hourleaf),
+            minutes: 45,
+            note: "Source note",
+            createdAt: Date().addingTimeInterval(-120),
+            updatedAt: Date().addingTimeInterval(-120)
+        )
+        _ = try await baseRepository.apply(createCommand(for: source))
+        let repository = GatedLedgerRepository(base: baseRepository)
+        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler())
+        await model.loadInitialSnapshot()
+        let proposal = try XCTUnwrap(model.oneTapProposal)
+
+        await repository.gateNextSnapshot()
+        let firstRequest = Task { await model.repeatLastEntry(expected: proposal) }
+        await repository.waitUntilSnapshotIsBlocked()
+
+        XCTAssertTrue(model.isRepeatingLastEntry)
+        let secondResult = await model.repeatLastEntry(expected: proposal)
+        XCTAssertFalse(secondResult)
+
+        await repository.releaseSnapshot()
+        let firstResult = await firstRequest.value
+        XCTAssertTrue(firstResult)
+        XCTAssertFalse(model.isRepeatingLastEntry)
+
+        let snapshot = try await baseRepository.ledgerSnapshot()
+        XCTAssertEqual(
+            snapshot.entries.filter { $0.source == EntryMutationSource.appOneTap.rawValue }.count,
+            1
+        )
+    }
+
+    func testOneTapSuccessRefreshesEntriesAndShowsMatchingUndo() async throws {
+        let repository = makeRepository()
+        let source = TimeEntry(
+            kind: .service,
+            day: LocalDay(Date(), calendar: .hourleaf),
+            minutes: 75,
+            note: "Source note",
+            createdAt: Date().addingTimeInterval(-120),
+            updatedAt: Date().addingTimeInterval(-120)
+        )
+        _ = try await repository.apply(createCommand(for: source))
+        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler())
+        await model.loadInitialSnapshot()
+        let proposal = try XCTUnwrap(model.oneTapProposal)
+        let draftGeneration = model.quickEntryResetGeneration
+
+        let repeatedSuccessfully = await model.repeatLastEntry(expected: proposal)
+        XCTAssertTrue(repeatedSuccessfully)
+
+        let repeated = try XCTUnwrap(
+            model.entryRecords.first { $0.source == EntryMutationSource.appOneTap.rawValue }
+        )
+        XCTAssertEqual(model.entryRecords.count, 2)
+        XCTAssertEqual(repeated.entry.kind, .service)
+        XCTAssertEqual(repeated.entry.minutes, 75)
+        XCTAssertEqual(
+            repeated.entry.day,
+            LocalDay(repeated.entry.createdAt, calendar: .hourleaf)
+        )
+        XCTAssertNil(repeated.entry.note)
+        XCTAssertEqual(model.undoCandidate?.entryID, repeated.id)
+        XCTAssertEqual(model.visibleUndoCandidate?.entryID, repeated.id)
+        XCTAssertEqual(model.quickEntryResetGeneration, draftGeneration)
+        XCTAssertFalse(model.isRepeatingLastEntry)
+    }
+
+    func testOneTapUndoSoftDeletesOnlyTheRepeatedEntry() async throws {
+        let repository = makeRepository()
+        let source = TimeEntry(
+            kind: .credit,
+            day: LocalDay(Date(), calendar: .hourleaf),
+            minutes: 30,
+            note: "Keep source",
+            createdAt: Date().addingTimeInterval(-120),
+            updatedAt: Date().addingTimeInterval(-120)
+        )
+        _ = try await repository.apply(createCommand(for: source))
+        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler())
+        await model.loadInitialSnapshot()
+        let proposal = try XCTUnwrap(model.oneTapProposal)
+        let repeatedSuccessfully = await model.repeatLastEntry(expected: proposal)
+        XCTAssertTrue(repeatedSuccessfully)
+        let repeatedID = try XCTUnwrap(
+            model.entryRecords.first { $0.source == EntryMutationSource.appOneTap.rawValue }?.id
+        )
+
+        await model.undoLatestMutation()
+
+        XCTAssertEqual(model.entryRecords.map(\.id), [source.id])
+        XCTAssertEqual(model.deletedEntryRecords.map(\.id), [repeatedID])
+        XCTAssertEqual(model.entryRecords.first?.entry.note, "Keep source")
+    }
+
+    func testSupersedingMutationPreventsMisleadingOneTapUndoBanner() async throws {
+        let repository = makeRepository()
+        let source = TimeEntry(
+            kind: .service,
+            day: LocalDay(Date(), calendar: .hourleaf),
+            minutes: 60,
+            createdAt: Date().addingTimeInterval(-120),
+            updatedAt: Date().addingTimeInterval(-120)
+        )
+        _ = try await repository.apply(createCommand(for: source))
+        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler())
+        await model.loadInitialSnapshot()
+        let proposal = try XCTUnwrap(model.oneTapProposal)
+        let repeatedSuccessfully = await model.repeatLastEntry(expected: proposal)
+        XCTAssertTrue(repeatedSuccessfully)
+        let repeatedID = try XCTUnwrap(model.visibleUndoCandidate?.entryID)
+
+        let addedSupersedingEntry = await model.addEntry(
+            kind: .credit,
+            date: Date(),
+            hours: 0,
+            minutes: 5,
+            note: nil
+        )
+        XCTAssertTrue(addedSupersedingEntry)
+
+        let visibleUndo = try XCTUnwrap(model.visibleUndoCandidate)
+        XCTAssertNotEqual(visibleUndo.entryID, repeatedID)
+        XCTAssertEqual(visibleUndo.entry.entry.kind, .credit)
+        XCTAssertEqual(visibleUndo.entry.entry.minutes, 5)
+        XCTAssertEqual(visibleUndo.entry.source, EntryMutationSource.appQuickEntry.rawValue)
+    }
+
+    func testOneTapFailureLeavesManualDraftAndLedgerUnchanged() async throws {
+        let repository = makeRepository()
+        let now = Date()
+        let source = TimeEntry(
+            kind: .service,
+            day: LocalDay(now, calendar: .hourleaf),
+            minutes: 30,
+            note: "Original",
+            createdAt: now.addingTimeInterval(-120),
+            updatedAt: now.addingTimeInterval(-120)
+        )
+        _ = try await repository.apply(createCommand(for: source))
+        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler())
+        await model.loadInitialSnapshot()
+        let staleProposal = try XCTUnwrap(model.oneTapProposal)
+        let draftGeneration = model.quickEntryResetGeneration
+
+        let newer = TimeEntry(
+            kind: .credit,
+            day: LocalDay(now, calendar: .hourleaf),
+            minutes: 45,
+            note: "Newer",
+            createdAt: now.addingTimeInterval(-60),
+            updatedAt: now.addingTimeInterval(-60)
+        )
+        _ = try await repository.apply(createCommand(for: newer))
+
+        let repeatedSuccessfully = await model.repeatLastEntry(expected: staleProposal)
+        XCTAssertFalse(repeatedSuccessfully)
+
+        XCTAssertEqual(Set(model.entryRecords.map(\.id)), Set([source.id, newer.id]))
+        XCTAssertEqual(model.oneTapProposal?.sourceEntryID, newer.id)
+        XCTAssertEqual(model.quickEntryResetGeneration, draftGeneration)
+        XCTAssertEqual(model.errorMessage, String(localized: "error.one_tap_changed"))
+        XCTAssertFalse(model.isRepeatingLastEntry)
+        let snapshot = try await repository.ledgerSnapshot()
+        XCTAssertFalse(snapshot.entries.contains { $0.source == EntryMutationSource.appOneTap.rawValue })
+        XCTAssertEqual(snapshot.entryRevisions.count, 2)
+    }
+
     func testOpeningBalanceOnlyAppliesToItsServiceYear() async {
         let repository = makeRepository()
         let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler())
@@ -732,6 +1281,48 @@ final class PersistenceAndAppModelTests: XCTestCase {
         return CoreDataLedgerRepository(persistence: persistence)
     }
 
+    private func configureOneTapLedgerStart(
+        _ repository: CoreDataLedgerRepository,
+        for day: LocalDay
+    ) async throws {
+        var settings = try await repository.loadSettings()
+        settings.ledgerStartMonth = day.monthKey
+        try await repository.saveSettings(settings)
+    }
+
+    private func oneTapDay(_ date: Date, offsetBy days: Int = 0) -> LocalDay {
+        let shifted = Calendar.hourleaf.date(byAdding: .day, value: days, to: date) ?? date
+        return LocalDay(shifted, calendar: .hourleaf)
+    }
+
+    private func makeOneTapRecord(
+        id: UUID,
+        kind: EntryKind = .service,
+        day: LocalDay,
+        minutes: Int,
+        note: String? = nil,
+        createdAt: Date,
+        updatedAt: Date? = nil,
+        deletedAt: Date? = nil,
+        revision: Int64 = 1
+    ) -> LedgerEntryRecord {
+        LedgerEntryRecord(
+            entry: TimeEntry(
+                id: id,
+                kind: kind,
+                day: day,
+                minutes: minutes,
+                note: note,
+                createdAt: createdAt,
+                updatedAt: updatedAt ?? createdAt
+            ),
+            deletedAt: deletedAt,
+            source: EntryMutationSource.appQuickEntry.rawValue,
+            revision: revision,
+            lastMutationID: nil
+        )
+    }
+
     private func createCommand(
         for entry: TimeEntry,
         mutationID: UUID = UUID(),
@@ -991,6 +1582,100 @@ private struct V1Fixture {
     let policy: ReportingPolicy
     let reminder: ReminderSchedule
     let receipt: ReportReceipt
+}
+
+private actor GatedLedgerRepository: LedgerRepository {
+    private let base: CoreDataLedgerRepository
+    private var shouldGateNextSnapshot = false
+    private var isSnapshotBlocked = false
+    private var snapshotStartedContinuation: CheckedContinuation<Void, Never>?
+    private var snapshotReleaseContinuation: CheckedContinuation<Void, Never>?
+
+    init(base: CoreDataLedgerRepository) {
+        self.base = base
+    }
+
+    func gateNextSnapshot() {
+        shouldGateNextSnapshot = true
+    }
+
+    func waitUntilSnapshotIsBlocked() async {
+        guard !isSnapshotBlocked else { return }
+        await withCheckedContinuation { continuation in
+            snapshotStartedContinuation = continuation
+        }
+    }
+
+    func releaseSnapshot() {
+        snapshotReleaseContinuation?.resume()
+        snapshotReleaseContinuation = nil
+    }
+
+    func ledgerSnapshot() async throws -> LedgerSnapshot {
+        if shouldGateNextSnapshot {
+            shouldGateNextSnapshot = false
+            isSnapshotBlocked = true
+            snapshotStartedContinuation?.resume()
+            snapshotStartedContinuation = nil
+            await withCheckedContinuation { continuation in
+                snapshotReleaseContinuation = continuation
+            }
+            isSnapshotBlocked = false
+        }
+        return try await base.ledgerSnapshot()
+    }
+
+    func fetchEntries() async throws -> [TimeEntry] {
+        try await base.fetchEntries()
+    }
+
+    func fetchAllEntries() async throws -> [LedgerEntryRecord] {
+        try await base.fetchAllEntries()
+    }
+
+    func apply(_ command: EntryMutationCommand) async throws -> EntryMutationReceipt {
+        try await base.apply(command)
+    }
+
+    func latestUndoCandidate(asOf: Date) async throws -> EntryUndoCandidate? {
+        try await base.latestUndoCandidate(asOf: asOf)
+    }
+
+    func loadSettings() async throws -> AppSettings {
+        try await base.loadSettings()
+    }
+
+    func saveSettings(_ settings: AppSettings) async throws {
+        try await base.saveSettings(settings)
+    }
+
+    func fetchPolicies() async throws -> [ReportingPolicy] {
+        try await base.fetchPolicies()
+    }
+
+    func savePolicy(_ policy: ReportingPolicy) async throws {
+        try await base.savePolicy(policy)
+    }
+
+    func fetchReminders() async throws -> [ReminderSchedule] {
+        try await base.fetchReminders()
+    }
+
+    func saveReminder(_ reminder: ReminderSchedule) async throws {
+        try await base.saveReminder(reminder)
+    }
+
+    func deleteReminder(id: UUID) async throws {
+        try await base.deleteReminder(id: id)
+    }
+
+    func fetchReceipts() async throws -> [ReportReceipt] {
+        try await base.fetchReceipts()
+    }
+
+    func saveReceipt(_ receipt: ReportReceipt, details: ReportSnapshotDetails?) async throws {
+        try await base.saveReceipt(receipt, details: details)
+    }
 }
 
 @MainActor

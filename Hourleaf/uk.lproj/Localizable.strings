@@ -11,6 +11,9 @@
 "quick.report_ready" = "Звіт за минулий місяць готовий";
 "quick.month_service" = "Служіння цього місяця";
 "quick.month_credit" = "Кредит цього місяця";
+"one_tap.repeat_last" = "Повторити останній запис";
+"one_tap.details_format" = "%1$@ · %2$@";
+"one_tap.explanation" = "Додасть цей час на сьогодні. Нотатки не копіюються.";
 "entry.type" = "Тип";
 "entry.kind.service" = "Служіння";
 "entry.kind.credit" = "Кредит";
@@ -29,6 +32,8 @@
 "error.local_data" = "Не вдалося відкрити або зберегти дані Hourleaf на цьому пристрої.";
 "error.report_changed" = "Звіт змінився до підготовки. Перевірте його й спробуйте знову.";
 "error.restore_in_progress" = "Hourleaf відновлює дані. Зачекайте трохи й спробуйте знову.";
+"error.one_tap_unavailable" = "Немає збереженого запису, який можна повторити.";
+"error.one_tap_changed" = "Останній запис змінився. Перевірте оновлену кнопку й спробуйте ще раз.";
 "startup.loading" = "Завантажуємо години…";
 "startup.failed.title" = "Не вдалося відкрити години";
 "startup.failed.message" = "Закрийте Hourleaf і відкрийте його знову.";

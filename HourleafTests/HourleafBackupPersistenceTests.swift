@@ -83,6 +83,93 @@ final class HourleafBackupPersistenceTests: XCTestCase {
             expectedBackup.content.records
         )
     }
+
+    func testOneTapCreateRoundTripsFrozenBackupV1() async throws {
+        let persistence = PersistenceController(inMemory: true, cloudSyncEnabled: false)
+        var expected = RawBackupFixture.records
+        expected.entries = [
+            HourleafEntryV1(
+                createdAt: 30,
+                deletedAt: nil,
+                id: RawBackupFixture.idString(301),
+                kind: EntryKind.service.rawValue,
+                lastMutationID: RawBackupFixture.idString(401),
+                localDay: "2026-08-03",
+                minutes: 61,
+                note: nil,
+                revision: 1,
+                source: EntryMutationSource.appOneTap.rawValue,
+                updatedAt: 30
+            )
+        ]
+        expected.revisions = [
+            HourleafEntryRevisionV1(
+                entryCreatedAt: 30,
+                entryDeletedAt: nil,
+                entryID: RawBackupFixture.idString(301),
+                entryUpdatedAt: 30,
+                id: RawBackupFixture.idString(302),
+                kind: EntryKind.service.rawValue,
+                localDay: "2026-08-03",
+                minutes: 61,
+                mutationID: RawBackupFixture.idString(401),
+                note: nil,
+                occurredAt: 30,
+                operation: EntryMutationOperation.create.rawValue,
+                parentMutationID: nil,
+                revertedMutationID: nil,
+                revision: 1,
+                source: EntryMutationSource.appOneTap.rawValue
+            )
+        ]
+        try RawBackupFixture.seed(expected, into: persistence.container.viewContext)
+
+        let repository = CoreDataLedgerRepository(persistence: persistence)
+        let exported = try await repository.portableBackupRecords()
+        let backup = try HourleafBackupCodec.encode(
+            content: HourleafBackupContentV1(exportedAt: 321, records: exported)
+        )
+        let decoded = try HourleafBackupCodec.decodeAndVerify(backup.data).content.records
+
+        let decodedEntry = try XCTUnwrap(decoded.entries.first(where: { $0.id == RawBackupFixture.idString(301) }))
+        XCTAssertEqual(decodedEntry.source, EntryMutationSource.appOneTap.rawValue)
+        XCTAssertNil(decodedEntry.note)
+        XCTAssertEqual(decodedEntry.minutes, 61)
+
+        let decodedRevision = try XCTUnwrap(
+            decoded.revisions.first(where: {
+                $0.entryID == RawBackupFixture.idString(301) &&
+                $0.mutationID == RawBackupFixture.idString(401)
+            })
+        )
+        XCTAssertEqual(decodedRevision.operation, EntryMutationOperation.create.rawValue)
+        XCTAssertEqual(decodedRevision.source, EntryMutationSource.appOneTap.rawValue)
+        XCTAssertNil(decodedRevision.note)
+        XCTAssertEqual(decodedRevision.minutes, 61)
+        XCTAssertNil(decodedRevision.parentMutationID)
+        XCTAssertNil(decodedRevision.revertedMutationID)
+
+        let restoredPersistence = PersistenceController(inMemory: true, cloudSyncEnabled: false)
+        try RawBackupFixture.seed(decoded, into: restoredPersistence.container.viewContext)
+        let restoredRepository = CoreDataLedgerRepository(persistence: restoredPersistence)
+        let restored = try await restoredRepository.portableBackupRecords()
+
+        let restoredEntry = try XCTUnwrap(restored.entries.first(where: { $0.id == RawBackupFixture.idString(301) }))
+        XCTAssertEqual(restoredEntry.source, EntryMutationSource.appOneTap.rawValue)
+        XCTAssertNil(restoredEntry.note)
+        XCTAssertEqual(restoredEntry.minutes, 61)
+
+        let restoredRevision = try XCTUnwrap(
+            restored.revisions.first(where: {
+                $0.entryID == RawBackupFixture.idString(301) &&
+                $0.mutationID == RawBackupFixture.idString(401)
+            })
+        )
+        XCTAssertEqual(restoredRevision.operation, EntryMutationOperation.create.rawValue)
+        XCTAssertEqual(restoredRevision.source, EntryMutationSource.appOneTap.rawValue)
+        XCTAssertNil(restoredRevision.note)
+        XCTAssertEqual(restoredRevision.minutes, 61)
+    }
 }
 
 private enum RawBackupFixture {
@@ -484,7 +571,7 @@ private enum RawBackupFixture {
         try context.save()
     }
 
-    private static func idString(_ value: Int) -> String {
+    static func idString(_ value: Int) -> String {
         String(format: "00000000-0000-0000-0000-%012d", value)
     }
 

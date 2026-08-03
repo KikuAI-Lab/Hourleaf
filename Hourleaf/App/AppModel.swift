@@ -26,6 +26,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var undoCandidate: EntryUndoCandidate?
     @Published private(set) var visibleUndoCandidate: EntryUndoCandidate?
     @Published private(set) var quickEntryResetGeneration: UInt64 = 0
+    @Published private(set) var isRepeatingLastEntry = false
 
     let repository: any LedgerRepository
     private let reminderScheduler: ReminderScheduling
@@ -140,6 +141,34 @@ final class AppModel: ObservableObject {
     func prepareQuickEntry() {
         quickEntryResetGeneration &+= 1
         selectedTab = .add
+    }
+
+    var oneTapProposal: OneTapProposal? {
+        RepeatLastEntryCommand.proposal(from: entryRecords)
+    }
+
+    @discardableResult
+    func repeatLastEntry(expected proposal: OneTapProposal) async -> Bool {
+        guard !isRepeatingLastEntry else { return false }
+        let tappedAt = Date()
+        isRepeatingLastEntry = true
+        defer { isRepeatingLastEntry = false }
+
+        do {
+            let receipt = try await RepeatLastEntryCommand(repository: repository).execute(
+                expected: proposal,
+                at: tappedAt
+            )
+            await refreshAfterEntryMutation(receipt, showUndoBanner: true)
+            return true
+        } catch let error as OneTapEntryError {
+            await refreshFromStore(showUndoBanner: true)
+            present(error)
+            return false
+        } catch {
+            present(error)
+            return false
+        }
     }
 
     private func refreshFromStore(showUndoBanner: Bool) async {
@@ -701,6 +730,8 @@ final class AppModel: ObservableObject {
         lastErrorDiagnostic = error.localizedDescription
         if let validationError = error as? EntryValidationError {
             errorMessage = validationError.localizedDescription
+        } else if let oneTapError = error as? OneTapEntryError {
+            errorMessage = oneTapError.localizedDescription
         } else if let mutationError = error as? EntryMutationError {
             errorMessage = mutationError.localizedDescription
         } else if let repositoryError = error as? LedgerRepositoryError,

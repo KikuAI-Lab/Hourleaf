@@ -11,6 +11,9 @@
 "quick.report_ready" = "Отчёт за прошлый месяц готов";
 "quick.month_service" = "Служение в этом месяце";
 "quick.month_credit" = "Кредит в этом месяце";
+"one_tap.repeat_last" = "Повторить последнюю запись";
+"one_tap.details_format" = "%1$@ · %2$@";
+"one_tap.explanation" = "Добавит это время на сегодня. Заметки не копируются.";
 "entry.type" = "Тип";
 "entry.kind.service" = "Служение";
 "entry.kind.credit" = "Кредит";
@@ -29,6 +32,8 @@
 "error.local_data" = "Не удалось открыть или сохранить данные Hourleaf на этом устройстве.";
 "error.report_changed" = "Отчёт изменился до подготовки. Проверьте его и попробуйте снова.";
 "error.restore_in_progress" = "Hourleaf восстанавливает данные. Подождите немного и попробуйте снова.";
+"error.one_tap_unavailable" = "Нет сохранённой записи, которую можно повторить.";
+"error.one_tap_changed" = "Последняя запись изменилась. Проверьте обновлённую кнопку и попробуйте снова.";
 "startup.loading" = "Загружаем часы…";
 "startup.failed.title" = "Не удалось открыть часы";
 "startup.failed.message" = "Закройте Hourleaf и откройте его снова.";

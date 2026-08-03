@@ -11,6 +11,9 @@
 "quick.report_ready" = "Last month’s report is ready";
 "quick.month_service" = "Service this month";
 "quick.month_credit" = "Credit this month";
+"one_tap.repeat_last" = "Repeat last entry";
+"one_tap.details_format" = "%1$@ · %2$@";
+"one_tap.explanation" = "Adds it for today. Notes are not copied.";
 "entry.type" = "Type";
 "entry.kind.service" = "Service";
 "entry.kind.credit" = "Credit";
@@ -29,6 +32,8 @@
 "error.local_data" = "Hourleaf could not open or save your data on this device.";
 "error.report_changed" = "The report changed before it was prepared. Review it and try again.";
 "error.restore_in_progress" = "Hourleaf is restoring your data. Wait a moment, then try again.";
+"error.one_tap_unavailable" = "There is no saved entry to repeat.";
+"error.one_tap_changed" = "The latest entry changed. Check the updated button and try again.";
 "startup.loading" = "Loading your hours…";
 "startup.failed.title" = "Your hours could not be opened";
 "startup.failed.message" = "Close Hourleaf and open it again.";

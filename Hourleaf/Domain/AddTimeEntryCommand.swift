@@ -86,3 +86,78 @@ struct AddTimeEntryCommand: Sendable {
         )
     }
 }
+
+struct OneTapProposal: Equatable, Sendable {
+    let sourceEntryID: UUID
+    let sourceRevision: Int64
+    let sourceCreatedAt: Date
+    let kind: EntryKind
+    let minutes: Int
+}
+
+enum OneTapEntryError: LocalizedError, Equatable, Sendable {
+    case unavailable
+    case proposalChanged
+
+    var errorDescription: String? {
+        switch self {
+        case .unavailable:
+            String(localized: "error.one_tap_unavailable")
+        case .proposalChanged:
+            String(localized: "error.one_tap_changed")
+        }
+    }
+}
+
+struct RepeatLastEntryCommand: Sendable {
+    let repository: any LedgerRepository
+
+    static func proposal(
+        from records: [LedgerEntryRecord]
+    ) -> OneTapProposal? {
+        records
+            .filter { !$0.isDeleted }
+            .max { lhs, rhs in
+                if lhs.entry.createdAt != rhs.entry.createdAt {
+                    return lhs.entry.createdAt < rhs.entry.createdAt
+                }
+                return lhs.id.uuidString.lowercased()
+                    < rhs.id.uuidString.lowercased()
+            }
+            .map {
+                OneTapProposal(
+                    sourceEntryID: $0.id,
+                    sourceRevision: $0.revision,
+                    sourceCreatedAt: $0.entry.createdAt,
+                    kind: $0.entry.kind,
+                    minutes: $0.entry.minutes
+                )
+            }
+    }
+
+    func execute(
+        expected proposal: OneTapProposal,
+        at tappedAt: Date = .now,
+        mutationID: UUID = UUID(),
+        entryID: UUID = UUID()
+    ) async throws -> EntryMutationReceipt {
+        let snapshot = try await repository.ledgerSnapshot()
+        guard let freshProposal = Self.proposal(from: snapshot.entries) else {
+            throw OneTapEntryError.unavailable
+        }
+        guard freshProposal == proposal else {
+            throw OneTapEntryError.proposalChanged
+        }
+        return try await AddTimeEntryCommand(repository: repository).execute(
+            kind: freshProposal.kind,
+            date: tappedAt,
+            hours: freshProposal.minutes / 60,
+            minutes: freshProposal.minutes % 60,
+            note: nil,
+            mutationID: mutationID,
+            entryID: entryID,
+            occurredAt: tappedAt,
+            source: .appOneTap
+        )
+    }
+}

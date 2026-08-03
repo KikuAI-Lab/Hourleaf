@@ -156,6 +156,71 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.buttons["dismissUndoBannerButton"].isHittable)
     }
 
+    func testRepeatLastEntryKeepsManualDraftAndShowsUndo() {
+        let app = launchApp()
+        let repeatButton = app.buttons["repeatLastEntryButton"]
+        XCTAssertFalse(repeatButton.exists)
+
+        let wheels = app.pickerWheels
+        XCTAssertTrue(wheels.element(boundBy: 0).waitForExistence(timeout: 5))
+        wheels.element(boundBy: 0).adjust(toPickerWheelValue: "1")
+        wheels.element(boundBy: 1).adjust(toPickerWheelValue: "15")
+        let noteField = app.textFields["entryNoteField"]
+        noteField.tap()
+        noteField.typeText("Source note")
+        app.buttons["saveEntryButton"].tap()
+
+        XCTAssertTrue(repeatButton.waitForExistence(timeout: 5))
+        XCTAssertEqual(repeatButton.value as? String, "Service · 1 hr 15 min")
+        expectation(
+            for: NSPredicate(format: "value == %@", "Short note (optional)"),
+            evaluatedWith: noteField
+        )
+        waitForExpectations(timeout: 3)
+
+        app.segmentedControls["entryKindPicker"].buttons["Credit"].tap()
+        wheels.element(boundBy: 0).adjust(toPickerWheelValue: "2")
+        wheels.element(boundBy: 1).adjust(toPickerWheelValue: "30")
+        noteField.tap()
+        noteField.typeText("Unsaved draft")
+        app.swipeDown()
+        XCTAssertTrue(repeatButton.isHittable)
+        repeatButton.tap()
+
+        XCTAssertTrue(app.staticTexts["2 hr 30 min"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.segmentedControls["entryKindPicker"].buttons["Credit"].isSelected)
+        XCTAssertEqual(noteField.value as? String, "Unsaved draft")
+        XCTAssertTrue(app.buttons["saveEntryButton"].isEnabled)
+        XCTAssertTrue(app.buttons["undoMutationButton"].waitForExistence(timeout: 5))
+
+        app.tabBars.buttons["History"].tap()
+        let historyEntries = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH 'historyEntry_'")
+        )
+        XCTAssertTrue(historyEntries.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(historyEntries.count, 2)
+        XCTAssertEqual(
+            app.staticTexts.matching(NSPredicate(format: "label == %@", "Source note")).count,
+            1
+        )
+    }
+
+    func testRepeatLastEntryRemainsHittableAtAccessibilityXXXL() {
+        let app = launchApp(
+            additionalArguments: [
+                "-UIPreferredContentSizeCategoryName",
+                "UICTContentSizeCategoryAccessibilityXXXL"
+            ]
+        )
+        addEntry(in: app, hours: "1", minutes: "15")
+
+        let repeatButton = app.buttons["repeatLastEntryButton"]
+        XCTAssertTrue(repeatButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(repeatButton.isHittable)
+        XCTAssertGreaterThanOrEqual(repeatButton.frame.height, 44)
+        XCTAssertEqual(repeatButton.value as? String, "Service · 1 hr 15 min")
+    }
+
     func testRecentlyDeletedCanRestoreAnEntry() {
         let app = launchApp()
         addEntry(in: app, hours: "1", minutes: "15")
@@ -288,6 +353,11 @@ final class HourleafUITests: XCTestCase {
 
         XCTAssertTrue(app.navigationBars["Добавить время"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["saveEntryButton"].exists)
+        addEntry(in: app, hours: "1", minutes: "15")
+        let repeatButton = app.buttons["repeatLastEntryButton"]
+        XCTAssertTrue(repeatButton.waitForExistence(timeout: 5))
+        XCTAssertEqual(repeatButton.label, "Повторить последнюю запись")
+        XCTAssertEqual(repeatButton.value as? String, "Служение · 1 ч 15 мин")
         app.tabBars.buttons["Настройки"].tap()
         XCTAssertTrue(app.staticTexts["Быстрые команды"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["shortcutsFooter"].exists)
@@ -300,6 +370,11 @@ final class HourleafUITests: XCTestCase {
 
         XCTAssertTrue(app.navigationBars["Додати час"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["saveEntryButton"].exists)
+        addEntry(in: app, hours: "1", minutes: "15")
+        let repeatButton = app.buttons["repeatLastEntryButton"]
+        XCTAssertTrue(repeatButton.waitForExistence(timeout: 5))
+        XCTAssertEqual(repeatButton.label, "Повторити останній запис")
+        XCTAssertEqual(repeatButton.value as? String, "Служіння · 1 год 15 хв")
         app.tabBars.buttons["Налаштування"].tap()
         XCTAssertTrue(app.staticTexts["Швидкі команди"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["shortcutsFooter"].exists)
