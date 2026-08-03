@@ -1309,19 +1309,21 @@ final class ReportReadinessTests: XCTestCase {
         updatedAt: Date
     ) throws {
         let context = persistence.container.viewContext
-        let request: NSFetchRequest<ReportStateEntity> = ReportStateEntity.request()
-        request.predicate = NSPredicate(format: "monthKey == %@", month.key)
-        let state = try context.fetch(request).first ?? context.insert(ReportStateEntity.self)
-        state.id = state.id ?? UUID()
-        state.monthKey = month.key
-        state.state = ReportLifecycleState.reviewed.rawValue
-        state.currentSnapshotID = currentSnapshotID
-        state.reviewedCalculationFingerprint = calculationFingerprint
-        state.reviewedPresentationFingerprint = presentationFingerprint
-        state.lastStableState = nil
-        state.changedAt = nil
-        state.updatedAt = updatedAt
-        try context.save()
+        try context.performAndWait {
+            let request: NSFetchRequest<ReportStateEntity> = ReportStateEntity.request()
+            request.predicate = NSPredicate(format: "monthKey == %@", month.key)
+            let state = try context.fetch(request).first ?? context.insert(ReportStateEntity.self)
+            state.id = state.id ?? UUID()
+            state.monthKey = month.key
+            state.state = ReportLifecycleState.reviewed.rawValue
+            state.currentSnapshotID = currentSnapshotID
+            state.reviewedCalculationFingerprint = calculationFingerprint
+            state.reviewedPresentationFingerprint = presentationFingerprint
+            state.lastStableState = nil
+            state.changedAt = nil
+            state.updatedAt = updatedAt
+            try context.save()
+        }
     }
 
     private func seedBaselineSettings(

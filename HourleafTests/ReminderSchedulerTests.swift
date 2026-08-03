@@ -90,6 +90,79 @@ final class ReminderSchedulerTests: XCTestCase {
         )
     }
 
+    func testReconcileRemovesQuietGapFollowUpWhenQuietGapIsDisabled() async throws {
+        let center = FakeReminderNotificationCenter()
+        let targetDay = LocalDay(year: 2026, month: 8, day: 10)
+        let quietGapFollowUpID = ReminderNotificationRequestID.quietGapFollowup(targetDay: targetDay)
+        center.requestsByIdentifier = [
+            quietGapFollowUpID: makeReminderPayloadRequest(
+                identifier: quietGapFollowUpID,
+                payload: ReminderNotificationPayload(kind: .followup, targetDay: targetDay),
+                categoryIdentifier: ReminderNotificationCategoryID.followup
+            ),
+            "com.example.other": makeReminderPayloadRequest(
+                identifier: "com.example.other",
+                payload: ReminderNotificationPayload(kind: .quietGap, targetDay: targetDay)
+            )
+        ]
+        let scheduler = ReminderScheduler(
+            center: center,
+            now: { .distantPast },
+            calendar: makeReminderTestCalendar()
+        )
+
+        try await scheduler.reconcile(
+            ReminderReconciliationRequest(
+                reminders: [],
+                quietGap: QuietGapSchedulingRequest(
+                    isEnabled: false,
+                    ledgerStartMonth: MonthKey(year: 2026, month: 1),
+                    entries: [],
+                    acknowledgements: []
+                )
+            )
+        )
+
+        XCTAssertNil(center.requestsByIdentifier[quietGapFollowUpID])
+        XCTAssertNotNil(center.requestsByIdentifier["com.example.other"])
+    }
+
+    func testReconcileUsesLatestCalendarFromProvider() async throws {
+        let center = FakeReminderNotificationCenter()
+        var currentCalendar = makeReminderTestCalendar(timeZoneID: "Europe/Uzhgorod")
+        let reminderID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let scheduler = ReminderScheduler(
+            center: center,
+            now: { .distantPast },
+            calendarProvider: { currentCalendar }
+        )
+        let request = ReminderReconciliationRequest(
+            reminders: [
+                ReminderSchedule(id: reminderID, weekday: 2, hour: 18, minute: 0, isEnabled: true)
+            ],
+            quietGap: QuietGapSchedulingRequest(
+                isEnabled: false,
+                ledgerStartMonth: MonthKey(year: 2026, month: 1),
+                entries: [],
+                acknowledgements: []
+            )
+        )
+
+        try await scheduler.reconcile(request)
+        let requestID = ReminderNotificationRequestID.weekly(reminderID: reminderID)
+        let firstTrigger = try XCTUnwrap(
+            center.requestsByIdentifier[requestID]?.trigger as? UNCalendarNotificationTrigger
+        )
+        XCTAssertEqual(firstTrigger.dateComponents.timeZone?.identifier, "Europe/Uzhgorod")
+
+        currentCalendar = makeReminderTestCalendar(timeZoneID: "America/Los_Angeles")
+        try await scheduler.reconcile(request)
+        let secondTrigger = try XCTUnwrap(
+            center.requestsByIdentifier[requestID]?.trigger as? UNCalendarNotificationTrigger
+        )
+        XCTAssertEqual(secondTrigger.dateComponents.timeZone?.identifier, "America/Los_Angeles")
+    }
+
     func testAddActionRoutesQuickEntryWithoutEmittingReminderEvent() async throws {
         let center = FakeReminderNotificationCenter()
         let scheduler = ReminderScheduler(center: center, now: { .distantPast }, calendar: makeReminderTestCalendar())

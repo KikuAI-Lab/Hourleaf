@@ -42,18 +42,29 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
 
     private let center: any ReminderUserNotificationCenter
     private let now: @Sendable () -> Date
-    private let calendar: Calendar
+    private let calendarProvider: () -> Calendar
     private let notificationDelegate = NotificationDelegate()
     private weak var router: AppRouter?
+
+    private var calendar: Calendar {
+        calendarProvider()
+    }
 
     init(
         center: any ReminderUserNotificationCenter = SystemReminderUserNotificationCenter(),
         now: @escaping @Sendable () -> Date = { .now },
-        calendar: Calendar = .hourleaf
+        calendar: Calendar? = nil,
+        calendarProvider: (() -> Calendar)? = nil
     ) {
         self.center = center
         self.now = now
-        self.calendar = calendar
+        if let calendarProvider {
+            self.calendarProvider = calendarProvider
+        } else if let calendar {
+            self.calendarProvider = { calendar }
+        } else {
+            self.calendarProvider = { .hourleaf }
+        }
     }
 
     func configure(router: AppRouter) {
@@ -421,9 +432,15 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
         let coveredDays = coveredDays(for: request.quietGap)
         let identifiers = requests.compactMap { pending -> String? in
             let identifier = pending.identifier
+            let isWeeklyFollowUp = identifier.hasPrefix(ReminderNotificationRequestID.followupWeeklyPrefix)
+            let isQuietGapFollowUp = identifier.hasPrefix(ReminderNotificationRequestID.quietGapFollowupPrefix)
+            guard isWeeklyFollowUp || isQuietGapFollowUp else {
+                return nil
+            }
+            if !allowsScheduling || (isQuietGapFollowUp && !request.quietGap.isEnabled) {
+                return identifier
+            }
             guard
-                identifier.hasPrefix(ReminderNotificationRequestID.followupWeeklyPrefix)
-                    || identifier.hasPrefix(ReminderNotificationRequestID.quietGapFollowupPrefix),
                 let payload = ReminderNotificationPayload(userInfo: pending.content.userInfo),
                 payload.kind == .followup,
                 let targetDay = payload.targetDay
@@ -431,7 +448,7 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
                 return nil
             }
 
-            if !allowsScheduling || coveredDays.contains(targetDay) {
+            if coveredDays.contains(targetDay) {
                 return identifier
             }
             if let reminderID = payload.reminderID, !enabledReminderIDs.contains(reminderID) {

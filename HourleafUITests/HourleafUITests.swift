@@ -659,7 +659,7 @@ final class HourleafUITests: XCTestCase {
         app.tabBars.buttons["Settings"].tap()
 
         let shortcutsLink = app.descendants(matching: .any)["shortcutsLink"]
-        XCTAssertTrue(shortcutsLink.waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollUntilVisible(shortcutsLink, in: app))
         XCTAssertTrue(app.staticTexts["shortcutsFooter"].exists)
     }
 
@@ -687,7 +687,7 @@ final class HourleafUITests: XCTestCase {
         XCTAssertEqual(repeatButton.label, "Повторить последнюю запись")
         XCTAssertEqual(repeatButton.value as? String, "Служение · 1 ч 15 мин")
         app.tabBars.buttons["Настройки"].tap()
-        XCTAssertTrue(app.staticTexts["Быстрые команды"].waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollUntilVisible(app.staticTexts["Быстрые команды"], in: app))
         XCTAssertTrue(app.staticTexts["shortcutsFooter"].exists)
     }
 
@@ -704,7 +704,7 @@ final class HourleafUITests: XCTestCase {
         XCTAssertEqual(repeatButton.label, "Повторити останній запис")
         XCTAssertEqual(repeatButton.value as? String, "Служіння · 1 год 15 хв")
         app.tabBars.buttons["Налаштування"].tap()
-        XCTAssertTrue(app.staticTexts["Швидкі команди"].waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollUntilVisible(app.staticTexts["Швидкі команди"], in: app))
         XCTAssertTrue(app.staticTexts["shortcutsFooter"].exists)
     }
 
