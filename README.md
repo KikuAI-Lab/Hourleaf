@@ -35,6 +35,15 @@ modified:
 ./scripts/install-local-device.sh <PERSONAL_TEAM_ID> <DEVICE_ID>
 ```
 
+For the isolated Slice 3 shortcut smoke build, append `--slice3-smoke`. It
+uses `com.kikuai.hourleaf.slice3smoke`, separate from both production and the
+normal local-device bundle, and is visibly named **Hourleaf Shortcut Smoke**
+on the device so its disposable data cannot be mistaken for the real app:
+
+```sh
+./scripts/install-local-device.sh <PERSONAL_TEAM_ID> <DEVICE_ID> --slice3-smoke
+```
+
 This variant keeps all data locally on the iPhone. CloudKit mirroring and
 TestFlight still require an active Apple Developer Program membership. Personal
 Team provisioning is temporary, so the app must be rebuilt periodically. Its

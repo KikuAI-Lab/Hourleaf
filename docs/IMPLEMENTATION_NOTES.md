@@ -41,6 +41,10 @@ MVP is accepted.
 - Every entry change appends an immutable revision. Foreground changes expose a
   short Undo banner, and the latest eligible change remains undoable for ten
   minutes when it has not been superseded.
+- Hourleaf promotes exactly three system commands: Add Service, Add Credit, and
+  Open Add Time. Record commands use the same validated repository actor as the
+  app; opening the form and tapping a reminder only route to a blank quick-entry
+  draft and never create time automatically.
 
 ## Delivery gates
 
@@ -86,3 +90,22 @@ MVP is accepted.
   mandatory before multi-process or CloudKit writers are enabled.
 - This slice was not installed on the physical iPhone. Device data remains
   untouched until portable backup and verified restore are complete.
+
+## Verification snapshot — 2026-08-03 (roadmap Slice 3)
+
+- 70 unit/integration tests and 19 UI tests passed serially on the iOS 26.5
+  simulator. Coverage includes fixed service/credit intent semantics, unresolved
+  duration prompts, exact dependency identity, active/foreground/startup store
+  refresh, typed reminder routing, cold routing, and warm-draft reset.
+- Unsigned Debug and Release device builds and Xcode Analyze passed. Extracted
+  App Intents metadata contains exactly three promoted commands and compiled
+  English, Russian, and Ukrainian shortcut phrases.
+- A Sol Max adversarial re-review returned GO with no P0 or P1 findings. The
+  accepted P2 residual is that App Intents exposes no durable invocation ID for
+  correlating a hypothetical new system retry after a committed save; heuristic
+  deduplication would incorrectly suppress legitimate repeated entries.
+- The signed smoke build is isolated as `com.kikuai.hourleaf.slice3smoke` with
+  the visible name `Hourleaf Shortcut Smoke`. Its first installation attempt
+  stopped before installing because Xcode had no signed-in Personal Team
+  account; no app or data on the physical iPhone was changed. Device lifecycle,
+  Action Button, and reminder-tap acceptance remain an owner-controlled gate.

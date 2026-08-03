@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 
 struct SettingsScreen: View {
@@ -56,6 +57,16 @@ struct SettingsScreen: View {
                     Text("settings.reminders")
                 } footer: {
                     Text("settings.reminders_footer")
+                }
+
+                Section {
+                    ShortcutsLink()
+                        .accessibilityIdentifier("shortcutsLink")
+                } header: {
+                    Text("settings.shortcuts")
+                } footer: {
+                    Text("settings.shortcuts_footer")
+                        .accessibilityIdentifier("shortcutsFooter")
                 }
 
                 Section {

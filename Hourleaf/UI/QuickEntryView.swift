@@ -31,6 +31,9 @@ struct QuickEntryView: View {
             .navigationTitle("quick.title")
             .navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
+            .onChange(of: model.quickEntryResetGeneration) { _, _ in
+                resetDraft()
+            }
         }
     }
 
@@ -161,5 +164,14 @@ struct QuickEntryView: View {
             minutes = 0
             note = ""
         }
+    }
+
+    private func resetDraft() {
+        kind = .service
+        date = Date()
+        hours = 0
+        minutes = 0
+        note = ""
+        noteFocused = false
     }
 }

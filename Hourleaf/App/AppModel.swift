@@ -25,6 +25,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var lastErrorDiagnostic: String?
     @Published private(set) var undoCandidate: EntryUndoCandidate?
     @Published private(set) var visibleUndoCandidate: EntryUndoCandidate?
+    @Published private(set) var quickEntryResetGeneration: UInt64 = 0
 
     let repository: any LedgerRepository
     private let reminderScheduler: ReminderScheduling
@@ -35,6 +36,9 @@ final class AppModel: ObservableObject {
     private var restoringEntryIDs = Set<UUID>()
     private var isUndoing = false
     private var undoBannerTask: Task<Void, Never>?
+    private var storeRefreshRequested = false
+    private var storeRefreshShouldShowUndo = false
+    private var isStoreRefreshInFlight = false
     /// Only user-visible undo state changes invalidate an in-flight presentation.
     /// A passive store reload must not prevent a just-confirmed mutation from showing Undo.
     private var undoStateGeneration = 0
@@ -65,11 +69,47 @@ final class AppModel: ObservableObject {
     }
 
     func reload() async {
-        do {
-            try await loadSnapshot()
-            await refreshUndoCandidate(showBanner: false)
-        } catch {
-            present(error)
+        await refreshFromStore(showUndoBanner: false)
+    }
+
+    /// Refreshes the one live app model after the scene becomes active. This
+    /// is the fallback for a shortcut write that happened while the scene was
+    /// suspended and therefore could not deliver its retained router signal.
+    func refreshAfterForegrounding() async {
+        guard startupState == .ready else { return }
+        await refreshFromStore(showUndoBanner: true)
+    }
+
+    /// Applies an already-signalled shortcut write while the scene remains
+    /// active. Requests coalesce so foreground and router events cannot race
+    /// into overlapping repository snapshots.
+    func refreshAfterExternalLedgerChange() async {
+        guard startupState == .ready else { return }
+        await refreshFromStore(showUndoBanner: true)
+    }
+
+    func prepareQuickEntry() {
+        quickEntryResetGeneration &+= 1
+        selectedTab = .add
+    }
+
+    private func refreshFromStore(showUndoBanner: Bool) async {
+        storeRefreshRequested = true
+        storeRefreshShouldShowUndo = storeRefreshShouldShowUndo || showUndoBanner
+        guard !isStoreRefreshInFlight else { return }
+
+        isStoreRefreshInFlight = true
+        defer { isStoreRefreshInFlight = false }
+        while storeRefreshRequested {
+            storeRefreshRequested = false
+            let shouldShowUndoBanner = storeRefreshShouldShowUndo
+            storeRefreshShouldShowUndo = false
+            do {
+                try await loadSnapshot()
+                await refreshUndoCandidate(showBanner: shouldShowUndoBanner)
+            } catch {
+                present(error)
+            }
         }
     }
 

@@ -1,0 +1,99 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Add credit time in ${applicationName}" : {
+      "localizations" : {
+        "en" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "Add credit time in ${applicationName}",
+              "Record credit time in ${applicationName}"
+            ]
+          }
+        },
+        "ru" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "Добавить кредитное время в ${applicationName}",
+              "Записать кредитное время в ${applicationName}"
+            ]
+          }
+        },
+        "uk" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "Додати кредитний час у ${applicationName}",
+              "Записати кредитний час у ${applicationName}"
+            ]
+          }
+        }
+      }
+    },
+    "Add service time in ${applicationName}" : {
+      "localizations" : {
+        "en" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "Add service time in ${applicationName}",
+              "Record service time in ${applicationName}"
+            ]
+          }
+        },
+        "ru" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "Добавить время служения в ${applicationName}",
+              "Записать время служения в ${applicationName}"
+            ]
+          }
+        },
+        "uk" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "Додати час служіння в ${applicationName}",
+              "Записати час служіння в ${applicationName}"
+            ]
+          }
+        }
+      }
+    },
+    "Open Add Time in ${applicationName}" : {
+      "localizations" : {
+        "en" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "Open Add Time in ${applicationName}",
+              "Open time entry in ${applicationName}"
+            ]
+          }
+        },
+        "ru" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "Открыть «Добавить время» в ${applicationName}",
+              "Открыть ввод времени в ${applicationName}"
+            ]
+          }
+        },
+        "uk" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "Відкрити «Додати час» у ${applicationName}",
+              "Відкрити введення часу у ${applicationName}"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.1"
+}

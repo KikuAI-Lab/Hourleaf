@@ -212,6 +212,66 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["No entries yet"].waitForExistence(timeout: 5))
     }
 
+    func testColdQuickEntryRouteLaunchesOnAddTime() {
+        let app = launchApp(additionalArguments: ["-coldQuickEntryRouteUITest"])
+
+        XCTAssertTrue(app.navigationBars["Add time"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["saveEntryButton"].isHittable)
+    }
+
+    func testQuickEntryRouteResetsAnExistingDraftOnForeground() {
+        let app = launchApp(
+            additionalArguments: [
+                "-pastDateUITest",
+                "-quickEntryRouteOnForegroundUITest"
+            ]
+        )
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+        let draftNote = "Draft note"
+
+        app.segmentedControls["entryKindPicker"].buttons["Credit"].tap()
+        app.datePickers["entryDatePicker"].tap()
+        let yesterdayButton = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", Self.dayButtonFormatter.string(from: yesterday))
+        ).firstMatch
+        XCTAssertTrue(yesterdayButton.waitForExistence(timeout: 5))
+        yesterdayButton.tap()
+        app.navigationBars["Add time"].tap()
+        app.pickerWheels.element(boundBy: 0).adjust(toPickerWheelValue: "2")
+        app.pickerWheels.element(boundBy: 1).adjust(toPickerWheelValue: "30")
+        let noteField = app.textFields["entryNoteField"]
+        noteField.tap()
+        noteField.typeText(draftNote)
+        XCTAssertEqual(noteField.value as? String, draftNote)
+
+        app.tabBars.buttons["History"].tap()
+        XCUIDevice.shared.press(.home)
+        app.activate()
+
+        XCTAssertTrue(app.navigationBars["Add time"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.segmentedControls["entryKindPicker"].buttons["Service"].isSelected)
+        XCTAssertFalse(app.buttons["saveEntryButton"].isEnabled)
+        XCTAssertEqual(noteField.value as? String, "Short note (optional)")
+
+        app.pickerWheels.element(boundBy: 1).adjust(toPickerWheelValue: "1")
+        app.buttons["saveEntryButton"].tap()
+        app.tabBars.buttons["History"].tap()
+
+        XCTAssertTrue(app.staticTexts["Service"].waitForExistence(timeout: 5))
+        let today = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        let todayIdentifier = "historyEntryDate_\(today.year!)_\(today.month!)_\(today.day!)"
+        XCTAssertTrue(app.staticTexts[todayIdentifier].exists)
+    }
+
+    func testSettingsOffersShortcutsLink() {
+        let app = launchApp()
+        app.tabBars.buttons["Settings"].tap()
+
+        let shortcutsLink = app.descendants(matching: .any)["shortcutsLink"]
+        XCTAssertTrue(shortcutsLink.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["shortcutsFooter"].exists)
+    }
+
     func testRussianInterfaceLaunches() {
         let app = XCUIApplication()
         app.launchArguments = ["-uiTesting", "-AppleLanguages", "(ru)"]
@@ -219,6 +279,9 @@ final class HourleafUITests: XCTestCase {
 
         XCTAssertTrue(app.navigationBars["Добавить время"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["saveEntryButton"].exists)
+        app.tabBars.buttons["Настройки"].tap()
+        XCTAssertTrue(app.staticTexts["Быстрые команды"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["shortcutsFooter"].exists)
     }
 
     func testUkrainianInterfaceLaunches() {
@@ -228,6 +291,9 @@ final class HourleafUITests: XCTestCase {
 
         XCTAssertTrue(app.navigationBars["Додати час"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["saveEntryButton"].exists)
+        app.tabBars.buttons["Налаштування"].tap()
+        XCTAssertTrue(app.staticTexts["Швидкі команди"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["shortcutsFooter"].exists)
     }
 
     func testOnboardingExplainsOpeningBalances() {
@@ -256,14 +322,15 @@ final class HourleafUITests: XCTestCase {
         XCTAssertFalse(app.switches["Carry August remainder into September"].exists)
         XCTAssertFalse(app.staticTexts["App Store name"].exists)
 
+        let settings = app.collectionViews.firstMatch
+        settings.swipeUp()
         let existingTime = app.buttons["existingTimeButton"]
-        XCTAssertTrue(existingTime.exists)
+        XCTAssertTrue(existingTime.waitForExistence(timeout: 5))
         existingTime.tap()
         XCTAssertTrue(app.navigationBars["Time already recorded"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["You only need this screen when moving an existing record into Hourleaf. It does not create entries for past days."].exists)
 
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        let settings = app.collectionViews.firstMatch
         settings.swipeUp()
         settings.swipeUp()
         XCTAssertTrue(app.staticTexts["storageStatus"].exists)

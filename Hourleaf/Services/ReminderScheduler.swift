@@ -1,9 +1,36 @@
 import Foundation
 import UserNotifications
 
-extension Notification.Name {
-    static let openQuickEntry = Notification.Name("Hourleaf.openQuickEntry")
+enum ReminderNotificationDestination: String, Sendable {
+    case quickEntry = "quick-entry"
+
+    private static let userInfoKey = "destination"
+
+    init?(userInfo: [AnyHashable: Any]) {
+        guard let rawValue = userInfo[Self.userInfoKey] as? String else {
+            return nil
+        }
+        self.init(rawValue: rawValue)
+    }
+
+    @MainActor
+    static func route(userInfo: [AnyHashable: Any], using router: AppRouter) {
+        guard let destination = Self(userInfo: userInfo) else {
+            return
+        }
+
+        destination.route(using: router)
+    }
+
+    @MainActor
+    func route(using router: AppRouter) {
+        switch self {
+        case .quickEntry:
+            router.route(to: .quickEntry)
+        }
+    }
 }
+
 @MainActor
 protocol ReminderScheduling {
     func requestAuthorization() async throws -> Bool
@@ -15,9 +42,11 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
     static let shared = ReminderScheduler()
 
     private let center = UNUserNotificationCenter.current()
+    private let notificationDelegate = NotificationDelegate()
 
-    func configure() {
-        center.delegate = NotificationDelegate.shared
+    func configure(router: AppRouter) {
+        notificationDelegate.configure(router: router)
+        center.delegate = notificationDelegate
     }
 
     func requestAuthorization() async throws -> Bool {
@@ -44,7 +73,7 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
             content.title = String(localized: "reminder.notification.title")
             content.body = String(localized: "reminder.notification.body")
             content.sound = .default
-            content.userInfo = ["destination": "quick-entry"]
+            content.userInfo = ["destination": ReminderNotificationDestination.quickEntry.rawValue]
             let components = DateComponents(
                 calendar: .hourleaf,
                 hour: reminder.hour,
@@ -63,14 +92,27 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
 }
 
 private final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
-    static let shared = NotificationDelegate()
+    private var router: AppRouter?
+
+    func configure(router: AppRouter) {
+        self.router = router
+    }
 
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
+        guard let destination = ReminderNotificationDestination(
+            userInfo: response.notification.request.content.userInfo
+        ) else {
+            return
+        }
+
         await MainActor.run {
-            NotificationCenter.default.post(name: .openQuickEntry, object: nil)
+            guard let router = self.router else {
+                return
+            }
+            destination.route(using: router)
         }
     }
 

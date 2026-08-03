@@ -4,7 +4,9 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var router: AppRouter
     @Environment(\.scenePhase) private var scenePhase
+    @State private var observedLedgerChangeGeneration: UInt64 = 0
 
     var body: some View {
         Group {
@@ -31,7 +33,24 @@ struct RootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
-            Task { await model.resumeUndoAvailability() }
+            if ProcessInfo.processInfo.arguments.contains("-quickEntryRouteOnForegroundUITest") {
+                router.route(to: .quickEntry)
+            }
+            Task { await model.refreshAfterForegrounding() }
+        }
+        .onAppear {
+            consumePendingRoute()
+            consumeLedgerChange()
+        }
+        .onChange(of: router.pendingRoute) { _, _ in
+            consumePendingRoute()
+        }
+        .onChange(of: router.ledgerChangeGeneration) { _, _ in
+            consumeLedgerChange()
+        }
+        .onChange(of: model.startupState) { _, state in
+            guard state == .ready else { return }
+            consumeLedgerChange()
         }
     }
 
@@ -75,12 +94,6 @@ struct RootView: View {
         .accessibilityIdentifier("appReady")
         .tint(Color(red: 0.16, green: 0.46, blue: 0.27))
         .onReceive(
-            NotificationCenter.default.publisher(for: .openQuickEntry)
-                .receive(on: DispatchQueue.main)
-        ) { _ in
-            model.selectedTab = .add
-        }
-        .onReceive(
             NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)
                 .receive(on: DispatchQueue.main)
         ) { _ in
@@ -108,5 +121,21 @@ struct RootView: View {
             get: { model.errorMessage != nil },
             set: { if !$0 { model.errorMessage = nil } }
         )
+    }
+
+    private func consumePendingRoute() {
+        guard let route = router.consumePendingRoute() else { return }
+        switch route {
+        case .quickEntry:
+            model.prepareQuickEntry()
+        }
+    }
+
+    private func consumeLedgerChange() {
+        guard model.startupState == .ready else { return }
+        let generation = router.ledgerChangeGeneration
+        guard generation != observedLedgerChangeGeneration else { return }
+        observedLedgerChangeGeneration = generation
+        Task { await model.refreshAfterExternalLedgerChange() }
     }
 }
