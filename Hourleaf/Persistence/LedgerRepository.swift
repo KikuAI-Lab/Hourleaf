@@ -15,7 +15,6 @@ protocol LedgerRepository: Sendable {
     func saveReminder(_ reminder: ReminderSchedule) async throws
     func deleteReminder(id: UUID) async throws
     func fetchReceipts() async throws -> [ReportReceipt]
-    func saveReceipt(_ receipt: ReportReceipt, details: ReportSnapshotDetails?) async throws
     func reconcileReportLifecycle(asOf now: Date) async throws -> LedgerSnapshot
     func reviewReport(_ request: ReviewReportRequest) async throws -> LedgerSnapshot
     func prepareReport(_ request: PrepareReportRequest) async throws -> PreparedReportResult
@@ -280,7 +279,11 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
         return try await ledgerSnapshot().receipts
     }
 
-    func saveReceipt(_ receipt: ReportReceipt, details: ReportSnapshotDetails?) async throws {
+    #if DEBUG
+    private func saveReceiptFixture(
+        _ receipt: ReportReceipt,
+        details: ReportSnapshotDetails?
+    ) async throws {
         try requireAvailable()
         try ensureNormalized()
         try perform { context in
@@ -400,6 +403,7 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
             try Self.saveIfNeeded(context)
         }
     }
+    #endif
 
     func reconcileReportLifecycle(asOf now: Date) async throws -> LedgerSnapshot {
         try requireAvailable()
@@ -1298,31 +1302,38 @@ private extension CoreDataLedgerRepository {
             NSSortDescriptor(key: "occurredAt", ascending: false),
             NSSortDescriptor(key: "mutationID", ascending: false)
         ]
-        request.fetchLimit = 1
-        guard let object = try context.fetch(request).first else { return nil }
-        guard let revision = entryRevisionRecord(from: object) else {
-            throw LedgerRepositoryError.invalidManagedObject("The newest saved entry revision is incomplete or invalid.")
+        request.fetchBatchSize = 100
+        for object in try context.fetch(request) {
+            guard let revision = entryRevisionRecord(from: object) else {
+                throw LedgerRepositoryError.invalidManagedObject("A saved entry revision is incomplete or invalid.")
+            }
+            guard
+                let entry = try entry(in: context, id: revision.entryID),
+                let record = entryRecord(from: entry),
+                record.lastMutationID == revision.mutationID,
+                record.revision == revision.revision
+            else {
+                // Older revisions can sort before the current head when two
+                // commands share an exact timestamp. Keep looking instead of
+                // hiding a valid Undo action behind a random UUID tie-break.
+                continue
+            }
+            guard let operation = EntryMutationOperation(rawValue: revision.operation), operation.isUndoable else {
+                return nil
+            }
+            let age = asOf.timeIntervalSince(revision.occurredAt)
+            guard age >= 0, age < undoWindow else { return nil }
+            return EntryUndoCandidate(
+                mutationID: revision.mutationID,
+                entryID: revision.entryID,
+                expectedRevision: revision.revision,
+                operation: operation,
+                entry: record,
+                occurredAt: revision.occurredAt,
+                expiresAt: revision.occurredAt.addingTimeInterval(undoWindow)
+            )
         }
-        guard let operation = EntryMutationOperation(rawValue: revision.operation), operation.isUndoable else {
-            return nil
-        }
-        let age = asOf.timeIntervalSince(revision.occurredAt)
-        guard age >= 0, age < undoWindow else { return nil }
-        guard
-            let entry = try entry(in: context, id: revision.entryID),
-            let record = entryRecord(from: entry),
-            record.lastMutationID == revision.mutationID,
-            record.revision == revision.revision
-        else { return nil }
-        return EntryUndoCandidate(
-            mutationID: revision.mutationID,
-            entryID: revision.entryID,
-            expectedRevision: revision.revision,
-            operation: operation,
-            entry: record,
-            occurredAt: revision.occurredAt,
-            expiresAt: revision.occurredAt.addingTimeInterval(undoWindow)
-        )
+        return nil
     }
 
     static func entry(in context: NSManagedObjectContext, id: UUID) throws -> EntryEntity? {
@@ -2653,6 +2664,17 @@ private extension CoreDataLedgerRepository {
         if context.hasChanges { try context.save() }
     }
 }
+
+#if DEBUG
+extension CoreDataLedgerRepository {
+    func testOnlySaveReceiptFixture(
+        _ receipt: ReportReceipt,
+        details: ReportSnapshotDetails?
+    ) async throws {
+        try await saveReceiptFixture(receipt, details: details)
+    }
+}
+#endif
 
 private extension EntryMutationOperation {
     var isUndoable: Bool {

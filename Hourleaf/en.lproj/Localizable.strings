@@ -7,6 +7,7 @@
 "common.save" = "Save";
 "common.cancel" = "Cancel";
 "common.delete" = "Delete";
+"common.done" = "Done";
 "quick.title" = "Add time";
 "quick.report_ready" = "Last month’s report is ready";
 "quick.month_service" = "Service this month";

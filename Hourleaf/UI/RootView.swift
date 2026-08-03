@@ -100,7 +100,7 @@ struct RootView: View {
                 .receive(on: DispatchQueue.main)
         ) { _ in
             Task {
-                await model.reload()
+                await model.refreshAfterExternalLedgerChange()
                 await model.rescheduleReminders()
             }
         }

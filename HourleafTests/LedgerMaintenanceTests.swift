@@ -62,21 +62,6 @@ final class LedgerMaintenanceTests: XCTestCase {
         }
         await assertMaintenanceBlocked { try await repository.deleteReminder(id: UUID()) }
         await assertMaintenanceBlocked { try await repository.fetchReceipts() }
-        await assertMaintenanceBlocked {
-            try await repository.saveReceipt(
-                ReportReceipt(
-                    id: UUID(),
-                    month: MonthKey(Date(), calendar: .hourleaf),
-                    text: "blocked",
-                    serviceHours: 0,
-                    creditHours: 0,
-                    serviceCarryOut: 0,
-                    creditCarryOut: 0,
-                    preparedAt: .now
-                ),
-                details: nil
-            )
-        }
         await assertMaintenanceBlocked { try await repository.reconcileReportLifecycle(asOf: reconcileDuringLeaseAt) }
         await assertMaintenanceBlocked { try await repository.reviewReport(reviewRequest) }
         await assertMaintenanceBlocked { try await repository.prepareReport(prepareRequest) }

@@ -24,42 +24,272 @@ final class HourleafUITests: XCTestCase {
     }
 
     func testSeededPreviousMonthReportIsVisible() {
-        let app = XCUIApplication()
-        app.launchArguments = ["-uiTesting", "-seedUITestData", "-AppleLanguages", "(en)"]
-        app.launch()
-        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
+        let app = launchApp(
+            additionalArguments: [
+                "-seedUITestData",
+                "-hourleafTestNow",
+                "2026-10-02T12:00:00Z"
+            ]
+        )
         app.tabBars.buttons["Progress"].tap()
 
         let preview = app.staticTexts["reportPreview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 5))
         XCTAssertTrue(preview.label.contains("Hours: 52"))
         XCTAssertTrue(preview.label.contains("Credit hours: 7"))
-        XCTAssertTrue(app.buttons["shareReportButton"].isEnabled)
+        XCTAssertEqual(app.staticTexts["selectedReportMonth"].label, "September 2026")
+        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Ready to review")
+        XCTAssertTrue(app.buttons["reportReviewButton"].isEnabled)
+        XCTAssertFalse(app.buttons["sharePreparedReportButton"].exists)
+        XCTAssertFalse(app.buttons["markReportSentButton"].exists)
     }
 
     func testProgressDoesNotNavigateBeforeLedgerStart() {
-        let app = launchApp()
+        let app = launchApp(
+            additionalArguments: [
+                "-ledgerStartsCurrentMonthUITest",
+                "-hourleafTestNow",
+                "2026-10-02T12:00:00Z"
+            ]
+        )
         app.tabBars.buttons["Progress"].tap()
 
         let month = app.staticTexts["selectedReportMonth"]
         XCTAssertTrue(month.waitForExistence(timeout: 5))
-        XCTAssertEqual(month.label, Self.monthFormatter.string(from: Date()))
+        XCTAssertEqual(month.label, "October 2026")
         XCTAssertFalse(app.buttons["previousReportMonthButton"].isEnabled)
-        XCTAssertTrue(app.buttons["shareReportButton"].isEnabled)
+        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Month in progress")
+        XCTAssertFalse(app.buttons["reportReviewButton"].exists)
+        XCTAssertFalse(app.buttons["sharePreparedReportButton"].exists)
     }
 
-    func testShareCancellationStillAsksForManualSentConfirmation() {
-        let app = launchApp(additionalArguments: ["-seedUITestData"])
+    func testPreviousMonthZeroEntryBannerOpensExactMonth() {
+        let app = launchApp(
+            additionalArguments: [
+                "-pastDateUITest",
+                "-hourleafTestNow",
+                "2026-10-02T12:00:00Z"
+            ]
+        )
+
+        let banner = app.buttons["previousReportBanner"]
+        XCTAssertTrue(banner.waitForExistence(timeout: 5))
+        XCTAssertTrue(banner.label.contains("September 2026"))
+        banner.tap()
+
+        let month = app.staticTexts["selectedReportMonth"]
+        XCTAssertTrue(month.waitForExistence(timeout: 5))
+        XCTAssertEqual(month.label, "September 2026")
+        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Ready to review")
+        XCTAssertTrue(app.staticTexts["reportPreview"].label.contains("Hours: 0"))
+    }
+
+    func testClosingShareMenuStillRequiresExplicitMarkAsSent() {
+        let app = launchApp(
+            additionalArguments: [
+                "-seedUITestData",
+                "-hourleafTestNow",
+                "2026-10-02T12:00:00Z"
+            ]
+        )
         app.tabBars.buttons["Progress"].tap()
-        app.buttons["shareReportButton"].tap()
+        app.buttons["reportReviewButton"].tap()
+        XCTAssertTrue(app.buttons["finishReportReviewButton"].waitForExistence(timeout: 5))
+        app.buttons["finishReportReviewButton"].tap()
+
+        let prepare = app.buttons["prepareReportButton"]
+        XCTAssertTrue(prepare.waitForExistence(timeout: 5))
+        prepare.tap()
 
         let close = app.buttons["Close"]
         XCTAssertTrue(close.waitForExistence(timeout: 8))
         close.tap()
 
-        let confirmation = app.alerts["Was the report sent?"]
-        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
-        confirmation.buttons["Not sent"].tap()
+        let state = app.staticTexts["reportLifecycleState"]
+        XCTAssertTrue(state.waitForExistence(timeout: 5))
+        XCTAssertEqual(state.label, "Prepared to share")
+        XCTAssertTrue(app.buttons["sharePreparedReportButton"].exists)
+        XCTAssertTrue(app.buttons["markReportSentButton"].exists)
+        XCTAssertFalse(app.alerts["Was the report sent?"].exists)
+
+        app.buttons["markReportSentButton"].tap()
+        expectation(
+            for: NSPredicate(format: "label == %@", "Marked as sent"),
+            evaluatedWith: state
+        )
+        waitForExpectations(timeout: 5)
+        XCTAssertFalse(app.buttons["markReportSentButton"].exists)
+        XCTAssertTrue(app.buttons["sharePreparedReportButton"].exists)
+    }
+
+    func testClosingReadyServiceYearArchivesRecordedServiceWithoutCredit() {
+        let app = launchApp(
+            additionalArguments: [
+                "-seedServiceYearUITest",
+                "-hourleafTestNow",
+                "2026-09-02T12:00:00Z"
+            ]
+        )
+        app.tabBars.buttons["Progress"].tap()
+
+        let month = app.staticTexts["selectedReportMonth"]
+        XCTAssertTrue(month.waitForExistence(timeout: 5))
+        if month.label != "August 2026" {
+            app.buttons["previousReportMonthButton"].tap()
+        }
+        XCTAssertEqual(month.label, "August 2026")
+        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Ready to review")
+
+        let preview = app.staticTexts["reportPreview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 5))
+        XCTAssertTrue(preview.label.contains("Hours: 1"))
+        XCTAssertTrue(preview.label.contains("Credit hours: 7"))
+
+        let serviceYearState = app.staticTexts["serviceYearArchiveState"].firstMatch
+        XCTAssertTrue(serviceYearState.waitForExistence(timeout: 5))
+        XCTAssertTrue(serviceYearState.label.contains("Ready to close"))
+
+        let reviewButton = app.buttons["reviewServiceYearButton"]
+        XCTAssertTrue(reviewButton.waitForExistence(timeout: 5))
+        reviewButton.tap()
+
+        XCTAssertTrue(app.navigationBars["Review service year"].waitForExistence(timeout: 5))
+        XCTAssertTrue(serviceYearState.label.contains("Ready to close"))
+        XCTAssertTrue(app.staticTexts["Service recorded in Hourleaf: 1 hr"].exists)
+        XCTAssertTrue(app.staticTexts["Credit is kept separately and is not included."].exists)
+
+        let closeButton = app.buttons["closeServiceYearButton"]
+        XCTAssertTrue(closeButton.waitForExistence(timeout: 5))
+        closeButton.tap()
+
+        expectation(
+            for: NSPredicate(format: "label CONTAINS %@", "Archived"),
+            evaluatedWith: serviceYearState
+        )
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.staticTexts["Original archive"].exists)
+
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.staticTexts["serviceYearArchiveState"].firstMatch.label.contains("Archived"))
+    }
+
+    func testReportReviewShowsIncomingRemaindersAndSeparateCredit() {
+        let app = launchApp(
+            additionalArguments: [
+                "-seedReportCarryUITest",
+                "-hourleafTestNow",
+                "2026-10-02T12:00:00Z"
+            ]
+        )
+        app.tabBars.buttons["Progress"].tap()
+        app.buttons["reportReviewButton"].tap()
+
+        XCTAssertTrue(reportBreakdownLine("Service in entries: 2 hr 10 min", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(reportBreakdownLine("Incoming remainder: 20 min", in: app).exists)
+        XCTAssertTrue(reportBreakdownLine("In the report: 2 hr", in: app).exists)
+        XCTAssertTrue(reportBreakdownLine("Remainder forward: 30 min", in: app).exists)
+        XCTAssertTrue(reportBreakdownLine("Credit in entries: 20 min", in: app).exists)
+        XCTAssertTrue(reportBreakdownLine("Incoming remainder: 15 min", in: app).exists)
+        XCTAssertTrue(reportBreakdownLine("Credit hours: 0 hr", in: app).exists)
+        XCTAssertTrue(reportBreakdownLine("Remainder forward: 35 min", in: app).exists)
+    }
+
+    func testZeroCreditCalculationIsHiddenFromReportReview() {
+        let app = launchApp(
+            additionalArguments: [
+                "-pastDateUITest",
+                "-hourleafTestNow",
+                "2026-10-02T12:00:00Z"
+            ]
+        )
+        app.buttons["previousReportBanner"].tap()
+        app.buttons["reportReviewButton"].tap()
+
+        XCTAssertTrue(reportBreakdownLine("Service in entries: 0 min", in: app).waitForExistence(timeout: 5))
+        XCTAssertEqual(reportBreakdownLines("Credit in entries: 0 min", in: app).count, 0)
+    }
+
+    func testChangedReportKeepsSentOriginalAndPreparesCorrection() {
+        let app = launchApp(
+            additionalArguments: [
+                "-seedChangedReportUITest",
+                "-hourleafTestNow",
+                "2026-10-02T12:00:00Z"
+            ]
+        )
+        app.tabBars.buttons["Progress"].tap()
+
+        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Changed — review again")
+        XCTAssertTrue(app.staticTexts["Original"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Marked as sent"].exists)
+        app.buttons["reportReviewButton"].tap()
+        app.buttons["finishReportReviewButton"].tap()
+
+        let prepare = app.buttons["prepareReportButton"]
+        XCTAssertTrue(prepare.waitForExistence(timeout: 5))
+        XCTAssertEqual(prepare.label, "Prepare corrected report")
+        prepare.tap()
+        let close = app.buttons["Close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 8))
+        close.tap()
+
+        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Prepared to share")
+        XCTAssertTrue(app.staticTexts["Correction 1"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Original"].exists)
+        XCTAssertTrue(app.buttons["markReportSentButton"].exists)
+    }
+
+    func testReportReviewReflowsAtAccessibilityXXXL() {
+        let app = launchApp(
+            additionalArguments: [
+                "-seedUITestData",
+                "-hourleafTestNow",
+                "2026-10-02T12:00:00Z",
+                "-UIPreferredContentSizeCategoryName",
+                "UICTContentSizeCategoryAccessibilityXXXL"
+            ]
+        )
+        app.tabBars.buttons["Progress"].tap()
+        app.buttons["reportReviewButton"].tap()
+
+        XCTAssertTrue(app.navigationBars["Review report"].waitForExistence(timeout: 5))
+        let finish = app.buttons["finishReportReviewButton"]
+        XCTAssertTrue(finish.waitForExistence(timeout: 5))
+        XCTAssertTrue(finish.isHittable)
+        XCTAssertGreaterThanOrEqual(finish.frame.height, 44)
+        let breakdown = reportBreakdownLine("Entries: 2", in: app)
+        XCTAssertTrue(scrollUntilVisible(breakdown, in: app))
+        let entryList = app.descendants(matching: .any)
+            .matching(identifier: "reportReviewEntryList")
+            .firstMatch
+        XCTAssertTrue(scrollUntilVisible(entryList, in: app))
+        XCTAssertTrue(finish.isHittable)
+    }
+
+    func testReportReadinessCopyIsRussian() {
+        let app = launchLocalizedReportApp(language: "ru")
+        app.tabBars.buttons["Прогресс"].tap()
+
+        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Готов к проверке")
+        XCTAssertTrue(app.staticTexts["Месяц закончился. Проверьте записи и итог перед отправкой."].exists)
+        let review = app.buttons["reportReviewButton"]
+        XCTAssertEqual(review.label, "Проверить отчёт")
+        review.tap()
+        XCTAssertTrue(app.navigationBars["Проверить отчёт"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["finishReportReviewButton"].label, "Готово, всё проверено")
+    }
+
+    func testReportReadinessCopyIsUkrainian() {
+        let app = launchLocalizedReportApp(language: "uk")
+        app.tabBars.buttons["Прогрес"].tap()
+
+        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Готово до перевірки")
+        XCTAssertTrue(app.staticTexts["Місяць завершився. Перевірте записи й підсумок перед надсиланням."].exists)
+        let review = app.buttons["reportReviewButton"]
+        XCTAssertEqual(review.label, "Перевірити звіт")
+        review.tap()
+        XCTAssertTrue(app.navigationBars["Перевірити звіт"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["finishReportReviewButton"].label, "Готово, усе перевірено")
     }
 
     func testPastDateCanBeRecorded() {
@@ -77,6 +307,7 @@ final class HourleafUITests: XCTestCase {
         app.pickerWheels.element(boundBy: 1).adjust(toPickerWheelValue: "20")
         app.textFields["entryNoteField"].tap()
         app.textFields["entryNoteField"].typeText("Past date")
+        app.buttons["dismissEntryKeyboardButton"].tap()
         app.buttons["saveEntryButton"].tap()
         app.tabBars.buttons["History"].tap()
 
@@ -168,6 +399,7 @@ final class HourleafUITests: XCTestCase {
         let noteField = app.textFields["entryNoteField"]
         noteField.tap()
         noteField.typeText("Source note")
+        app.buttons["dismissEntryKeyboardButton"].tap()
         app.buttons["saveEntryButton"].tap()
 
         XCTAssertTrue(repeatButton.waitForExistence(timeout: 5))
@@ -183,7 +415,7 @@ final class HourleafUITests: XCTestCase {
         wheels.element(boundBy: 1).adjust(toPickerWheelValue: "30")
         noteField.tap()
         noteField.typeText("Unsaved draft")
-        app.swipeDown()
+        app.buttons["dismissEntryKeyboardButton"].tap()
         XCTAssertTrue(repeatButton.isHittable)
         repeatButton.tap()
 
@@ -340,7 +572,9 @@ final class HourleafUITests: XCTestCase {
     func testSettingsOpensDataManagement() {
         let app = launchApp()
         app.tabBars.buttons["Settings"].tap()
-        app.buttons["dataManagementButton"].tap()
+        let dataManagement = app.buttons["dataManagementButton"]
+        XCTAssertTrue(scrollUntilVisible(dataManagement, in: app))
+        dataManagement.tap()
 
         XCTAssertTrue(app.buttons["createBackupButton"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["chooseRestoreBackupButton"].waitForExistence(timeout: 5))
@@ -437,12 +671,51 @@ final class HourleafUITests: XCTestCase {
         return app
     }
 
+    private func launchLocalizedReportApp(language: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-uiTesting",
+            "-AppleLanguages",
+            "(\(language))",
+            "-seedUITestData",
+            "-hourleafTestNow",
+            "2026-10-02T12:00:00Z"
+        ]
+        app.launch()
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
+        return app
+    }
+
     private func addEntry(in app: XCUIApplication, hours: String, minutes: String) {
         let wheels = app.pickerWheels
         XCTAssertTrue(wheels.element(boundBy: 0).waitForExistence(timeout: 5))
         wheels.element(boundBy: 0).adjust(toPickerWheelValue: hours)
         wheels.element(boundBy: 1).adjust(toPickerWheelValue: minutes)
         app.buttons["saveEntryButton"].tap()
+    }
+
+    private func scrollUntilVisible(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+        for _ in 0..<5 {
+            if element.exists, app.frame.intersects(element.frame), element.frame.height > 0 {
+                return true
+            }
+            app.swipeUp()
+        }
+        return element.exists && app.frame.intersects(element.frame) && element.frame.height > 0
+    }
+
+    private func reportBreakdownLine(_ label: String, in app: XCUIApplication) -> XCUIElement {
+        reportBreakdownLines(label, in: app).firstMatch
+    }
+
+    private func reportBreakdownLines(_ label: String, in app: XCUIApplication) -> XCUIElementQuery {
+        app.staticTexts.matching(
+            NSPredicate(
+                format: "identifier == %@ AND label == %@",
+                "reportCalculationBreakdown",
+                label
+            )
+        )
     }
 
     private func firstHistoryEntry(in app: XCUIApplication) -> XCUIElement {

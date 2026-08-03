@@ -125,6 +125,7 @@ private struct EntryEditorView: View {
     }
 
     var body: some View {
+        let lowerBound = model.settings.ledgerStartMonth.date(calendar: .hourleaf)
         NavigationStack {
             Form {
                 Picker("entry.type", selection: $kind) {
@@ -134,7 +135,7 @@ private struct EntryEditorView: View {
                 DatePicker(
                     "entry.date",
                     selection: $date,
-                    in: model.settings.ledgerStartMonth.date(calendar: .hourleaf)...Date(),
+                    in: lowerBound...max(lowerBound, model.currentDate),
                     displayedComponents: .date
                 )
                 .accessibilityIdentifier("editEntryDatePicker")

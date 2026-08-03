@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 @main
@@ -61,19 +62,30 @@ final class HourleafAppLauncher: ObservableObject {
     private let arguments: [String]
     private let isUITesting: Bool
     private let usesTestStore: Bool
+    private let clock: @Sendable () -> Date
     private var pendingRecovery: PendingRecovery?
     private var didStart = false
 
     init(arguments: [String]) {
+        let uiTesting = arguments.contains("-uiTesting")
+        let fixedTestNow = Self.fixedTestNow(in: arguments, isUITesting: uiTesting)
+        let fixedClock = fixedTestNow.map(FixedUITestClock.init)
+        let clock: @Sendable () -> Date = if let fixedClock {
+            { fixedClock.now() }
+        } else {
+            { .now }
+        }
+
         self.arguments = arguments
-        isUITesting = arguments.contains("-uiTesting")
-        usesTestStore = isUITesting || arguments.contains("-onboardingUITest")
+        isUITesting = uiTesting
+        usesTestStore = uiTesting || arguments.contains("-onboardingUITest")
+        self.clock = clock
 
         if usesTestStore {
             let router = AppRouter()
             let scheduler = UITestReminderScheduler()
             let persistence = PersistenceController(inMemory: true, cloudSyncEnabled: false)
-            let repository = CoreDataLedgerRepository(persistence: persistence)
+            let repository = CoreDataLedgerRepository(persistence: persistence, clock: clock)
             let journalStore = RestoreJournalStoreV1(
                 rootDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(
                     "Hourleaf-UITest-Restore-\(UUID().uuidString)",
@@ -126,6 +138,16 @@ final class HourleafAppLauncher: ObservableObject {
         }
     }
 
+    private static func fixedTestNow(in arguments: [String], isUITesting: Bool) -> Date? {
+        guard
+            isUITesting,
+            let flagIndex = arguments.firstIndex(of: "-hourleafTestNow"),
+            arguments.indices.contains(flagIndex + 1)
+        else { return nil }
+
+        return ISO8601DateFormatter().date(from: arguments[flagIndex + 1])
+    }
+
     func startIfNeeded() async {
         guard !didStart else { return }
         didStart = true
@@ -175,7 +197,8 @@ final class HourleafAppLauncher: ObservableObject {
     ) -> HourleafAppSession {
         let model = AppModel(
             repository: runtime.repository,
-            reminderScheduler: reminderScheduler
+            reminderScheduler: reminderScheduler,
+            now: clock
         )
         let restoreCoordinator = HourleafRestoreCoordinator(
             persistence: runtime.persistence,
@@ -217,8 +240,83 @@ final class HourleafAppLauncher: ObservableObject {
         if isUITesting {
             var settings = model.settings
             settings.onboardingComplete = true
-            if arguments.contains("-seedUITestData") || arguments.contains("-pastDateUITest") {
-                let previous = MonthKey(Date(), calendar: .hourleaf).advanced(by: -1, calendar: .hourleaf)
+            if arguments.contains("-ledgerStartsCurrentMonthUITest") {
+                settings.ledgerStartMonth = model.currentMonth
+                await model.saveSettings(settings)
+            } else if arguments.contains("-seedServiceYearUITest") {
+                settings.ledgerStartMonth = MonthKey(year: 2025, month: GoalPolicy.regularPioneer.startMonth)
+                await model.saveSettings(settings)
+
+                let seedDate = LocalDay(year: 2026, month: 8, day: 15)
+                    .date(calendar: .hourleaf)
+                _ = await model.addEntry(
+                    kind: .service,
+                    date: seedDate,
+                    hours: 1,
+                    minutes: 0,
+                    note: nil
+                )
+                _ = await model.addEntry(
+                    kind: .credit,
+                    date: seedDate,
+                    hours: 7,
+                    minutes: 0,
+                    note: nil
+                )
+            } else if arguments.contains("-seedReportCarryUITest") {
+                let previous = model.currentMonth.advanced(by: -1, calendar: .hourleaf)
+                settings.ledgerStartMonth = previous
+                settings.openingServiceCarryMinutes = 20
+                settings.openingCreditCarryMinutes = 15
+                await model.saveSettings(settings)
+
+                let seedDate = LocalDay(year: previous.year, month: previous.month, day: 15)
+                    .date(calendar: .hourleaf)
+                _ = await model.addEntry(
+                    kind: .service,
+                    date: seedDate,
+                    hours: 2,
+                    minutes: 10,
+                    note: nil
+                )
+                _ = await model.addEntry(
+                    kind: .credit,
+                    date: seedDate,
+                    hours: 0,
+                    minutes: 20,
+                    note: nil
+                )
+            } else if arguments.contains("-seedChangedReportUITest") {
+                let previous = model.currentMonth.advanced(by: -1, calendar: .hourleaf)
+                settings.ledgerStartMonth = previous
+                await model.saveSettings(settings)
+
+                let seedDate = LocalDay(year: previous.year, month: previous.month, day: 15)
+                    .date(calendar: .hourleaf)
+                _ = await model.addEntry(
+                    kind: .service,
+                    date: seedDate,
+                    hours: 1,
+                    minutes: 0,
+                    note: nil
+                )
+                let originalDraft = model.reportDraft(for: previous)
+                if await model.reviewReport(originalDraft),
+                   let originalSnapshot = await model.prepareReport(originalDraft) {
+                    _ = await model.markReportSent(originalSnapshot)
+                }
+                if let record = model.entryRecords.first {
+                    _ = await model.updateEntry(
+                        record,
+                        kind: .service,
+                        date: seedDate,
+                        hours: 2,
+                        minutes: 0,
+                        note: nil
+                    )
+                }
+            } else if arguments.contains("-seedUITestData") || arguments.contains("-pastDateUITest") {
+                let previous = model.currentMonth.advanced(by: -1, calendar: .hourleaf)
                 settings.ledgerStartMonth = previous
                 await model.saveSettings(settings)
                 if arguments.contains("-seedUITestData") {
@@ -242,12 +340,35 @@ final class HourleafAppLauncher: ObservableObject {
             } else {
                 await model.saveSettings(settings)
             }
+            // Seed commands exercise the real mutation path, but their Undo
+            // banner is not part of the fixture being tested on first launch.
+            model.dismissUndoBanner()
             model.finishInitialLoad()
         }
 
         if !usesTestStore {
             await model.rescheduleReminders()
         }
+    }
+}
+
+/// Gives UI tests a stable calendar date while preserving the strict ordering
+/// required by mutation history and its ten-minute undo window.
+private final class FixedUITestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Date
+
+    init(_ value: Date) {
+        self.value = value
+    }
+
+    func now() -> Date {
+        lock.lock()
+        defer {
+            value = value.addingTimeInterval(0.001)
+            lock.unlock()
+        }
+        return value
     }
 }
 

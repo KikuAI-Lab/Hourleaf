@@ -171,6 +171,7 @@ struct ReportSnapshotMetadata: Identifiable, Equatable, Sendable {
     var id: UUID { receipt.id }
 }
 
+#if DEBUG
 struct ReportSnapshotDetails: Equatable, Sendable {
     let report: MonthlyReport
     let reportingMode: RemainderMode
@@ -180,6 +181,7 @@ struct ReportSnapshotDetails: Equatable, Sendable {
     let calculationFingerprint: String
     let presentationFingerprint: String
 }
+#endif
 
 enum ReportLifecycleState: String, Codable, CaseIterable, Sendable {
     case draft

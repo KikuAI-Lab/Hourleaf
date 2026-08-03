@@ -17,6 +17,15 @@ final class AppModel: ObservableObject {
     @Published private(set) var reminders: [ReminderSchedule] = []
     @Published private(set) var receipts: [ReportReceipt] = []
     @Published private(set) var reportSnapshots: [ReportSnapshotMetadata] = []
+    @Published private(set) var reportStates: [ReportStateRecord] = []
+    @Published private(set) var serviceYearArchives: [ServiceYearArchiveRecord] = []
+    @Published private(set) var currentDate: Date
+    @Published private(set) var currentMonth: MonthKey
+    @Published var selectedReportMonth: MonthKey
+    @Published private(set) var reviewingReportMonths: Set<MonthKey> = []
+    @Published private(set) var preparingReportMonths: Set<MonthKey> = []
+    @Published private(set) var markingSentSnapshotIDs: Set<UUID> = []
+    @Published private(set) var closingServiceYearStarts: Set<MonthKey> = []
     @Published var settings = AppSettings()
     @Published var selectedTab: Tab = .add
     @Published var errorMessage: String?
@@ -30,10 +39,11 @@ final class AppModel: ObservableObject {
 
     let repository: any LedgerRepository
     private let reminderScheduler: ReminderScheduling
+    private let now: @Sendable () -> Date
+    private var latestLedgerSnapshot: LedgerSnapshot?
     private var initialSnapshotLoaded = false
     private var settingsSaveGeneration = 0
     private var settingsSaveTask: Task<Void, Never>?
-    private var reportPreparationsInFlight = Set<MonthKey>()
     private var restoringEntryIDs = Set<UUID>()
     private var isUndoing = false
     private var undoBannerTask: Task<Void, Never>?
@@ -44,9 +54,19 @@ final class AppModel: ObservableObject {
     /// A passive store reload must not prevent a just-confirmed mutation from showing Undo.
     private var undoStateGeneration = 0
 
-    init(repository: any LedgerRepository, reminderScheduler: ReminderScheduling) {
+    init(
+        repository: any LedgerRepository,
+        reminderScheduler: ReminderScheduling,
+        now: @escaping @Sendable () -> Date = { .now }
+    ) {
+        let initialDate = now()
+        let initialMonth = ReportReadiness.currentMonth(asOf: initialDate)
         self.repository = repository
         self.reminderScheduler = reminderScheduler
+        self.now = now
+        currentDate = initialDate
+        currentMonth = initialMonth
+        selectedReportMonth = initialMonth
     }
 
     func loadInitialSnapshot(markReady: Bool = true) async {
@@ -54,7 +74,7 @@ final class AppModel: ObservableObject {
         startupDiagnostic = nil
         initialSnapshotLoaded = false
         do {
-            try await loadSnapshot()
+            try await loadReconciledSnapshot(selectDefaultReportMonth: true)
             await refreshUndoCandidate(showBanner: true)
             initialSnapshotLoaded = true
             if markReady { startupState = .ready }
@@ -101,7 +121,10 @@ final class AppModel: ObservableObject {
         settingsSaveTask = nil
         storeRefreshRequested = false
         storeRefreshShouldShowUndo = false
-        reportPreparationsInFlight.removeAll()
+        reviewingReportMonths.removeAll()
+        preparingReportMonths.removeAll()
+        markingSentSnapshotIDs.removeAll()
+        closingServiceYearStarts.removeAll()
         restoringEntryIDs.removeAll()
         isUndoing = false
         undoBannerTask?.cancel()
@@ -111,7 +134,10 @@ final class AppModel: ObservableObject {
         undoStateGeneration &+= 1
 
         do {
-            try await loadSnapshot(waitForPendingSettingsSave: false)
+            try await loadReconciledSnapshot(
+                waitForPendingSettingsSave: false,
+                selectDefaultReportMonth: true
+            )
             initialSnapshotLoaded = true
             errorMessage = nil
             startupState = .ready
@@ -150,7 +176,7 @@ final class AppModel: ObservableObject {
     @discardableResult
     func repeatLastEntry(expected proposal: OneTapProposal) async -> Bool {
         guard !isRepeatingLastEntry else { return false }
-        let tappedAt = Date()
+        let tappedAt = now()
         isRepeatingLastEntry = true
         defer { isRepeatingLastEntry = false }
 
@@ -183,11 +209,47 @@ final class AppModel: ObservableObject {
             let shouldShowUndoBanner = storeRefreshShouldShowUndo
             storeRefreshShouldShowUndo = false
             do {
-                try await loadSnapshot()
+                try await loadReconciledSnapshot(selectDefaultReportMonth: false)
                 await refreshUndoCandidate(showBanner: shouldShowUndoBanner)
             } catch {
                 present(error)
             }
+        }
+    }
+
+    private func loadReconciledSnapshot(
+        waitForPendingSettingsSave: Bool = true,
+        selectDefaultReportMonth: Bool
+    ) async throws {
+        if waitForPendingSettingsSave {
+            while let pendingSettingsSave = settingsSaveTask {
+                await pendingSettingsSave.value
+            }
+        }
+
+        let refreshInstant = now()
+        let refreshedMonth = ReportReadiness.currentMonth(asOf: refreshInstant)
+        while true {
+            let generationBeforeFetch = settingsSaveGeneration
+            let snapshot = try await repository.reconcileReportLifecycle(asOf: refreshInstant)
+            guard
+                !waitForPendingSettingsSave
+                    || (settingsSaveTask == nil && generationBeforeFetch == settingsSaveGeneration)
+            else {
+                while let pendingSettingsSave = settingsSaveTask {
+                    await pendingSettingsSave.value
+                }
+                continue
+            }
+
+            currentDate = refreshInstant
+            currentMonth = refreshedMonth
+            apply(snapshot)
+            updateSelectedReportMonth(
+                from: snapshot,
+                preferLatestClosed: selectDefaultReportMonth
+            )
+            return
         }
     }
 
@@ -217,6 +279,7 @@ final class AppModel: ObservableObject {
     }
 
     private func apply(_ snapshot: LedgerSnapshot) {
+        latestLedgerSnapshot = snapshot
         entryRecords = snapshot.entries.filter { !$0.isDeleted }
         deletedEntryRecords = snapshot.deletedEntries.sorted {
             ($0.deletedAt ?? .distantPast, $0.id.uuidString) > ($1.deletedAt ?? .distantPast, $1.id.uuidString)
@@ -227,6 +290,24 @@ final class AppModel: ObservableObject {
         reminders = snapshot.reminderSchedules
         receipts = snapshot.receipts
         reportSnapshots = snapshot.reportSnapshots
+        reportStates = snapshot.reportStates
+        serviceYearArchives = snapshot.serviceYearArchives
+        updateSelectedReportMonth(from: snapshot, preferLatestClosed: false)
+    }
+
+    private func updateSelectedReportMonth(
+        from snapshot: LedgerSnapshot,
+        preferLatestClosed: Bool
+    ) {
+        let previousMonth = currentMonth.advanced(by: -1, calendar: .hourleaf)
+        let defaultMonth = previousMonth >= snapshot.settings.ledgerStartMonth
+            ? previousMonth
+            : currentMonth
+        if preferLatestClosed
+            || selectedReportMonth < snapshot.settings.ledgerStartMonth
+            || selectedReportMonth > currentMonth {
+            selectedReportMonth = defaultMonth
+        }
     }
 
     func addEntry(kind: EntryKind, date: Date, hours: Int, minutes: Int, note: String?) async -> Bool {
@@ -237,7 +318,14 @@ final class AppModel: ObservableObject {
         }
         do {
             let receipt = try await AddTimeEntryCommand(repository: repository)
-                .execute(kind: kind, date: date, hours: hours, minutes: minutes, note: note)
+                .execute(
+                    kind: kind,
+                    date: date,
+                    hours: hours,
+                    minutes: minutes,
+                    note: note,
+                    occurredAt: now()
+                )
             await refreshAfterEntryMutation(receipt, showUndoBanner: true)
             return true
         } catch {
@@ -282,6 +370,7 @@ final class AppModel: ObservableObject {
                         minutes: total,
                         note: note
                     ),
+                    occurredAt: now(),
                     source: .appHistory
                 )
             )
@@ -301,6 +390,7 @@ final class AppModel: ObservableObject {
                     entryID: record.id,
                     expectedRevision: record.revision,
                     operation: .delete,
+                    occurredAt: now(),
                     source: .appHistory
                 )
             )
@@ -322,6 +412,7 @@ final class AppModel: ObservableObject {
                     entryID: record.id,
                     expectedRevision: record.revision,
                     operation: .restore,
+                    occurredAt: now(),
                     source: .restore
                 )
             )
@@ -351,6 +442,7 @@ final class AppModel: ObservableObject {
                     expectedRevision: candidate.expectedRevision,
                     operation: .undo,
                     revertedMutationID: candidate.mutationID,
+                    occurredAt: now(),
                     source: .undo
                 )
             )
@@ -381,7 +473,7 @@ final class AppModel: ObservableObject {
         let generation = undoStateGeneration
         do {
             try await loadSnapshot()
-            let candidate = try await repository.latestUndoCandidate(asOf: .now)
+            let candidate = try await repository.latestUndoCandidate(asOf: now())
             guard generation == undoStateGeneration else { return }
             undoCandidate = candidate
             guard
@@ -401,7 +493,7 @@ final class AppModel: ObservableObject {
     private func refreshUndoCandidate(showBanner: Bool) async {
         let generation = undoStateGeneration
         do {
-            let candidate = try await repository.latestUndoCandidate(asOf: .now)
+            let candidate = try await repository.latestUndoCandidate(asOf: now())
             guard generation == undoStateGeneration else { return }
             undoCandidate = candidate
             if let candidate, showBanner {
@@ -423,6 +515,167 @@ final class AppModel: ObservableObject {
             guard !Task.isCancelled, self?.visibleUndoCandidate?.mutationID == candidate.mutationID else { return }
             self?.visibleUndoCandidate = nil
         }
+    }
+
+    func lifecycleState(for month: MonthKey) -> ReportLifecycleState {
+        guard let snapshot = latestLedgerSnapshot else { return .draft }
+        guard month >= snapshot.settings.ledgerStartMonth else { return .draft }
+        guard month < currentMonth else { return .draft }
+
+        if let state = snapshot.reportStates.first(where: { $0.month == month }) {
+            return state.state == .draft ? .ready : state.state
+        }
+        if let saved = newestReportSnapshot(for: month, in: snapshot) {
+            return saved.receipt.confirmedSentAt == nil ? .prepared : .sent
+        }
+        return .ready
+    }
+
+    func reportDraft(for month: MonthKey) -> ReportDraft {
+        guard
+            let snapshot = latestLedgerSnapshot,
+            let draft = ReportReadiness.draft(for: month, in: snapshot)
+        else {
+            preconditionFailure("A report draft requires a loaded month at or after the ledger start.")
+        }
+        return draft
+    }
+
+    func openReport(_ month: MonthKey) {
+        selectedReportMonth = month
+        selectedTab = .progress
+    }
+
+    @discardableResult
+    func reviewReport(_ draft: ReportDraft) async -> Bool {
+        guard reviewingReportMonths.insert(draft.month).inserted else { return false }
+        let reviewedAt = now()
+        defer { reviewingReportMonths.remove(draft.month) }
+
+        do {
+            let ledger = try await repository.reviewReport(
+                ReviewReportRequest(
+                    month: draft.month,
+                    expectedCalculationFingerprint: draft.calculationFingerprint,
+                    expectedPresentationFingerprint: draft.presentationFingerprint,
+                    reviewedAt: reviewedAt
+                )
+            )
+            apply(ledger)
+            return true
+        } catch {
+            await handleLifecycleFailure(error)
+            return false
+        }
+    }
+
+    func prepareReport(_ draft: ReportDraft) async -> ReportSnapshotMetadata? {
+        guard preparingReportMonths.insert(draft.month).inserted else { return nil }
+        let snapshotID = UUID()
+        let preparedAt = now()
+        defer { preparingReportMonths.remove(draft.month) }
+
+        if let ledger = latestLedgerSnapshot,
+           let state = ledger.reportStates.first(where: { $0.month == draft.month }),
+           state.state == .prepared || state.state == .sent,
+           let currentSnapshotID = state.currentSnapshotID,
+           let currentSnapshot = ledger.reportSnapshots.first(where: { $0.id == currentSnapshotID }),
+           ReportReadiness.snapshotMatchesDraft(currentSnapshot, draft: draft, ledger: ledger) {
+            return currentSnapshot
+        }
+
+        do {
+            let result = try await repository.prepareReport(
+                PrepareReportRequest(
+                    month: draft.month,
+                    expectedCalculationFingerprint: draft.calculationFingerprint,
+                    expectedPresentationFingerprint: draft.presentationFingerprint,
+                    snapshotID: snapshotID,
+                    preparedAt: preparedAt
+                )
+            )
+            apply(result.ledger)
+            return result.snapshot
+        } catch {
+            await handleLifecycleFailure(error)
+            return nil
+        }
+    }
+
+    @discardableResult
+    func markReportSent(_ snapshot: ReportSnapshotMetadata) async -> Bool {
+        guard markingSentSnapshotIDs.insert(snapshot.id).inserted else { return false }
+        let confirmedAt = now()
+        defer { markingSentSnapshotIDs.remove(snapshot.id) }
+
+        do {
+            let ledger = try await repository.markReportSent(
+                MarkReportSentRequest(snapshotID: snapshot.id, confirmedAt: confirmedAt)
+            )
+            apply(ledger)
+            return true
+        } catch {
+            await handleLifecycleFailure(error)
+            return false
+        }
+    }
+
+    func serviceYearDraft(starting startMonth: MonthKey) -> ServiceYearDraft {
+        guard
+            let snapshot = latestLedgerSnapshot,
+            let draft = ReportReadiness.serviceYearDraft(starting: startMonth, in: snapshot)
+        else {
+            preconditionFailure("A service-year draft requires a loaded September-to-August period.")
+        }
+        return draft
+    }
+
+    func closeServiceYear(_ draft: ServiceYearDraft) async -> ServiceYearArchiveRecord? {
+        guard closingServiceYearStarts.insert(draft.startMonth).inserted else { return nil }
+        let archiveID = UUID()
+        let createdAt = now()
+        defer { closingServiceYearStarts.remove(draft.startMonth) }
+
+        do {
+            let result = try await repository.closeServiceYear(
+                CloseServiceYearRequest(
+                    startMonth: draft.startMonth,
+                    expectedCalculationFingerprint: draft.calculationFingerprint,
+                    archiveID: archiveID,
+                    createdAt: createdAt
+                )
+            )
+            apply(result.ledger)
+            return result.archive
+        } catch {
+            await handleLifecycleFailure(error)
+            return nil
+        }
+    }
+
+    private func newestReportSnapshot(
+        for month: MonthKey,
+        in ledger: LedgerSnapshot
+    ) -> ReportSnapshotMetadata? {
+        ledger.reportSnapshots
+            .filter { $0.receipt.month == month }
+            .max {
+                ($0.receipt.preparedAt, $0.id.uuidString)
+                    < ($1.receipt.preparedAt, $1.id.uuidString)
+            }
+    }
+
+    private func handleLifecycleFailure(_ error: Error) async {
+        if let lifecycleError = error as? ReportLifecycleError,
+           lifecycleError == .reportChanged || lifecycleError == .archiveChanged {
+            do {
+                try await loadReconciledSnapshot(selectDefaultReportMonth: false)
+            } catch {
+                present(error)
+                return
+            }
+        }
+        present(error)
     }
 
     func reports(through month: MonthKey) -> [MonthlyReport] {
@@ -451,7 +704,8 @@ final class AppModel: ObservableObject {
             )
     }
 
-    func serviceYearProgress(containing day: LocalDay = LocalDay(Date(), calendar: .hourleaf)) -> Int {
+    func serviceYearProgress(containing day: LocalDay? = nil) -> Int {
+        let day = day ?? LocalDay(year: currentMonth.year, month: currentMonth.month, day: 1)
         let selectedStart = ServiceYearCalculator.serviceYearStart(containing: day).monthKey
         let baseline = selectedStart == settings.baselineServiceYearStart
             ? settings.baselineServiceYearMinutes
@@ -497,6 +751,10 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             do {
                 try await repository.saveSettings(updated)
+                try await self.loadSnapshot(
+                    waitForPendingSettingsSave: false,
+                    onlyIfSettingsGeneration: generation
+                )
             } catch {
                 guard generation == self.settingsSaveGeneration else { return }
                 self.present(error)
@@ -542,7 +800,7 @@ final class AppModel: ObservableObject {
     }
 
     func updateReportingPolicy(mode: RemainderMode) async {
-        let current = MonthKey(Date(), calendar: .hourleaf)
+        let current = currentMonth
         let effective = hasConfirmedReceipt(in: current) ? current.advanced(by: 1, calendar: .hourleaf) : current
         do {
             try await repository.savePolicy(ReportingPolicy(
@@ -611,119 +869,17 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func createReceipt(for report: MonthlyReport, text: String) async -> ReportReceipt? {
-        guard reportPreparationsInFlight.insert(report.month).inserted else { return nil }
-        defer { reportPreparationsInFlight.remove(report.month) }
-
-        let entriesSnapshot = entries
-        let settingsSnapshot = settings
-        let policiesSnapshot = policies
-        let currentReport = ReportCalculator.timeline(
-            entries: entriesSnapshot,
-            from: settingsSnapshot.ledgerStartMonth,
-            through: report.month,
-            openingServiceCarry: settingsSnapshot.openingServiceCarryMinutes,
-            openingCreditCarry: settingsSnapshot.openingCreditCarryMinutes,
-            policies: policiesSnapshot
-        ).last(where: { $0.month == report.month })
-        guard
-            currentReport == report,
-            ReportFormatter.format(report, settings: settingsSnapshot) == text
-        else {
-            errorMessage = String(localized: "error.report_changed")
-            return nil
-        }
-
-        let receipt = ReportReceipt(
-            id: UUID(),
-            month: report.month,
-            text: text,
-            serviceHours: report.serviceHours,
-            creditHours: report.creditHours,
-            serviceCarryOut: report.serviceCarryOut,
-            creditCarryOut: report.creditCarryOut,
-            preparedAt: .now,
-            confirmedSentAt: nil
-        )
-        do {
-            let policy = ReportCalculator.policy(for: report.month, revisions: policiesSnapshot)
-            let calculationFingerprint = ReportFingerprint.calculation(
-                report: report,
-                entries: entriesSnapshot,
-                settings: settingsSnapshot,
-                policies: policiesSnapshot
-            )
-            let details = ReportSnapshotDetails(
-                report: report,
-                reportingMode: policy.mode,
-                reportLanguage: settingsSnapshot.reportLanguage,
-                creditLabel: settingsSnapshot.creditLabel(for: settingsSnapshot.reportLanguage),
-                templateID: "standard",
-                calculationFingerprint: calculationFingerprint,
-                presentationFingerprint: ReportFingerprint.presentation(
-                    calculationFingerprint: calculationFingerprint,
-                    language: settingsSnapshot.reportLanguage,
-                    creditLabel: settingsSnapshot.creditLabel(for: settingsSnapshot.reportLanguage),
-                    templateID: "standard",
-                    text: text
-                )
-            )
-            try await repository.saveReceipt(receipt, details: details)
-            try await loadSnapshot()
-            return receipt
-        } catch {
-            present(error)
-            return nil
-        }
-    }
-
-    func markReceiptSent(_ receipt: ReportReceipt) async {
-        do {
-            var updated = receipt
-            updated.confirmedSentAt = .now
-            try await repository.saveReceipt(updated, details: nil)
-            receipts = try await repository.fetchReceipts()
-        } catch {
-            present(error)
-        }
-    }
-
     func hasConfirmedReceipt(in month: MonthKey) -> Bool {
         receipts.contains { $0.month == month && $0.confirmedSentAt != nil }
     }
 
     func changeAffectsConfirmedReport(from month: MonthKey) -> Bool {
-        receipts.contains { $0.month >= month && $0.confirmedSentAt != nil }
-    }
-
-    func isStale(_ receipt: ReportReceipt) -> Bool {
-        let current = report(for: receipt.month)
-        if let snapshot = reportSnapshots.first(where: { $0.id == receipt.id }),
-           !snapshot.legacyCalculationUnavailable,
-           let storedCalculationFingerprint = snapshot.calculationFingerprint,
-           let storedPresentationFingerprint = snapshot.presentationFingerprint,
-           let templateID = snapshot.templateID {
-            let calculationFingerprint = ReportFingerprint.calculation(
-                report: current,
-                entries: entries,
-                settings: settings,
-                policies: policies
-            )
-            let presentationFingerprint = ReportFingerprint.presentation(
-                calculationFingerprint: calculationFingerprint,
-                language: settings.reportLanguage,
-                creditLabel: settings.creditLabel(for: settings.reportLanguage),
-                templateID: templateID,
-                text: ReportFormatter.format(current, settings: settings)
-            )
-            return calculationFingerprint != storedCalculationFingerprint
-                || presentationFingerprint != storedPresentationFingerprint
-        }
-        return current.serviceHours != receipt.serviceHours
-            || current.creditHours != receipt.creditHours
-            || current.serviceCarryOut != receipt.serviceCarryOut
-            || current.creditCarryOut != receipt.creditCarryOut
-            || ReportFormatter.format(current, settings: settings) != receipt.text
+        let checkpointStates: Set<ReportLifecycleState> = [.reviewed, .prepared, .sent, .changed]
+        return reportStates.contains { $0.month >= month && checkpointStates.contains($0.state) }
+            || receipts.contains { $0.month >= month && $0.confirmedSentAt != nil }
+            || serviceYearArchives.contains { archive in
+                archive.startMonth <= month && month <= archive.endMonth
+            }
     }
 
     private func present(_ error: Error) {
@@ -734,6 +890,26 @@ final class AppModel: ObservableObject {
             errorMessage = oneTapError.localizedDescription
         } else if let mutationError = error as? EntryMutationError {
             errorMessage = mutationError.localizedDescription
+        } else if let lifecycleError = error as? ReportLifecycleError {
+            switch lifecycleError {
+            case .beforeLedgerStart:
+                errorMessage = String(localized: "error.before_ledger_start")
+            case .monthStillOpen:
+                errorMessage = String(localized: "error.month_still_open")
+            case .reportChanged:
+                errorMessage = String(localized: "error.report_changed")
+            case .reviewRequired:
+                errorMessage = String(localized: "error.report_review_required")
+            case .serviceYearStillOpen:
+                errorMessage = String(localized: "error.service_year_still_open")
+            case .archiveChanged:
+                errorMessage = String(localized: "error.archive_changed")
+            case .snapshotNotFound,
+                    .invalidSnapshotHistory,
+                    .receiptVersionExhausted,
+                    .archiveVersionExhausted:
+                errorMessage = String(localized: "error.action_failed")
+            }
         } else if let repositoryError = error as? LedgerRepositoryError,
                   repositoryError == .maintenanceInProgress {
             errorMessage = String(localized: "error.restore_in_progress")

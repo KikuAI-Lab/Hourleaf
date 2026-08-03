@@ -713,6 +713,7 @@ final class ReportReadinessTests: XCTestCase {
             in: repository
         )
         let draft = try await reportDraft(from: repository, month: july)
+        let before = try await repository.ledgerSnapshot()
 
         await assertLifecycleError(.reportChanged) {
             _ = try await repository.reviewReport(
@@ -726,8 +727,8 @@ final class ReportReadinessTests: XCTestCase {
         }
 
         let ledger = try await repository.ledgerSnapshot()
-        XCTAssertTrue(ledger.reportStates.isEmpty)
-        XCTAssertTrue(ledger.reportSnapshots.isEmpty)
+        XCTAssertEqual(ledger.reportStates, before.reportStates)
+        XCTAssertEqual(ledger.reportSnapshots, before.reportSnapshots)
     }
 
     func testPrepareReplayReturnsExistingSnapshotAfterLaterMutation() async throws {
@@ -838,8 +839,8 @@ final class ReportReadinessTests: XCTestCase {
             preparedAt: fixedDate(200),
             confirmedSentAt: nil
         )
-        try await repository.saveReceipt(older, details: reportDetails(for: older, rawServiceMinutes: 60))
-        try await repository.saveReceipt(
+        try await repository.testOnlySaveReceiptFixture(older, details: reportDetails(for: older, rawServiceMinutes: 60))
+        try await repository.testOnlySaveReceiptFixture(
             newer,
             details: ReportSnapshotDetails(
                 report: currentDraft.report,

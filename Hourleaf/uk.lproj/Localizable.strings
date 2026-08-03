@@ -7,6 +7,7 @@
 "common.save" = "Зберегти";
 "common.cancel" = "Скасувати";
 "common.delete" = "Видалити";
+"common.done" = "Готово";
 "quick.title" = "Додати час";
 "quick.report_ready" = "Звіт за минулий місяць готовий";
 "quick.month_service" = "Служіння цього місяця";

@@ -9,19 +9,35 @@ struct QuickEntryView: View {
     @State private var minutes = 0
     @State private var note = ""
     @State private var isSaving = false
+    @State private var didInitializeDate = false
     @FocusState private var noteFocused: Bool
 
     private var previousMonth: MonthKey {
-        MonthKey(Date(), calendar: .hourleaf).advanced(by: -1, calendar: .hourleaf)
+        model.currentMonth.advanced(by: -1, calendar: .hourleaf)
     }
 
-    private var previousReport: MonthlyReport { model.report(for: previousMonth) }
+    private var previousReportBannerState: PreviousReportBannerState? {
+        guard previousMonth >= model.settings.ledgerStartMonth else { return nil }
+
+        switch model.lifecycleState(for: previousMonth) {
+        case .ready:
+            return .ready
+        case .changed:
+            return .changed
+        case .reviewed:
+            return .reviewed
+        case .prepared:
+            return .prepared
+        case .sent, .draft:
+            return nil
+        }
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 18) {
-                    if reportNeedsAttention { reportBanner }
+                    if let state = previousReportBannerState { reportBanner(state) }
                     if let proposal = model.oneTapProposal {
                         oneTapAction(proposal)
                     }
@@ -37,32 +53,60 @@ struct QuickEntryView: View {
             .onChange(of: model.quickEntryResetGeneration) { _, _ in
                 resetDraft()
             }
+            .onAppear {
+                guard !didInitializeDate else { return }
+                date = model.currentDate
+                didInitializeDate = true
+            }
+            .onChange(of: model.currentDate) { previousDate, currentDate in
+                guard LocalDay(date, calendar: .hourleaf) == LocalDay(previousDate, calendar: .hourleaf) else {
+                    return
+                }
+                date = currentDate
+            }
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("common.done") {
+                        noteFocused = false
+                    }
+                    .accessibilityIdentifier("dismissEntryKeyboardButton")
+                }
+            }
         }
     }
 
-    private var reportNeedsAttention: Bool {
-        let hasTime = previousReport.rawServiceMinutes + previousReport.rawCreditMinutes
-            + previousReport.serviceCarryIn + previousReport.creditCarryIn > 0
-        return hasTime && !model.hasConfirmedReceipt(in: previousMonth)
-    }
+    private func reportBanner(_ state: PreviousReportBannerState) -> some View {
+        let monthLabel = AppDateText.month(previousMonth)
+        let title = String(
+            format: String(localized: state.formatKey),
+            monthLabel
+        )
 
-    private var reportBanner: some View {
-        Button {
-            model.selectedTab = .progress
+        return Button {
+            model.openReport(previousMonth)
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: "doc.text.fill").foregroundStyle(.green)
+                Image(systemName: state.symbolName)
+                    .foregroundStyle(.green)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("quick.report_ready").font(.headline)
-                    Text(AppDateText.month(previousMonth)).font(.subheadline).foregroundStyle(.secondary)
+                    Text(verbatim: title)
+                        .font(.headline)
+                    Text(state.statusKey)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Image(systemName: "chevron.right").foregroundStyle(.tertiary)
             }
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .padding()
             .background(.green.opacity(0.09), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Text(verbatim: title))
+        .accessibilityValue(Text(state.statusKey))
         .accessibilityIdentifier("previousReportBanner")
     }
 
@@ -170,11 +214,16 @@ struct QuickEntryView: View {
 
     @ViewBuilder
     private var dateInput: some View {
-        let range = model.settings.ledgerStartMonth.date(calendar: .hourleaf)...Date()
+        let lowerBound = model.settings.ledgerStartMonth.date(calendar: .hourleaf)
+        let range = lowerBound...max(lowerBound, model.currentDate)
+        let selection = Binding(
+            get: { min(max(date, range.lowerBound), range.upperBound) },
+            set: { date = $0 }
+        )
         if dynamicTypeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 8) {
                 Text("entry.date").font(.headline)
-                DatePicker("entry.date", selection: $date, in: range, displayedComponents: .date)
+                DatePicker("entry.date", selection: selection, in: range, displayedComponents: .date)
                     .labelsHidden()
                     .datePickerStyle(.compact)
             }
@@ -182,7 +231,7 @@ struct QuickEntryView: View {
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("entryDatePicker")
         } else {
-            DatePicker("entry.date", selection: $date, in: range, displayedComponents: .date)
+            DatePicker("entry.date", selection: selection, in: range, displayedComponents: .date)
                 .datePickerStyle(.compact)
                 .accessibilityIdentifier("entryDatePicker")
         }
@@ -230,10 +279,56 @@ struct QuickEntryView: View {
 
     private func resetDraft() {
         kind = .service
-        date = Date()
+        date = model.currentDate
         hours = 0
         minutes = 0
         note = ""
         noteFocused = false
+    }
+}
+
+private enum PreviousReportBannerState {
+    case ready
+    case changed
+    case reviewed
+    case prepared
+
+    var formatKey: String.LocalizationValue {
+        switch self {
+        case .ready:
+            "report.banner.ready_format"
+        case .changed:
+            "report.banner.changed_format"
+        case .reviewed:
+            "report.banner.reviewed_format"
+        case .prepared:
+            "report.banner.prepared_format"
+        }
+    }
+
+    var statusKey: LocalizedStringKey {
+        switch self {
+        case .ready:
+            "report.state.ready"
+        case .changed:
+            "report.state.changed"
+        case .reviewed:
+            "report.state.reviewed"
+        case .prepared:
+            "report.state.prepared"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .ready:
+            "doc.text.magnifyingglass"
+        case .changed:
+            "arrow.trianglehead.2.clockwise.rotate.90"
+        case .reviewed:
+            "checkmark.circle"
+        case .prepared:
+            "square.and.arrow.up"
+        }
     }
 }

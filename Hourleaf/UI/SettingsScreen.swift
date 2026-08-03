@@ -11,7 +11,7 @@ struct SettingsScreen: View {
     @FocusState private var creditLabelIsFocused: Bool
 
     private var currentPolicy: ReportingPolicy {
-        ReportCalculator.policy(for: MonthKey(Date(), calendar: .hourleaf), revisions: model.policies)
+        ReportCalculator.policy(for: model.currentMonth, revisions: model.policies)
     }
 
     var body: some View {
@@ -278,8 +278,13 @@ private struct StartingBalancesView: View {
         var settings = model.settings
         settings.ledgerStartMonth = MonthKey(ledgerStartDate, calendar: .hourleaf)
         settings.baselineServiceYearMinutes = serviceHours * 60 + serviceMinutes
+        let selectedLedgerStartMonth = settings.ledgerStartMonth
         settings.baselineServiceYearStart = ServiceYearCalculator.serviceYearStart(
-            containing: LocalDay(Date(), calendar: .hourleaf)
+            containing: LocalDay(
+                year: selectedLedgerStartMonth.year,
+                month: selectedLedgerStartMonth.month,
+                day: 1
+            )
         ).monthKey
         settings.openingServiceCarryMinutes = serviceCarry
         settings.openingCreditCarryMinutes = creditCarry
@@ -287,6 +292,6 @@ private struct StartingBalancesView: View {
     }
 
     private var maximumLedgerStartDate: Date {
-        model.entries.map { $0.day.date(calendar: .hourleaf) }.min() ?? Date()
+        model.entries.map { $0.day.date(calendar: .hourleaf) }.min() ?? model.currentDate
     }
 }

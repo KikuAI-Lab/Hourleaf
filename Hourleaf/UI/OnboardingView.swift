@@ -46,10 +46,10 @@ struct OnboardingView: View {
 
     private func finish() {
         var settings = model.settings
-        settings.ledgerStartMonth = MonthKey(Date(), calendar: .hourleaf)
+        settings.ledgerStartMonth = MonthKey(model.currentDate, calendar: .hourleaf)
         settings.baselineServiceYearMinutes = baselineHours * 60 + baselineMinutes
         settings.baselineServiceYearStart = ServiceYearCalculator.serviceYearStart(
-            containing: LocalDay(Date(), calendar: .hourleaf)
+            containing: LocalDay(model.currentDate, calendar: .hourleaf)
         ).monthKey
         settings.openingServiceCarryMinutes = serviceCarry
         settings.openingCreditCarryMinutes = creditCarry

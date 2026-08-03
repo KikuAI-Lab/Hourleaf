@@ -55,9 +55,9 @@ MVP is accepted.
 - Apple Developer signing, App ID and iCloud container registration, CloudKit
   production-schema promotion, App Store Connect creation, and 2FA require the
   repository owner's Apple account.
-- Opening a share sheet is not proof of delivery. A report is recorded as sent
-  only after an explicit user confirmation. Closing the share sheet always
-  opens that confirmation, including when sharing was cancelled.
+- Opening or closing a share sheet is not proof of delivery. The report stays
+  prepared, no automatic confirmation appears, and it is recorded as sent only
+  after the user taps the persistent Mark as sent action.
 - Report navigation stops at the configured ledger start, so Hourleaf never
   presents or snapshots invented months before the user's opening balances.
 - A zero-duration history edit is treated as an intent to remove an accidental
@@ -136,3 +136,27 @@ MVP is accepted.
   gates. Restore must validate a disposable store, create a verified
   pre-restore backup, replace the whole local store, and prove an exact digest
   after relaunch before any real iPhone ledger can be touched.
+
+## Verification snapshot — 2026-08-03 (Report Readiness v1)
+
+- The final tree passed 243 unit/integration tests and 30 UI tests on the iPhone
+  17 simulator with iOS 26.5. Coverage includes zero-entry completed months,
+  atomic review/prepare/send transitions, immutable corrections, service-only
+  year archives, separate credit and carry calculations, deterministic Undo,
+  current-month draft previews, EN/RU/UK copy, and Accessibility XXXL.
+- Unsigned generic-device Release build and Xcode Analyze passed. The three
+  Localizable.strings catalogs contain the same 266 keys, the shortcut catalog
+  remains valid in English, Russian, and Ukrainian, and exactly three system
+  shortcuts are promoted.
+- Core Data model V1 remains
+  `dbfcef97f98cc80657a8eb9c453ecf925371d1a8bccb18177c1cb33dbfe72606`;
+  V2 remains
+  `69d8472b17c6322444621824dbece6e77882ed15e472dba0f5a04ac89b335c45`.
+  No protected model, entitlement, privacy manifest, or dependency changed.
+- One bounded adversarial pass found one P2: a legacy current-month snapshot
+  could override its live draft preview. The preview selector now always uses
+  the live draft in the collecting month; a focused regression and the full
+  test matrices pass afterward. No P0 or P1 finding remained.
+- This slice was not installed on or read from the physical iPhone. Signed
+  device work remains gated on a verified portable backup, disposable restore
+  canary, and explicit owner permission.

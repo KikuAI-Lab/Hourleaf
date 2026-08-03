@@ -101,7 +101,7 @@ final class PersistenceAndAppModelTests: XCTestCase {
                 text: receipt.text
             )
         )
-        try await repository.saveReceipt(receipt, details: details)
+        try await repository.testOnlySaveReceiptFixture(receipt, details: details)
         let savedReceipts = try await repository.fetchReceipts()
         XCTAssertEqual(savedReceipts.first?.id, receipt.id)
         let storedSnapshot = try await repository.ledgerSnapshot()
@@ -132,132 +132,243 @@ final class PersistenceAndAppModelTests: XCTestCase {
         XCTAssertNotNil(deletedEntry.deletedAt)
     }
 
-    func testPastEditMarksConfirmedReceiptStale() async throws {
-        let repository = makeRepository()
-        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler())
+    func testPastEditMarksConfirmedReceiptChanged() async throws {
+        let now = fixedDate(year: 2026, month: 8, day: 3)
+        let month = MonthKey(year: 2026, month: 7)
+        let entryDate = fixedDate(year: 2026, month: 7, day: 12)
+        let repository = makeRepository(clock: { now })
+        try await configureLedgerStart(repository, month: month)
+        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler(), now: { now })
         await model.loadInitialSnapshot()
         XCTAssertEqual(model.startupState, .ready)
-        let month = MonthKey(Date(), calendar: .hourleaf)
-        let date = Date()
-        let added = await model.addEntry(kind: .service, date: date, hours: 1, minutes: 15, note: nil)
+
+        let added = await model.addEntry(kind: .service, date: entryDate, hours: 1, minutes: 15, note: nil)
         XCTAssertTrue(added)
+        let draft = model.reportDraft(for: month)
+        let reviewed = await model.reviewReport(draft)
+        XCTAssertTrue(reviewed)
+        let preparedSnapshot = await model.prepareReport(draft)
+        let prepared = try XCTUnwrap(preparedSnapshot)
+        let markedSent = await model.markReportSent(prepared)
+        XCTAssertTrue(markedSent)
 
-        let report = model.report(for: month)
-        let text = ReportFormatter.format(report, settings: model.settings)
-        let createdReceipt = await model.createReceipt(for: report, text: text)
-        let receipt = try XCTUnwrap(createdReceipt)
-        await model.markReceiptSent(receipt)
         let entry = try XCTUnwrap(model.entryRecords.first)
-
-        let updated = await model.updateEntry(entry, kind: .service, date: date, hours: 2, minutes: 0, note: nil)
+        let updated = await model.updateEntry(entry, kind: .service, date: entryDate, hours: 2, minutes: 0, note: nil)
         XCTAssertTrue(updated)
-        let storedReceipt = try XCTUnwrap(model.receipts.first)
-        XCTAssertTrue(model.isStale(storedReceipt))
+        XCTAssertEqual(model.lifecycleState(for: month), .changed)
         XCTAssertTrue(model.changeAffectsConfirmedReport(from: month))
     }
 
     func testFingerprintsExposeDiscardedMinuteChangesAndPresentationChanges() async throws {
-        let repository = makeRepository()
-        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler())
+        let now = fixedDate(year: 2026, month: 8, day: 3)
+        let month = MonthKey(year: 2026, month: 7)
+        let entryDate = fixedDate(year: 2026, month: 7, day: 12)
+        let repository = makeRepository(clock: { now })
+        try await configureLedgerStart(repository, month: month)
+        try await repository.savePolicy(ReportingPolicy(effectiveMonth: month, mode: .discard))
+        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler(), now: { now })
         await model.loadInitialSnapshot()
-        let month = MonthKey(Date(), calendar: .hourleaf)
-        await model.updateReportingPolicy(mode: .discard)
 
-        let added = await model.addEntry(kind: .service, date: Date(), hours: 1, minutes: 5, note: nil)
+        let added = await model.addEntry(kind: .service, date: entryDate, hours: 1, minutes: 5, note: nil)
         XCTAssertTrue(added)
-        let originalReport = model.report(for: month)
-        let originalText = ReportFormatter.format(originalReport, settings: model.settings)
-        let createdReceipt = await model.createReceipt(for: originalReport, text: originalText)
-        let receipt = try XCTUnwrap(createdReceipt)
-        XCTAssertEqual(model.reportSnapshots.first(where: { $0.id == receipt.id })?.calculationFingerprint?.isEmpty, false)
+        let originalDraft = model.reportDraft(for: month)
+        let reviewed = await model.reviewReport(originalDraft)
+        XCTAssertTrue(reviewed)
+        let preparedSnapshot = await model.prepareReport(originalDraft)
+        let prepared = try XCTUnwrap(preparedSnapshot)
+        XCTAssertEqual(model.reportSnapshots.first(where: { $0.id == prepared.id })?.calculationFingerprint?.isEmpty, false)
 
         let record = try XCTUnwrap(model.entryRecords.first)
         let updated = await model.updateEntry(
             record,
             kind: .service,
-            date: Date(),
+            date: entryDate,
             hours: 1,
             minutes: 15,
             note: nil
         )
         XCTAssertTrue(updated)
-        let changedReport = model.report(for: month)
-        XCTAssertEqual(changedReport.serviceHours, originalReport.serviceHours)
-        XCTAssertEqual(changedReport.serviceCarryOut, originalReport.serviceCarryOut)
-        XCTAssertEqual(ReportFormatter.format(changedReport, settings: model.settings), receipt.text)
-        XCTAssertTrue(model.isStale(receipt))
+        let changedDraft = model.reportDraft(for: month)
+        XCTAssertEqual(changedDraft.report.serviceHours, originalDraft.report.serviceHours)
+        XCTAssertEqual(changedDraft.report.serviceCarryOut, originalDraft.report.serviceCarryOut)
+        XCTAssertEqual(changedDraft.text, prepared.receipt.text)
+        XCTAssertEqual(model.lifecycleState(for: month), .changed)
 
         await model.undoLatestMutation()
-        XCTAssertFalse(model.isStale(receipt))
+        let restoredDraft = model.reportDraft(for: month)
+        XCTAssertEqual(restoredDraft.text, prepared.receipt.text)
+        XCTAssertEqual(restoredDraft.report.serviceHours, originalDraft.report.serviceHours)
 
         await model.updateReportLanguage(.ukrainian)
-        XCTAssertTrue(model.isStale(receipt))
+        XCTAssertEqual(model.lifecycleState(for: month), .changed)
     }
 
     func testFingerprintsTrackDeleteRestoreAndUndo() async throws {
-        let repository = makeRepository()
-        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler())
+        let now = fixedDate(year: 2026, month: 8, day: 3)
+        let month = MonthKey(year: 2026, month: 7)
+        let entryDate = fixedDate(year: 2026, month: 7, day: 12)
+        let repository = makeRepository(clock: { now })
+        try await configureLedgerStart(repository, month: month)
+        try await repository.savePolicy(ReportingPolicy(effectiveMonth: month, mode: .discard))
+        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler(), now: { now })
         await model.loadInitialSnapshot()
-        let month = MonthKey(Date(), calendar: .hourleaf)
-        await model.updateReportingPolicy(mode: .discard)
-        let added = await model.addEntry(kind: .service, date: Date(), hours: 1, minutes: 5, note: nil)
+        let added = await model.addEntry(kind: .service, date: entryDate, hours: 1, minutes: 5, note: nil)
         XCTAssertTrue(added)
 
-        let report = model.report(for: month)
-        let createdReceipt = await model.createReceipt(
-            for: report,
-            text: ReportFormatter.format(report, settings: model.settings)
-        )
-        let receipt = try XCTUnwrap(createdReceipt)
+        let draft = model.reportDraft(for: month)
+        let reviewed = await model.reviewReport(draft)
+        XCTAssertTrue(reviewed)
+        let preparedSnapshot = await model.prepareReport(draft)
+        _ = try XCTUnwrap(preparedSnapshot)
         let record = try XCTUnwrap(model.entryRecords.first)
         let deletedSuccessfully = await model.deleteEntry(record)
         XCTAssertTrue(deletedSuccessfully)
-        XCTAssertTrue(model.isStale(receipt))
+        XCTAssertEqual(model.lifecycleState(for: month), .changed)
 
         let deleted = try XCTUnwrap(model.deletedEntryRecords.first)
         let restoredSuccessfully = await model.restoreEntry(deleted)
         XCTAssertTrue(restoredSuccessfully)
-        XCTAssertFalse(model.isStale(receipt))
+        XCTAssertEqual(model.lifecycleState(for: month), .prepared)
 
         await model.undoLatestMutation()
-        XCTAssertTrue(model.isStale(receipt))
+        XCTAssertTrue(model.entryRecords.isEmpty)
+        XCTAssertEqual(model.deletedEntryRecords.count, 1)
+        XCTAssertNil(model.errorMessage)
+        XCTAssertEqual(model.lifecycleState(for: month), .changed)
     }
 
-    func testReportPreparationRejectsMixedStaleInputs() async throws {
-        let repository = makeRepository()
-        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler())
+    func testLatestUndoCandidateFindsCurrentHeadWhenTimestampsTie() async throws {
+        let now = fixedDate(year: 2026, month: 8, day: 3)
+        let month = MonthKey(year: 2026, month: 7)
+        let repository = makeRepository(clock: { now })
+        try await configureLedgerStart(repository, month: month)
+
+        let entryID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let createID = UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")!
+        let deleteID = UUID(uuidString: "EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE")!
+        let restoreID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+        let created = try await repository.apply(
+            EntryMutationCommand(
+                mutationID: createID,
+                entryID: entryID,
+                expectedRevision: nil,
+                operation: .create,
+                values: EntryMutationValues(
+                    kind: .service,
+                    day: LocalDay(year: 2026, month: 7, day: 12),
+                    minutes: 65,
+                    note: nil
+                ),
+                occurredAt: now,
+                source: .appQuickEntry
+            )
+        )
+        let deleted = try await repository.apply(
+            EntryMutationCommand(
+                mutationID: deleteID,
+                entryID: entryID,
+                expectedRevision: created.appliedRevision,
+                operation: .delete,
+                occurredAt: now,
+                source: .appHistory
+            )
+        )
+        let restored = try await repository.apply(
+            EntryMutationCommand(
+                mutationID: restoreID,
+                entryID: entryID,
+                expectedRevision: deleted.appliedRevision,
+                operation: .restore,
+                occurredAt: now,
+                source: .restore
+            )
+        )
+
+        let candidateValue = try await repository.latestUndoCandidate(asOf: now)
+        let candidate = try XCTUnwrap(candidateValue)
+        XCTAssertEqual(candidate.mutationID, restoreID)
+        XCTAssertEqual(candidate.expectedRevision, restored.appliedRevision)
+
+        _ = try await repository.apply(
+            EntryMutationCommand(
+                entryID: entryID,
+                expectedRevision: candidate.expectedRevision,
+                operation: .undo,
+                revertedMutationID: candidate.mutationID,
+                occurredAt: now,
+                source: .undo
+            )
+        )
+        let snapshot = try await repository.ledgerSnapshot()
+        XCTAssertTrue(snapshot.activeEntries.isEmpty)
+        XCTAssertEqual(snapshot.entries.filter(\.isDeleted).map(\.id), [entryID])
+    }
+
+    func testMovingLedgerStartPastSelectedReportMonthClampsSelection() async throws {
+        let now = fixedDate(year: 2026, month: 10, day: 2)
+        let september = MonthKey(year: 2026, month: 9)
+        let october = MonthKey(year: 2026, month: 10)
+        let repository = makeRepository(clock: { now })
+        try await configureLedgerStart(repository, month: september)
+        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler(), now: { now })
         await model.loadInitialSnapshot()
-        let month = MonthKey(Date(), calendar: .hourleaf)
-        let date = Date()
-        let firstAdded = await model.addEntry(kind: .service, date: date, hours: 1, minutes: 15, note: nil)
+        XCTAssertEqual(model.selectedReportMonth, september)
+
+        var settings = model.settings
+        settings.ledgerStartMonth = october
+        await model.saveSettings(settings)
+
+        XCTAssertEqual(model.selectedReportMonth, october)
+        XCTAssertEqual(model.lifecycleState(for: october), .draft)
+        XCTAssertEqual(model.reportDraft(for: october).month, october)
+    }
+
+    func testReportReviewRejectsStaleCapturedDraft() async throws {
+        let now = fixedDate(year: 2026, month: 8, day: 3)
+        let month = MonthKey(year: 2026, month: 7)
+        let entryDate = fixedDate(year: 2026, month: 7, day: 12)
+        let repository = makeRepository(clock: { now })
+        try await configureLedgerStart(repository, month: month)
+        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler(), now: { now })
+        await model.loadInitialSnapshot()
+        let firstAdded = await model.addEntry(kind: .service, date: entryDate, hours: 1, minutes: 15, note: nil)
         XCTAssertTrue(firstAdded)
-        let capturedReport = model.report(for: month)
-        let capturedText = ReportFormatter.format(capturedReport, settings: model.settings)
+        let capturedDraft = model.reportDraft(for: month)
 
-        let secondAdded = await model.addEntry(kind: .service, date: date, hours: 0, minutes: 15, note: nil)
+        let secondAdded = await model.addEntry(kind: .service, date: entryDate, hours: 0, minutes: 15, note: nil)
         XCTAssertTrue(secondAdded)
-        let receipt = await model.createReceipt(for: capturedReport, text: capturedText)
-
-        XCTAssertNil(receipt)
+        let reviewed = await model.reviewReport(capturedDraft)
+        XCTAssertFalse(reviewed)
         XCTAssertEqual(model.errorMessage, String(localized: "error.report_changed"))
         let receipts = try await repository.fetchReceipts()
         XCTAssertTrue(receipts.isEmpty)
+        XCTAssertEqual(model.lifecycleState(for: month), .ready)
     }
 
     func testConcurrentReportPreparationCreatesOnlyOneSnapshot() async throws {
-        let repository = makeRepository()
-        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler())
+        let now = fixedDate(year: 2026, month: 8, day: 3)
+        let month = MonthKey(year: 2026, month: 7)
+        let repository = makeRepository(clock: { now })
+        try await configureLedgerStart(repository, month: month)
+        let model = AppModel(repository: repository, reminderScheduler: TestReminderScheduler(), now: { now })
         await model.loadInitialSnapshot()
-        let month = MonthKey(Date(), calendar: .hourleaf)
-        let report = model.report(for: month)
-        let text = ReportFormatter.format(report, settings: model.settings)
+        let added = await model.addEntry(
+            kind: .service,
+            date: fixedDate(year: 2026, month: 7, day: 12),
+            hours: 1,
+            minutes: 0,
+            note: nil
+        )
+        XCTAssertTrue(added)
+        let draft = model.reportDraft(for: month)
+        let reviewed = await model.reviewReport(draft)
+        XCTAssertTrue(reviewed)
 
-        async let first = model.createReceipt(for: report, text: text)
-        async let second = model.createReceipt(for: report, text: text)
+        async let first = model.prepareReport(draft)
+        async let second = model.prepareReport(draft)
         let (firstResult, secondResult) = await (first, second)
-        let results = [firstResult, secondResult]
 
-        XCTAssertEqual(results.compactMap { $0 }.count, 1)
+        XCTAssertEqual([firstResult, secondResult].compactMap { $0 }.count, 1)
         let receipts = try await repository.fetchReceipts()
         XCTAssertEqual(receipts.count, 1)
     }
@@ -997,9 +1108,9 @@ final class PersistenceAndAppModelTests: XCTestCase {
             confirmedSentAt: nil
         )
 
-        try await repository.saveReceipt(older, details: reportDetails(for: older, rawServiceMinutes: 75))
-        try await repository.saveReceipt(newer, details: reportDetails(for: newer, rawServiceMinutes: 125))
-        try await repository.saveReceipt(older, details: nil)
+        try await repository.testOnlySaveReceiptFixture(older, details: reportDetails(for: older, rawServiceMinutes: 75))
+        try await repository.testOnlySaveReceiptFixture(newer, details: reportDetails(for: newer, rawServiceMinutes: 125))
+        try await repository.testOnlySaveReceiptFixture(older, details: nil)
 
         let snapshot = try await repository.ledgerSnapshot()
         let state = try XCTUnwrap(snapshot.reportStates.first { $0.month == month })
@@ -1043,7 +1154,7 @@ final class PersistenceAndAppModelTests: XCTestCase {
         )
 
         do {
-            try await repository.saveReceipt(receipt, details: details)
+            try await repository.testOnlySaveReceiptFixture(receipt, details: details)
             XCTFail("Contradictory report totals must not be stored.")
         } catch let error as LedgerRepositoryError {
             guard case .invalidManagedObject = error else {
@@ -1067,7 +1178,7 @@ final class PersistenceAndAppModelTests: XCTestCase {
             preparedAt: .now,
             confirmedSentAt: nil
         )
-        try await repository.saveReceipt(receipt, details: reportDetails(for: receipt, rawServiceMinutes: 75))
+        try await repository.testOnlySaveReceiptFixture(receipt, details: reportDetails(for: receipt, rawServiceMinutes: 75))
         let changed = ReportReceipt(
             id: receipt.id,
             month: receipt.month,
@@ -1081,7 +1192,7 @@ final class PersistenceAndAppModelTests: XCTestCase {
         )
 
         do {
-            try await repository.saveReceipt(changed, details: nil)
+            try await repository.testOnlySaveReceiptFixture(changed, details: nil)
             XCTFail("A prepared snapshot must be immutable apart from sent confirmation.")
         } catch let error as LedgerRepositoryError {
             guard case .invalidManagedObject = error else {
@@ -1792,6 +1903,23 @@ final class PersistenceAndAppModelTests: XCTestCase {
         try await repository.saveSettings(settings)
     }
 
+    private func configureLedgerStart(
+        _ repository: CoreDataLedgerRepository,
+        month: MonthKey
+    ) async throws {
+        var settings = try await repository.loadSettings()
+        settings.ledgerStartMonth = month
+        try await repository.saveSettings(settings)
+    }
+
+    private func fixedDate(year: Int, month: Int, day: Int, hour: Int = 12) -> Date {
+        var calendar = Calendar.hourleaf
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar.date(
+            from: DateComponents(year: year, month: month, day: day, hour: hour)
+        )!
+    }
+
     private func oneTapDay(_ date: Date, offsetBy days: Int = 0) -> LocalDay {
         let shifted = Calendar.hourleaf.date(byAdding: .day, value: days, to: date) ?? date
         return LocalDay(shifted, calendar: .hourleaf)
@@ -2173,10 +2301,6 @@ private actor GatedLedgerRepository: LedgerRepository {
 
     func fetchReceipts() async throws -> [ReportReceipt] {
         try await base.fetchReceipts()
-    }
-
-    func saveReceipt(_ receipt: ReportReceipt, details: ReportSnapshotDetails?) async throws {
-        try await base.saveReceipt(receipt, details: details)
     }
 
     func reconcileReportLifecycle(asOf now: Date) async throws -> LedgerSnapshot {
