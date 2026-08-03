@@ -6,7 +6,7 @@ credit time, following service-year progress, and preparing monthly reports.
 - App Store name: **Hourleaf: Ministry Hours**
 - Platform: iOS 17+
 - Languages: English, Russian, Ukrainian
-- Storage: Core Data with private iCloud/CloudKit mirroring
+- Storage: local Core Data on this iPhone
 - Privacy: no accounts, ads, tracking, or third-party analytics
 
 ## Development
@@ -20,16 +20,16 @@ xcodebuild -project Hourleaf.xcodeproj \
   test
 ```
 
-CloudKit is intentionally disabled in simulator and UI-test stores. A signed
-device build uses the private `iCloud.com.kikuai.hourleaf` container.
+Every current build is local-only. Hourleaf does not sync records or require an
+account; portable backups leave the app only when the user chooses to share
+them. Private iCloud sync is a separate future opt-in feature.
 
 ## Personal Team device testing
 
 An Apple Developer Program membership is not required for local testing on a
 connected iPhone. The installer builds a temporary project copy with a separate
-local bundle identifier, no CloudKit entitlements, and the
-`HOURLEAF_LOCAL_DEVICE` compilation condition. The production target is not
-modified:
+local bundle identifier and the `HOURLEAF_LOCAL_DEVICE` compilation condition.
+The production target is not modified:
 
 ```sh
 ./scripts/install-local-device.sh <PERSONAL_TEAM_ID> <DEVICE_ID>
@@ -44,8 +44,8 @@ on the device so its disposable data cannot be mistaken for the real app:
 ./scripts/install-local-device.sh <PERSONAL_TEAM_ID> <DEVICE_ID> --slice3-smoke
 ```
 
-This variant keeps all data locally on the iPhone. CloudKit mirroring and
-TestFlight still require an active Apple Developer Program membership. Personal
-Team provisioning is temporary, so the app must be rebuilt periodically. Its
-data lives in a separate app sandbox and will not automatically move into the
-future App Store build.
+All variants keep data locally on the iPhone. TestFlight still requires an
+active Apple Developer Program membership. Personal Team provisioning is
+temporary, so the app must be rebuilt periodically. Its data lives in a
+separate app sandbox and will not automatically move into the future App Store
+build.

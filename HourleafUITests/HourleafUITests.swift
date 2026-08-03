@@ -333,7 +333,7 @@ final class HourleafUITests: XCTestCase {
         app.navigationBars.buttons.element(boundBy: 0).tap()
         settings.swipeUp()
         settings.swipeUp()
-        XCTAssertTrue(app.staticTexts["storageStatus"].exists)
+        XCTAssertFalse(app.staticTexts["storageStatus"].exists)
         XCTAssertTrue(app.buttons["developerWebsiteLink"].exists)
         XCTAssertTrue(app.buttons["developerTelegramLink"].exists)
         XCTAssertTrue(app.buttons["developerGitHubLink"].exists)

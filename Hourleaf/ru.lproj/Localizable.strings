@@ -106,13 +106,9 @@
 "settings.data" = "Данные";
 "settings.opening_balances" = "Ранее учтённое время";
 "settings.opening_balances_help" = "Нужно только тем, кто начал вести учёт в Hourleaf посреди служебного года.";
-"settings.storage" = "Записи";
-"settings.storage_value" = "На этом iPhone";
-"settings.sync_planned" = "Синхронизация через личный iCloud — в планах.";
 "settings.privacy" = "Приватность";
 "settings.no_tracking" = "Без рекламы и слежения";
-"settings.privacy_detail" = "Ваши записи остаются на ваших устройствах и в личном iCloud. Hourleaf не следит за тем, как вы пользуетесь приложением, и не передаёт записи рекламным компаниям.";
-"settings.privacy_local_detail" = "Ваши записи остаются только на этом iPhone. Hourleaf не следит за тем, как вы пользуетесь приложением, и не передаёт записи рекламным компаниям.";
+"settings.privacy_detail" = "Ваши записи остаются на этом iPhone. Hourleaf не следит за тем, как вы пользуетесь приложением, и не передаёт записи рекламным компаниям.";
 "settings.about" = "О приложении";
 "settings.version" = "Версия";
 "settings.developer" = "Разработчик";

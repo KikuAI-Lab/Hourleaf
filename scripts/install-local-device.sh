@@ -65,29 +65,25 @@ while IFS= read -r model_file; do
     model_files+=("$model_file")
 done < <(find "$temporary_source" -type f -path '*.xcdatamodel/contents' -print | sort)
 
-if [[ "$(grep -Fc 'com.apple.iCloud = {enabled = 1; };' "$project_file")" != 1 ]]; then
-    print -u2 "Expected exactly one enabled iCloud target capability."
+if grep -Eq 'com\.apple\.(iCloud|Push) = \{enabled = 1; \};' "$project_file"; then
+    print -u2 "The base Hourleaf target must remain local-only."
     exit 65
 fi
-if (( ${#model_files[@]} == 0 )) || [[ ! -f "$entitlements_file" ]]; then
-    print -u2 "Expected production CloudKit model files and entitlements file."
+if (( ${#model_files[@]} == 0 )); then
+    print -u2 "Expected Hourleaf Core Data model files."
+    exit 65
+fi
+if [[ -e "$entitlements_file" ]] || grep -Fq 'CODE_SIGN_ENTITLEMENTS = Hourleaf/Hourleaf.entitlements;' "$project_file"; then
+    print -u2 "The base Hourleaf target must not ship iCloud entitlements."
     exit 65
 fi
 
 for model_file in "${model_files[@]}"; do
-    if [[ "$(grep -Fc 'usedWithCloudKit="YES"' "$model_file")" != 1 ]]; then
-        print -u2 "Expected exactly one CloudKit-enabled store in $model_file."
+    if [[ "$(grep -Fc 'usedWithCloudKit="NO"' "$model_file")" != 1 ]] || grep -Fq 'usedWithCloudKit="YES"' "$model_file"; then
+        print -u2 "Expected a local-only Core Data model in $model_file."
         exit 65
     fi
 done
-
-perl -ni -e \
-    'print unless /com\.apple\.(?:iCloud|Push) = \{enabled = 1; \};/' \
-    "$project_file"
-for model_file in "${model_files[@]}"; do
-    perl -0pi -e 's/usedWithCloudKit="YES"/usedWithCloudKit="NO"/' "$model_file"
-done
-rm -- "$entitlements_file"
 
 xcodebuild \
     -project "$temporary_source/Hourleaf.xcodeproj" \

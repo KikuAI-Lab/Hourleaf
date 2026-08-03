@@ -23,23 +23,16 @@ final class PersistenceController: @unchecked Sendable {
 
     init(
         inMemory: Bool = false,
-        cloudSyncEnabled: Bool? = nil,
+        cloudSyncEnabled: Bool = false,
         storeURL: URL? = nil
     ) {
         container = NSPersistentCloudKitContainer(name: "HourleafModel")
         var result: PersistenceStartupError?
 
         if let description = container.persistentStoreDescriptions.first {
-            let shouldUseCloud: Bool
-            if let cloudSyncEnabled {
-                shouldUseCloud = cloudSyncEnabled && !inMemory
-            } else {
-                #if HOURLEAF_LOCAL_DEVICE || targetEnvironment(simulator)
-                shouldUseCloud = false
-                #else
-                shouldUseCloud = !inMemory
-                #endif
-            }
+            // Local storage is the truthful default for every build. A future
+            // iCloud slice must pass an explicit opt-in after migration gates.
+            let shouldUseCloud = cloudSyncEnabled && !inMemory
 
             if inMemory {
                 description.type = NSInMemoryStoreType

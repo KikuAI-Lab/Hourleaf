@@ -106,13 +106,9 @@
 "settings.data" = "Data";
 "settings.opening_balances" = "Time already recorded";
 "settings.opening_balances_help" = "Use this only if you started Hourleaf partway through the service year.";
-"settings.storage" = "Records";
-"settings.storage_value" = "On this iPhone";
-"settings.sync_planned" = "Sync through your private iCloud is planned.";
 "settings.privacy" = "Privacy";
 "settings.no_tracking" = "No ads or activity tracking";
-"settings.privacy_detail" = "Your records stay on your devices and in your private iCloud. Hourleaf does not watch how you use the app or share your records with advertising companies.";
-"settings.privacy_local_detail" = "Your records stay only on this iPhone. Hourleaf does not watch how you use the app or share your records with advertising companies.";
+"settings.privacy_detail" = "Your records stay on this iPhone. Hourleaf does not watch how you use the app or share your records with advertising companies.";
 "settings.about" = "About";
 "settings.version" = "Version";
 "settings.developer" = "Developer";

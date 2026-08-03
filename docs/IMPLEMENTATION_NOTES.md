@@ -6,31 +6,29 @@ MVP is accepted.
 
 ## Decisions
 
-- Native SwiftUI, Core Data, CloudKit, and UserNotifications are used without
-  third-party dependencies.
+- Native SwiftUI, Core Data, and UserNotifications are used without third-party
+  dependencies.
 - Reporting totals and service-year progress are separate calculations. A
   carried minute can affect a report but never changes the date on which the
   underlying service occurred.
 - Service and credit time use the same reporting policy but maintain separate
   carry balances. Credit time never contributes to the 600-hour goal.
-- CloudKit is an adapter behind the repository boundary, not the domain model.
-  Android or self-hosted sync will require a future backend and migration, but
-  not a rewrite of reporting rules.
+- Every current build is local-only. A future private-iCloud adapter remains
+  behind the repository boundary and requires explicit opt-in plus migration
+  gates; it is not part of the current runtime.
 - Opening balances let a person adopt Hourleaf mid-year without manufacturing
   historical daily entries. The 600-hour goal never caps the saved opening
   progress; opening hours use direct non-negative numeric input.
 - Reporting remainders never cross the service-year boundary from August into
   September. The legacy Core Data flag remains only for store compatibility and
   is ignored by domain calculations.
-- Personal Team testing uses a separate `com.kikuai.hourleaf.local` bundle ID
-  and a compile-time local-only store. The installer edits target capabilities
-  only in a temporary project copy; it does not claim or alter the future App
-  Store bundle ID and does not pretend to verify CloudKit sync. Records created
-  under this local bundle ID will not migrate automatically to the future App
-  Store sandbox.
+- Personal Team testing uses a separate `com.kikuai.hourleaf.local` bundle ID.
+  The installer does not claim or alter the future App Store bundle ID. Records
+  created under this local bundle ID will not migrate automatically to the
+  future App Store sandbox.
 - Settings use plain-language examples for reporting rules, clearly identify
-  editable report wording, and present storage as status rather than a choice.
-  Developer links replace internal App Store metadata.
+  editable report wording, and explain the local-only privacy boundary without
+  exposing a storage choice. Developer links replace internal App Store metadata.
 - App, Shortcuts, and future quick surfaces share one validated mutation
   contract. Stable mutation IDs make exact retries idempotent, while captured
   revisions prevent an older screen from overwriting a newer edit.
