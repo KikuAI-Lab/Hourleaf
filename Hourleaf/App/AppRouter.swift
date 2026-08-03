@@ -11,6 +11,7 @@ enum AppRoute: Equatable, Sendable {
 @MainActor
 final class AppRouter: ObservableObject {
     @Published private(set) var pendingRoute: AppRoute?
+    @Published private(set) var pendingReminderEvent: ReminderNotificationEvent?
     @Published private(set) var ledgerChangeGeneration: UInt64 = 0
 
     func route(to route: AppRoute) {
@@ -20,6 +21,15 @@ final class AppRouter: ObservableObject {
     func consumePendingRoute() -> AppRoute? {
         defer { pendingRoute = nil }
         return pendingRoute
+    }
+
+    func publish(reminderEvent: ReminderNotificationEvent) {
+        pendingReminderEvent = reminderEvent
+    }
+
+    func consumePendingReminderEvent() -> ReminderNotificationEvent? {
+        defer { pendingReminderEvent = nil }
+        return pendingReminderEvent
     }
 
     /// Retains a verified external/system ledger write until an active root can
