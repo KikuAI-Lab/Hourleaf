@@ -11,14 +11,10 @@ struct OnboardingView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    Image(systemName: "leaf.circle.fill")
-                        .font(.system(size: 76))
-                        .foregroundStyle(.green.gradient)
-                        .accessibilityHidden(true)
-                    VStack(spacing: 8) {
-                        Text("onboarding.title").font(.largeTitle.bold())
-                        Text("onboarding.subtitle").multilineTextAlignment(.center).foregroundStyle(.secondary)
-                    }
+                    Text("onboarding.subtitle")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 10) {
                         Text("onboarding.progress_title").font(.headline)
                         Text("onboarding.progress_detail").font(.subheadline).foregroundStyle(.secondary)

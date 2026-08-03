@@ -301,7 +301,7 @@ final class HourleafUITests: XCTestCase {
         app.launchArguments = ["-onboardingUITest", "-AppleLanguages", "(en)"]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Welcome to Hourleaf"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Add time you already have, if any. Then record new time as you go."].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["finishOnboardingButton"].exists)
         XCTAssertTrue(app.staticTexts["Already served this service year?"].exists)
 
@@ -327,13 +327,19 @@ final class HourleafUITests: XCTestCase {
         let existingTime = app.buttons["existingTimeButton"]
         XCTAssertTrue(existingTime.waitForExistence(timeout: 5))
         existingTime.tap()
-        XCTAssertTrue(app.navigationBars["Time already recorded"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["You only need this screen when moving an existing record into Hourleaf. It does not create entries for past days."].exists)
+        XCTAssertTrue(app.navigationBars["Time before Hourleaf"].waitForExistence(timeout: 5))
+        let balancesIntro = app.staticTexts.matching(
+            NSPredicate(
+                format: "label == %@",
+                "This does not create entries for past days. Enter service already counted this year and any minutes carried from an earlier report."
+            )
+        ).firstMatch
+        XCTAssertTrue(balancesIntro.exists)
 
         app.navigationBars.buttons.element(boundBy: 0).tap()
         settings.swipeUp()
         settings.swipeUp()
-        XCTAssertTrue(app.staticTexts["storageStatus"].exists)
+        XCTAssertFalse(app.staticTexts["storageStatus"].exists)
         XCTAssertTrue(app.buttons["developerWebsiteLink"].exists)
         XCTAssertTrue(app.buttons["developerTelegramLink"].exists)
         XCTAssertTrue(app.buttons["developerGitHubLink"].exists)
