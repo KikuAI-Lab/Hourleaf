@@ -243,7 +243,6 @@ enum HourleafBackupCodec {
             }
         }
 
-        var revisionsByEntry = [String: [HourleafEntryRevisionV1]]()
         var mutationIDs = Set<String>()
         for (index, revision) in records.revisions.enumerated() {
             let path = "revisions[\(index)]"
@@ -255,32 +254,15 @@ enum HourleafBackupCodec {
             guard entriesByID[ids.entryID] != nil else {
                 throw HourleafBackupError.invalidGraph("revision at \(path) references a missing entry")
             }
-            revisionsByEntry[ids.entryID, default: []].append(revision)
         }
 
-        for (entryID, entry) in entriesByID {
-            guard let revisions = revisionsByEntry[entryID], !revisions.isEmpty else {
-                throw HourleafBackupError.invalidGraph("entry \(entryID) has no revisions")
-            }
-            let ordered = revisions.sorted {
-                ($0.revision, $0.id ?? "") < ($1.revision, $1.id ?? "")
-            }
-            try validateRevisionHistory(ordered, entryID: entryID)
-            guard
-                let current = ordered.last,
-                entry.revision == current.revision,
-                entry.lastMutationID == current.mutationID,
-                entry.kind == current.kind,
-                entry.localDay == current.localDay,
-                entry.minutes == current.minutes,
-                entry.note == current.note,
-                entry.createdAt == current.entryCreatedAt,
-                entry.updatedAt == current.entryUpdatedAt,
-                entry.deletedAt == current.entryDeletedAt,
-                entry.source == current.source
-            else {
-                throw HourleafBackupError.invalidGraph("entry \(entryID) does not match its current revision")
-            }
+        do {
+            try EntryRevisionGraphValidator.validate(
+                entries: records.entries.map(Self.graphEntryRecord),
+                revisions: records.revisions.map(Self.graphRevisionRecord)
+            )
+        } catch let error as EntryRevisionGraphError {
+            throw HourleafBackupError.invalidGraph(error.diagnosticDescription)
         }
 
         for (index, policy) in records.policies.enumerated() {
@@ -368,190 +350,83 @@ enum HourleafBackupCodec {
         }
     }
 
-    private static func validateRevisionHistory(
-        _ revisions: [HourleafEntryRevisionV1],
-        entryID: String
-    ) throws {
-        var prior: HourleafEntryRevisionV1?
-        var priorToPrior: HourleafEntryRevisionV1?
-
-        for (offset, revision) in revisions.enumerated() {
-            let expectedRevision = Int64(offset + 1)
-            guard revision.revision == expectedRevision else {
-                throw HourleafBackupError.invalidGraph("entry \(entryID) revision numbers are not contiguous")
-            }
-            guard
-                let operationValue = revision.operation,
-                let operation = EntryMutationOperation(rawValue: operationValue),
-                let sourceValue = revision.source,
-                let source = EntryMutationSource(rawValue: sourceValue)
-            else {
-                throw HourleafBackupError.invalidGraph("entry \(entryID) has an unknown mutation operation or source")
-            }
-
-            if let prior {
-                guard
-                    operation != .create,
-                    revision.parentMutationID == prior.mutationID,
-                    revision.entryCreatedAt == prior.entryCreatedAt
-                else {
-                    throw HourleafBackupError.invalidGraph("entry \(entryID) has a broken revision parent or creation date")
-                }
-            } else {
-                guard
-                    operation == .create,
-                    revision.parentMutationID == nil,
-                    revision.revertedMutationID == nil,
-                    revision.entryDeletedAt == nil,
-                    isValidCreateSource(source)
-                else {
-                    throw HourleafBackupError.invalidGraph("entry \(entryID) must begin with an active create revision")
-                }
-                if source != .migration {
-                    guard
-                        revision.entryCreatedAt == revision.occurredAt,
-                        revision.entryUpdatedAt == revision.occurredAt
-                    else {
-                        throw HourleafBackupError.invalidGraph("entry \(entryID) create timestamps are inconsistent")
-                    }
-                }
-                prior = revision
-                continue
-            }
-
-            guard let parent = prior else {
-                throw HourleafBackupError.invalidGraph("entry \(entryID) has no revision parent")
-            }
-            switch operation {
-            case .create:
-                throw HourleafBackupError.invalidGraph("entry \(entryID) cannot create after revision one")
-            case .update:
-                guard
-                    source == .appHistory,
-                    revision.revertedMutationID == nil,
-                    parent.entryDeletedAt == nil,
-                    revision.entryDeletedAt == nil,
-                    revision.entryUpdatedAt == revision.occurredAt
-                else {
-                    throw HourleafBackupError.invalidGraph("entry \(entryID) has an invalid update transition")
-                }
-            case .delete:
-                guard
-                    source == .appHistory,
-                    revision.revertedMutationID == nil,
-                    parent.entryDeletedAt == nil,
-                    sameEntryValues(revision, parent),
-                    revision.entryDeletedAt == revision.occurredAt,
-                    revision.entryUpdatedAt == revision.occurredAt
-                else {
-                    throw HourleafBackupError.invalidGraph("entry \(entryID) has an invalid delete transition")
-                }
-            case .restore:
-                guard
-                    source == .restore,
-                    revision.revertedMutationID == nil,
-                    parent.entryDeletedAt != nil,
-                    sameEntryValues(revision, parent),
-                    revision.entryDeletedAt == nil,
-                    revision.entryUpdatedAt == revision.occurredAt
-                else {
-                    throw HourleafBackupError.invalidGraph("entry \(entryID) has an invalid restore transition")
-                }
-            case .undo:
-                try validateUndoTransition(
-                    revision,
-                    target: parent,
-                    targetParent: priorToPrior,
-                    entryID: entryID
-                )
-            }
-
-            priorToPrior = prior
-            prior = revision
-        }
-    }
-
-    private static func validateUndoTransition(
-        _ revision: HourleafEntryRevisionV1,
-        target: HourleafEntryRevisionV1,
-        targetParent: HourleafEntryRevisionV1?,
-        entryID: String
-    ) throws {
+    /// Convert raw rows only after their boundary syntax has been checked.
+    /// Assigning the note after `TimeEntry` construction is intentional:
+    /// `TimeEntry.init` normalizes user input, while backup graph validation
+    /// must compare the stored note exactly.
+    private static func graphEntryRecord(_ raw: HourleafEntryV1) throws -> LedgerEntryRecord {
         guard
-            revision.source == EntryMutationSource.undo.rawValue,
-            revision.revertedMutationID == target.mutationID,
-            revision.parentMutationID == target.mutationID,
-            revision.entryUpdatedAt == revision.occurredAt,
-            target.source != EntryMutationSource.migration.rawValue,
-            let targetOperationValue = target.operation,
-            let targetOperation = EntryMutationOperation(rawValue: targetOperationValue),
-            targetOperation != .undo
+            let idValue = raw.id,
+            let id = UUID(uuidString: idValue),
+            let kindValue = raw.kind,
+            let kind = EntryKind(rawValue: kindValue),
+            let localDayValue = raw.localDay,
+            let day = LocalDay(key: localDayValue),
+            let lastMutationValue = raw.lastMutationID,
+            let lastMutationID = UUID(uuidString: lastMutationValue),
+            let createdAtValue = raw.createdAt,
+            let updatedAtValue = raw.updatedAt,
+            let source = raw.source
         else {
-            throw HourleafBackupError.invalidGraph("entry \(entryID) has an invalid undo header")
+            throw HourleafBackupError.invalidRecord("entry graph conversion failed")
         }
 
-        switch targetOperation {
-        case .create:
-            guard
-                target.entryDeletedAt == nil,
-                sameEntryValues(revision, target),
-                revision.entryDeletedAt == revision.occurredAt
-            else {
-                throw HourleafBackupError.invalidGraph("entry \(entryID) undo does not invert create")
-            }
-        case .update:
-            guard
-                let targetParent,
-                target.entryDeletedAt == nil,
-                targetParent.entryDeletedAt == nil,
-                sameEntryValues(revision, targetParent),
-                revision.entryDeletedAt == nil
-            else {
-                throw HourleafBackupError.invalidGraph("entry \(entryID) undo does not restore update parent")
-            }
-        case .delete:
-            guard
-                let targetParent,
-                target.entryDeletedAt != nil,
-                targetParent.entryDeletedAt == nil,
-                sameEntryValues(revision, target),
-                revision.entryDeletedAt == nil
-            else {
-                throw HourleafBackupError.invalidGraph("entry \(entryID) undo does not invert delete")
-            }
-        case .restore:
-            guard
-                let targetParent,
-                let deletedAt = targetParent.entryDeletedAt,
-                target.entryDeletedAt == nil,
-                sameEntryValues(revision, target),
-                revision.entryDeletedAt == deletedAt
-            else {
-                throw HourleafBackupError.invalidGraph("entry \(entryID) undo does not restore deleted state")
-            }
-        case .undo:
-            throw HourleafBackupError.invalidGraph("entry \(entryID) cannot undo an undo")
-        }
+        var entry = TimeEntry(
+            id: id,
+            kind: kind,
+            day: day,
+            minutes: Int(raw.minutes),
+            note: raw.note,
+            createdAt: Date(timeIntervalSinceReferenceDate: createdAtValue),
+            updatedAt: Date(timeIntervalSinceReferenceDate: updatedAtValue)
+        )
+        entry.note = raw.note
+        return LedgerEntryRecord(
+            entry: entry,
+            deletedAt: raw.deletedAt.map(Date.init(timeIntervalSinceReferenceDate:)),
+            source: source,
+            revision: raw.revision,
+            lastMutationID: lastMutationID
+        )
     }
 
-    private static func isValidCreateSource(_ source: EntryMutationSource) -> Bool {
-        switch source {
-        case .appQuickEntry, .appOneTap, .shortcut, .widget, .watch, .timer, .csvImport, .migration:
-            true
-        case .appHistory, .restore, .undo:
-            false
+    private static func graphRevisionRecord(_ raw: HourleafEntryRevisionV1) throws -> EntryRevisionRecord {
+        guard
+            let idValue = raw.id,
+            let id = UUID(uuidString: idValue),
+            let entryIDValue = raw.entryID,
+            let entryID = UUID(uuidString: entryIDValue),
+            let mutationIDValue = raw.mutationID,
+            let mutationID = UUID(uuidString: mutationIDValue),
+            let operation = raw.operation,
+            let kind = raw.kind,
+            let localDay = raw.localDay,
+            let entryCreatedAtValue = raw.entryCreatedAt,
+            let entryUpdatedAtValue = raw.entryUpdatedAt,
+            let source = raw.source,
+            let occurredAtValue = raw.occurredAt
+        else {
+            throw HourleafBackupError.invalidRecord("revision graph conversion failed")
         }
-    }
 
-    private static func sameEntryValues(
-        _ lhs: HourleafEntryRevisionV1,
-        _ rhs: HourleafEntryRevisionV1
-    ) -> Bool {
-        lhs.entryCreatedAt == rhs.entryCreatedAt
-            && lhs.kind == rhs.kind
-            && lhs.localDay == rhs.localDay
-            && lhs.minutes == rhs.minutes
-            && lhs.note == rhs.note
+        return EntryRevisionRecord(
+            id: id,
+            entryID: entryID,
+            mutationID: mutationID,
+            parentMutationID: raw.parentMutationID.flatMap(UUID.init(uuidString:)),
+            revertedMutationID: raw.revertedMutationID.flatMap(UUID.init(uuidString:)),
+            revision: raw.revision,
+            operation: operation,
+            kind: kind,
+            localDay: localDay,
+            minutes: Int(raw.minutes),
+            note: raw.note,
+            entryCreatedAt: Date(timeIntervalSinceReferenceDate: entryCreatedAtValue),
+            entryUpdatedAt: Date(timeIntervalSinceReferenceDate: entryUpdatedAtValue),
+            entryDeletedAt: raw.entryDeletedAt.map(Date.init(timeIntervalSinceReferenceDate:)),
+            source: source,
+            occurredAt: Date(timeIntervalSinceReferenceDate: occurredAtValue)
+        )
     }
 
     private static func validate(entry: HourleafEntryV1, path: String) throws -> String {

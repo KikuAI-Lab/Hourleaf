@@ -2596,10 +2596,16 @@ private extension CoreDataLedgerRepository {
             NSSortDescriptor(key: "localDay", ascending: false),
             NSSortDescriptor(key: "id", ascending: true)
         ]
+        let entryObjects = try context.fetch(entryRequest)
         let entries = try decodeRequired(
-            context.fetch(entryRequest),
+            entryObjects,
             entity: "EntryEntity",
             using: entryRecord
+        )
+        let graphEntries = try decodeRequired(
+            entryObjects,
+            entity: "EntryEntity",
+            using: entryGraphRecord
         )
 
         let policyRequest: NSFetchRequest<PolicyRevisionEntity> = PolicyRevisionEntity.request()
@@ -2641,13 +2647,26 @@ private extension CoreDataLedgerRepository {
         try validateReportGraph(snapshots: reportSnapshots, states: reportStates)
 
         let revisionRequest: NSFetchRequest<EntryRevisionEntity> = EntryRevisionEntity.request()
+        let revisionObjects = try context.fetch(revisionRequest)
         let revisions = try decodeRequired(
-            context.fetch(revisionRequest),
+            revisionObjects,
             entity: "EntryRevisionEntity",
             using: entryRevisionRecord
         ).sorted {
             ($0.entryID.uuidString, $0.revision, $0.mutationID.uuidString)
                 < ($1.entryID.uuidString, $1.revision, $1.mutationID.uuidString)
+        }
+        let graphRevisions = try decodeRequired(
+            revisionObjects,
+            entity: "EntryRevisionEntity",
+            using: entryGraphRevisionRecord
+        )
+        do {
+            try EntryRevisionGraphValidator.validate(entries: graphEntries, revisions: graphRevisions)
+        } catch is EntryRevisionGraphError {
+            throw LedgerRepositoryError.invalidManagedObject(
+                "Hourleaf entry history is unavailable."
+            )
         }
 
         let presetRequest: NSFetchRequest<PresetEntity> = PresetEntity.request()
@@ -2704,6 +2723,17 @@ private extension CoreDataLedgerRepository {
     }
 
     static func entryRecord(from object: EntryEntity) -> LedgerEntryRecord? {
+        makeEntryRecord(from: object, preservingStoredGraphValues: false)
+    }
+
+    static func entryGraphRecord(from object: EntryEntity) -> LedgerEntryRecord? {
+        makeEntryRecord(from: object, preservingStoredGraphValues: true)
+    }
+
+    private static func makeEntryRecord(
+        from object: EntryEntity,
+        preservingStoredGraphValues: Bool
+    ) -> LedgerEntryRecord? {
         guard
             let id = object.id,
             let kind = object.kind.flatMap(EntryKind.init(rawValue:)),
@@ -2712,24 +2742,39 @@ private extension CoreDataLedgerRepository {
             let updatedAt = object.updatedAt,
             (1...5_999).contains(Int(object.minutes))
         else { return nil }
+        var entry = TimeEntry(
+            id: id,
+            kind: kind,
+            day: day,
+            minutes: Int(object.minutes),
+            note: object.note,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+        if preservingStoredGraphValues {
+            entry.note = object.note
+        }
         return LedgerEntryRecord(
-            entry: TimeEntry(
-                id: id,
-                kind: kind,
-                day: day,
-                minutes: Int(object.minutes),
-                note: object.note,
-                createdAt: createdAt,
-                updatedAt: updatedAt
-            ),
+            entry: entry,
             deletedAt: object.deletedAt,
             source: object.source,
-            revision: max(object.revision, 1),
+            revision: preservingStoredGraphValues ? object.revision : max(object.revision, 1),
             lastMutationID: object.lastMutationID
         )
     }
 
     static func entryRevisionRecord(from object: EntryRevisionEntity) -> EntryRevisionRecord? {
+        makeEntryRevisionRecord(from: object, preservingStoredGraphValues: false)
+    }
+
+    static func entryGraphRevisionRecord(from object: EntryRevisionEntity) -> EntryRevisionRecord? {
+        makeEntryRevisionRecord(from: object, preservingStoredGraphValues: true)
+    }
+
+    private static func makeEntryRevisionRecord(
+        from object: EntryRevisionEntity,
+        preservingStoredGraphValues: Bool
+    ) -> EntryRevisionRecord? {
         guard
             let id = object.id,
             let entryID = object.entryID,
@@ -2744,7 +2789,7 @@ private extension CoreDataLedgerRepository {
             EntryKind(rawValue: kind) != nil,
             LocalDay(key: localDay) != nil,
             (1...5_999).contains(Int(object.minutes)),
-            object.revision >= 1
+            preservingStoredGraphValues || object.revision >= 1
         else { return nil }
         return EntryRevisionRecord(
             id: id,
@@ -2752,7 +2797,7 @@ private extension CoreDataLedgerRepository {
             mutationID: mutationID,
             parentMutationID: object.parentMutationID,
             revertedMutationID: object.revertedMutationID,
-            revision: max(object.revision, 1),
+            revision: preservingStoredGraphValues ? object.revision : max(object.revision, 1),
             operation: operation,
             kind: kind,
             localDay: localDay,

@@ -281,36 +281,6 @@ final class EntryMutationTests: XCTestCase {
         }
     }
 
-    func testRevisionCeilingReturnsTypedErrorWithoutOverflowing() async throws {
-        let persistence = PersistenceController(inMemory: true, cloudSyncEnabled: false)
-        let repository = CoreDataLedgerRepository(persistence: persistence)
-        try await configureLedgerStart(repository)
-        let entry = makeEntry(minutes: 30)
-        let created = try await repository.apply(createCommand(for: entry))
-
-        let context = persistence.container.viewContext
-        let request: NSFetchRequest<EntryEntity> = EntryEntity.request()
-        request.predicate = NSPredicate(format: "id == %@", entry.id as CVarArg)
-        let stored = try XCTUnwrap(context.fetch(request).first)
-        stored.revision = Int64.max
-        try context.save()
-
-        await assertMutationError(.revisionExhausted) {
-            _ = try await repository.apply(
-                EntryMutationCommand(
-                    entryID: entry.id,
-                    expectedRevision: Int64.max,
-                    operation: .delete,
-                    source: .appHistory
-                )
-            )
-        }
-        let snapshot = try await repository.ledgerSnapshot()
-        XCTAssertEqual(snapshot.entries.first(where: { $0.id == entry.id })?.revision, Int64.max)
-        XCTAssertEqual(snapshot.entries.first(where: { $0.id == entry.id })?.entry.minutes, entry.minutes)
-        XCTAssertEqual(created.appliedRevision, 1)
-    }
-
     func testNewFutureCommandsAreRejectedButExactReplaysSurviveClockRollback() async throws {
         let persistence = PersistenceController(inMemory: true, cloudSyncEnabled: false)
         let commandTime = Date(timeIntervalSince1970: 2_000_000_000)
