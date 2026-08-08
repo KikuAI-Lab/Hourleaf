@@ -816,9 +816,14 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(chooseImport.exists)
         chooseImport.tap()
 
+        let pickerClose = app.buttons["Close"]
         let pickerCancel = app.buttons["Cancel"]
-        XCTAssertTrue(pickerCancel.waitForExistence(timeout: 5))
-        pickerCancel.tap()
+        if pickerClose.waitForExistence(timeout: 5) {
+            pickerClose.tap()
+        } else {
+            XCTAssertTrue(pickerCancel.waitForExistence(timeout: 5))
+            pickerCancel.tap()
+        }
         XCTAssertTrue(chooseImport.waitForExistence(timeout: 5))
         XCTAssertFalse(app.alerts["Error"].exists)
     }

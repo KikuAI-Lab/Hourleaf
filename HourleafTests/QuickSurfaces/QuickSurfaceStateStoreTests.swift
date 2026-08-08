@@ -1,4 +1,5 @@
 import XCTest
+import Darwin
 @testable import Hourleaf
 
 final class QuickSurfaceStateStoreTests: XCTestCase {
@@ -21,7 +22,12 @@ final class QuickSurfaceStateStoreTests: XCTestCase {
         XCTAssertThrowsError(try store.read()) { error in
             XCTAssertEqual(error as? QuickSurfaceStateStoreError, .missingFile)
         }
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), [])
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: QuickSurfaceStateStoreV1.lockFileURL(root: root).path
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: QuickSurfaceStoreTestSupport.stateFileURL(root: root).path
+        ))
     }
 
     func testCreateReadAndUpdateRoundTripWithRequiredAttributes() throws {
@@ -48,10 +54,21 @@ final class QuickSurfaceStateStoreTests: XCTestCase {
 
         let fileURL = QuickSurfaceStoreTestSupport.stateFileURL(root: root)
         let directoryURL = QuickSurfaceStoreTestSupport.stateDirectoryURL(root: root)
+        let lockURL = QuickSurfaceStateStoreV1.lockFileURL(root: root)
         XCTAssertTrue(context.ledger.isBackupExcluded(fileURL))
         XCTAssertTrue(context.ledger.isBackupExcluded(directoryURL))
+        XCTAssertTrue(context.ledger.isBackupExcluded(lockURL))
         XCTAssertTrue(context.ledger.isProtected(fileURL))
         XCTAssertTrue(context.ledger.isProtected(directoryURL))
+        XCTAssertTrue(context.ledger.isProtected(lockURL))
+        XCTAssertEqual(try Data(contentsOf: lockURL), Data())
+        let lockAttributes = try FileManager.default.attributesOfItem(atPath: lockURL.path)
+        let permissions = try XCTUnwrap(lockAttributes[.posixPermissions] as? NSNumber).uint16Value
+        XCTAssertEqual(permissions & 0o777, 0o600)
+        XCTAssertEqual(
+            try XCTUnwrap(lockAttributes[.ownerAccountID] as? NSNumber).uint64Value,
+            UInt64(geteuid())
+        )
     }
 
     func testConcurrentCreateRacePublishesOnlyRevisionOneState() async throws {
@@ -518,6 +535,253 @@ final class QuickSurfaceStateStoreTests: XCTestCase {
         }
     }
 
+    func testSharedLeasesCanCoexistAndConflictWithExclusiveLeases() throws {
+        let root = try QuickSurfaceStoreTestSupport.makeSandboxRoot(name: "lease-shared-\(UUID().uuidString)")
+        defer { QuickSurfaceStoreTestSupport.cleanup(root) }
+        let directory = QuickSurfaceStoreTestSupport.stateDirectoryURL(root: root)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let lockURL = QuickSurfaceStateStoreV1.lockFileURL(root: root)
+
+        let firstShared = try QuickSurfaceStateStoreLease.acquire(
+            mode: .shared,
+            rootURL: root,
+            lockURL: lockURL
+        )
+        let secondShared = try QuickSurfaceStateStoreLease.acquire(
+            mode: .shared,
+            rootURL: root,
+            lockURL: lockURL
+        )
+        XCTAssertThrowsError(try QuickSurfaceStateStoreLease.acquire(
+            mode: .exclusive,
+            rootURL: root,
+            lockURL: lockURL
+        )) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .accessBusy)
+        }
+
+        try firstShared.release()
+        try secondShared.release()
+        let exclusive = try QuickSurfaceStateStoreLease.acquire(
+            mode: .exclusive,
+            rootURL: root,
+            lockURL: lockURL
+        )
+        XCTAssertThrowsError(try QuickSurfaceStateStoreLease.acquire(
+            mode: .shared,
+            rootURL: root,
+            lockURL: lockURL
+        )) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .accessBusy)
+        }
+        XCTAssertThrowsError(try QuickSurfaceStateStoreLease.acquire(
+            mode: .exclusive,
+            rootURL: root,
+            lockURL: lockURL
+        )) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .accessBusy)
+        }
+        try exclusive.release()
+    }
+
+    func testDifferentRootsDoNotContend() throws {
+        let firstRoot = try QuickSurfaceStoreTestSupport.makeSandboxRoot(name: "lease-root-a-\(UUID().uuidString)")
+        defer { QuickSurfaceStoreTestSupport.cleanup(firstRoot) }
+        let secondRoot = try QuickSurfaceStoreTestSupport.makeSandboxRoot(name: "lease-root-b-\(UUID().uuidString)")
+        defer { QuickSurfaceStoreTestSupport.cleanup(secondRoot) }
+        for root in [firstRoot, secondRoot] {
+            try FileManager.default.createDirectory(
+                at: QuickSurfaceStoreTestSupport.stateDirectoryURL(root: root),
+                withIntermediateDirectories: true
+            )
+        }
+
+        let first = try QuickSurfaceStateStoreLease.acquire(
+            mode: .exclusive,
+            rootURL: firstRoot,
+            lockURL: QuickSurfaceStateStoreV1.lockFileURL(root: firstRoot)
+        )
+        let second = try QuickSurfaceStateStoreLease.acquire(
+            mode: .exclusive,
+            rootURL: secondRoot,
+            lockURL: QuickSurfaceStateStoreV1.lockFileURL(root: secondRoot)
+        )
+        try first.release()
+        try second.release()
+    }
+
+    func testOrdinaryStoreOperationsFailClosedDuringExclusiveLease() throws {
+        let root = try QuickSurfaceStoreTestSupport.makeSandboxRoot(name: "lease-ordinary-\(UUID().uuidString)")
+        defer { QuickSurfaceStoreTestSupport.cleanup(root) }
+        let ledger = QuickSurfaceStoreTestSupport.makeAttributeLedger()
+        let first = makeStore(root: root, ledger: ledger).store
+        let second = makeStore(root: root, ledger: ledger).store
+        try first.write(QuickSurfaceStoreTestSupport.makeHiddenState(revision: 1))
+        let lease = try first.acquireExclusiveRestoreLease()
+        defer { try? lease.release() }
+
+        XCTAssertThrowsError(try second.read()) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .accessBusy)
+        }
+        XCTAssertThrowsError(try second.write(QuickSurfaceStoreTestSupport.makeHiddenState(revision: 1))) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .accessBusy)
+        }
+        XCTAssertThrowsError(try second.createIfAbsent(QuickSurfaceStoreTestSupport.makeHiddenState(revision: 1))) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .accessBusy)
+        }
+        XCTAssertThrowsError(try second.replace { _ in
+            XCTFail("A transform must not run while the exclusive lease is held")
+            return try QuickSurfaceStoreTestSupport.makeHiddenState(revision: 2)
+        }) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .accessBusy)
+        }
+        XCTAssertThrowsError(try second.removeStateFile()) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .accessBusy)
+        }
+
+        try lease.release()
+        let expected = try QuickSurfaceStoreTestSupport.makeHiddenState(revision: 1)
+        XCTAssertEqual(try second.read(), expected)
+    }
+
+    func testLeasedViewSkipsRecursiveSharedAcquisition() throws {
+        let root = try QuickSurfaceStoreTestSupport.makeSandboxRoot(name: "lease-view-\(UUID().uuidString)")
+        defer { QuickSurfaceStoreTestSupport.cleanup(root) }
+        let ledger = QuickSurfaceStoreTestSupport.makeAttributeLedger()
+        let store = makeStore(root: root, ledger: ledger).store
+        try store.write(QuickSurfaceStoreTestSupport.makeHiddenState(revision: 1))
+
+        let lease = try store.acquireExclusiveRestoreLease()
+        let view = try store.leasedView(using: lease)
+        let expected = try QuickSurfaceStoreTestSupport.makeHiddenState(revision: 1)
+        XCTAssertEqual(try view.read(), expected)
+        let updated = try view.replace { current in
+            let current = try XCTUnwrap(current)
+            return try QuickSurfaceStoreTestSupport.makeHiddenState(revision: current.revision + 1)
+        }
+        XCTAssertEqual(updated.revision, 2)
+        XCTAssertThrowsError(try store.read()) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .accessBusy)
+        }
+        try lease.release()
+        XCTAssertEqual(try store.read(), updated)
+    }
+
+    func testLeasedViewRejectsReleasedAndMismatchedLeases() throws {
+        let firstRoot = try QuickSurfaceStoreTestSupport.makeSandboxRoot(name: "lease-mismatch-a-\(UUID().uuidString)")
+        defer { QuickSurfaceStoreTestSupport.cleanup(firstRoot) }
+        let secondRoot = try QuickSurfaceStoreTestSupport.makeSandboxRoot(name: "lease-mismatch-b-\(UUID().uuidString)")
+        defer { QuickSurfaceStoreTestSupport.cleanup(secondRoot) }
+        let first = makeStore(root: firstRoot).store
+        let second = makeStore(root: secondRoot).store
+        try first.write(QuickSurfaceStoreTestSupport.makeHiddenState(revision: 1))
+        try second.write(QuickSurfaceStoreTestSupport.makeHiddenState(revision: 1))
+
+        let firstLease = try first.acquireExclusiveRestoreLease()
+        XCTAssertThrowsError(try second.leasedView(using: firstLease)) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .leaseRootMismatch)
+        }
+        try firstLease.release()
+        XCTAssertThrowsError(try first.leasedView(using: firstLease)) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .leaseReleased)
+        }
+    }
+
+    func testExistingLockSymlinkDirectoryAndUnsafePermissionsFailClosed() throws {
+        let sandbox = try QuickSurfaceStoreTestSupport.makeSandboxRoot(name: "lease-lock-shapes-\(UUID().uuidString)")
+        defer { QuickSurfaceStoreTestSupport.cleanup(sandbox) }
+
+        let symlinkRoot = sandbox.appendingPathComponent("symlink", isDirectory: true)
+        let symlinkDirectory = QuickSurfaceStoreTestSupport.stateDirectoryURL(root: symlinkRoot)
+        try FileManager.default.createDirectory(at: symlinkDirectory, withIntermediateDirectories: true)
+        let symlinkTarget = sandbox.appendingPathComponent("outside.lock", isDirectory: false)
+        try Data().write(to: symlinkTarget)
+        try FileManager.default.createSymbolicLink(
+            at: QuickSurfaceStateStoreV1.lockFileURL(root: symlinkRoot),
+            withDestinationURL: symlinkTarget
+        )
+        XCTAssertThrowsError(try makeStore(root: symlinkRoot).store.read()) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .symlinkDetected)
+        }
+
+        let directoryRoot = sandbox.appendingPathComponent("directory", isDirectory: true)
+        let lockDirectory = QuickSurfaceStateStoreV1.lockFileURL(root: directoryRoot)
+        try FileManager.default.createDirectory(at: lockDirectory, withIntermediateDirectories: true)
+        XCTAssertThrowsError(try makeStore(root: directoryRoot).store.read()) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .lockFileInvalid)
+        }
+
+        let unsafeRoot = sandbox.appendingPathComponent("unsafe", isDirectory: true)
+        let unsafeDirectory = QuickSurfaceStoreTestSupport.stateDirectoryURL(root: unsafeRoot)
+        try FileManager.default.createDirectory(at: unsafeDirectory, withIntermediateDirectories: true)
+        let unsafeLock = QuickSurfaceStateStoreV1.lockFileURL(root: unsafeRoot)
+        try Data().write(to: unsafeLock)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: unsafeLock.path)
+        XCTAssertThrowsError(try makeStore(root: unsafeRoot).store.read()) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .lockFileInvalid)
+        }
+    }
+
+    func testResetLeavesPersistentLockInodeIntact() throws {
+        let root = try QuickSurfaceStoreTestSupport.makeSandboxRoot(name: "lease-reset-\(UUID().uuidString)")
+        defer { QuickSurfaceStoreTestSupport.cleanup(root) }
+        let ledger = QuickSurfaceStoreTestSupport.makeAttributeLedger()
+        let store = makeStore(root: root, ledger: ledger).store
+        try store.write(QuickSurfaceStoreTestSupport.makeHiddenState(revision: 1))
+        let lockURL = QuickSurfaceStateStoreV1.lockFileURL(root: root)
+        let before = try QuickSurfaceStoreTestSupport.fileIdentity(at: lockURL)
+
+        try store.removeStateFile()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: QuickSurfaceStoreTestSupport.stateFileURL(root: root).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: lockURL.path))
+        XCTAssertEqual(try QuickSurfaceStoreTestSupport.fileIdentity(at: lockURL), before)
+        XCTAssertThrowsError(try store.read()) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .missingFile)
+        }
+    }
+
+    func testLeasedViewRejectsLockInodeReplacement() throws {
+        let root = try QuickSurfaceStoreTestSupport.makeSandboxRoot(name: "lease-inode-\(UUID().uuidString)")
+        defer { QuickSurfaceStoreTestSupport.cleanup(root) }
+        let ledger = QuickSurfaceStoreTestSupport.makeAttributeLedger()
+        let store = makeStore(root: root, ledger: ledger).store
+        try store.write(QuickSurfaceStoreTestSupport.makeHiddenState(revision: 1))
+        let lease = try store.acquireExclusiveRestoreLease()
+        let view = try store.leasedView(using: lease)
+        let lockURL = QuickSurfaceStateStoreV1.lockFileURL(root: root)
+        let replacement = lockURL.deletingLastPathComponent().appendingPathComponent("replacement.lock")
+        try Data().write(to: replacement)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: replacement.path)
+        try FileManager.default.removeItem(at: lockURL)
+        try FileManager.default.moveItem(at: replacement, to: lockURL)
+
+        XCTAssertThrowsError(try view.read()) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .leaseIdentityMismatch)
+        }
+        try lease.release()
+    }
+
+    func testLeaseDeinitReleasesAdvisoryLock() throws {
+        let root = try QuickSurfaceStoreTestSupport.makeSandboxRoot(name: "lease-deinit-\(UUID().uuidString)")
+        defer { QuickSurfaceStoreTestSupport.cleanup(root) }
+        let directory = QuickSurfaceStoreTestSupport.stateDirectoryURL(root: root)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let lockURL = QuickSurfaceStateStoreV1.lockFileURL(root: root)
+        var lease: QuickSurfaceStateStoreLease? = try QuickSurfaceStateStoreLease.acquire(
+            mode: .exclusive,
+            rootURL: root,
+            lockURL: lockURL
+        )
+        XCTAssertNotNil(lease)
+        lease = nil
+        let next = try QuickSurfaceStateStoreLease.acquire(
+            mode: .exclusive,
+            rootURL: root,
+            lockURL: lockURL
+        )
+        try next.release()
+    }
+
     private func makeStore(
         root: URL,
         ledger: QuickSurfaceStoreAttributeLedger? = nil,
@@ -542,5 +806,19 @@ final class QuickSurfaceStateStoreTests: XCTestCase {
             ),
             ledger
         )
+    }
+}
+
+private extension QuickSurfaceStoreTestSupport {
+    static func fileIdentity(at url: URL) throws -> QuickSurfaceStateStoreFileIdentity {
+        var metadata = stat()
+        let result: Int32 = url.withUnsafeFileSystemRepresentation { path in
+            guard let path else { return -1 }
+            return Darwin.lstat(path, &metadata)
+        }
+        guard result == 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+        return QuickSurfaceStateStoreFileIdentity(metadata)
     }
 }

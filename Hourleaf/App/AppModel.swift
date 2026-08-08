@@ -58,6 +58,7 @@ final class AppModel: ObservableObject {
     private var storeRefreshRequested = false
     private var storeRefreshShouldShowUndo = false
     private var isStoreRefreshInFlight = false
+    private var isWholeStoreRestoreInProgress = false
     /// Only user-visible undo state changes invalidate an in-flight presentation.
     /// A passive store reload must not prevent a just-confirmed mutation from showing Undo.
     private var undoStateGeneration = 0
@@ -134,10 +135,87 @@ final class AppModel: ObservableObject {
         undoStateGeneration &+= 1
     }
 
+    /// Owns the app-level restore transaction. The host controller keeps the
+    /// cross-process sidecar lease alive while this operation confirms the
+    /// journaled store replacement and while the terminal model refresh runs.
+    func performWholeStoreRestore(
+        confirmation: @escaping @Sendable () async throws -> RestoreCommitResult
+    ) async throws {
+        let previousStartupState = startupState
+        isWholeStoreRestoreInProgress = true
+        defer { isWholeStoreRestoreInProgress = false }
+        startupState = .loading
+        do {
+            await prepareForWholeStoreRestore()
+            let originalSnapshot = try await repository.ledgerSnapshot()
+            _ = try await quickSurfaceHost.performRestoreBoundary(
+                originalSnapshot: originalSnapshot,
+                confirmation: confirmation,
+                terminal: { restoredSnapshot, restoredHost in
+                    try await self.finishRestoreRefresh(
+                        snapshot: restoredSnapshot,
+                        quickSurfaceHostSnapshot: restoredHost
+                    )
+                }
+            )
+        } catch let error as QuickSurfaceHostError where error == .restoreProjectionFailed {
+            startupDiagnostic = error.localizedDescription
+            startupState = .failed
+            throw error
+        } catch {
+            if startupState == .loading {
+                startupState = previousStartupState
+            }
+            throw error
+        }
+    }
+
     /// Reads every published value from the fresh container returned by the
     /// restore coordinator. Imported mutation history is intentionally not
     /// offered as a current-session Undo action.
     func refreshAfterRestore() async throws {
+        beginRestoreRefresh()
+
+        do {
+            try await loadReconciledSnapshot(
+                waitForPendingSettingsSave: false,
+                selectDefaultReportMonth: true
+            )
+            try await reconcileLoadedReminderState()
+            initialSnapshotLoaded = true
+            errorMessage = nil
+            startupState = .ready
+        } catch {
+            startupDiagnostic = error.localizedDescription
+            startupState = .failed
+            throw error
+        }
+    }
+
+    private func finishRestoreRefresh(
+        snapshot: LedgerSnapshot,
+        quickSurfaceHostSnapshot: QuickSurfaceHostSnapshot
+    ) async throws {
+        beginRestoreRefresh()
+        do {
+            let refreshInstant = now()
+            currentDate = refreshInstant
+            currentMonth = ReportReadiness.currentMonth(asOf: refreshInstant)
+            apply(snapshot)
+            updateSelectedReportMonth(from: snapshot, preferLatestClosed: true)
+            self.quickSurfaceHostSnapshot = quickSurfaceHostSnapshot
+            try await reconcileLoadedReminderState()
+            initialSnapshotLoaded = true
+            errorMessage = nil
+            startupState = .ready
+        } catch {
+            startupDiagnostic = error.localizedDescription
+            startupState = .failed
+            throw error
+        }
+    }
+
+    private func beginRestoreRefresh() {
         startupState = .loading
         startupDiagnostic = nil
         settingsSaveGeneration &+= 1
@@ -157,21 +235,6 @@ final class AppModel: ObservableObject {
         visibleUndoCandidate = nil
         undoCandidate = nil
         undoStateGeneration &+= 1
-
-        do {
-            try await loadReconciledSnapshot(
-                waitForPendingSettingsSave: false,
-                selectDefaultReportMonth: true
-            )
-            try await reconcileLoadedReminderState()
-            initialSnapshotLoaded = true
-            errorMessage = nil
-            startupState = .ready
-        } catch {
-            startupDiagnostic = error.localizedDescription
-            startupState = .failed
-            throw error
-        }
     }
 
     /// Refreshes the one live app model after the scene becomes active. This
@@ -1090,6 +1153,7 @@ final class AppModel: ObservableObject {
     private func enqueuePlanningPreferencesSave(
         _ updated: PlanningPreferences
     ) -> Task<Void, Never> {
+        guard !isWholeStoreRestoreInProgress else { return Task {} }
         planningPreferences = updated
         planningSaveGeneration &+= 1
         let generation = planningSaveGeneration
@@ -1148,6 +1212,7 @@ final class AppModel: ObservableObject {
 
     @discardableResult
     private func enqueueSettingsSave(_ updated: AppSettings) -> Task<Void, Never> {
+        guard !isWholeStoreRestoreInProgress else { return Task {} }
         settings = updated
         settingsSaveGeneration += 1
         let generation = settingsSaveGeneration

@@ -625,7 +625,7 @@ struct DataManagementView: View {
         switch hostError {
         case .timerMustBeResolved:
             errorMessage = String(localized: "quick_surfaces.restore.blocked")
-        case .resetRequired:
+        case .resetRequired, .restoreProjectionFailed:
             errorMessage = String(localized: "quick_surfaces.restore.reset_required")
         case .stateUnreadable:
             errorMessage = String(localized: "quick_surfaces.restore.unavailable")

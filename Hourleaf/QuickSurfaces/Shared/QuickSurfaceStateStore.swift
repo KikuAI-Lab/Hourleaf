@@ -21,6 +21,13 @@ enum QuickSurfaceStateStoreError: LocalizedError, Equatable, Sendable {
     case invalidRevisionTransition
     case revisionUnavailable
     case currentStateMismatch
+    case accessBusy
+    case lockFileInvalid
+    case leaseUnavailable
+    case leaseReleased
+    case leaseRootMismatch
+    case leaseIdentityMismatch
+    case leaseReleaseFailed
 
     var errorDescription: String? {
         switch self {
@@ -62,6 +69,20 @@ enum QuickSurfaceStateStoreError: LocalizedError, Equatable, Sendable {
             return "Quick-surface state revision is unavailable."
         case .currentStateMismatch:
             return "Quick-surface state no longer matches the expected state."
+        case .accessBusy:
+            return "Quick-surface state is busy."
+        case .lockFileInvalid:
+            return "Quick-surface state lock is invalid."
+        case .leaseUnavailable:
+            return "Quick-surface state lock is unavailable."
+        case .leaseReleased:
+            return "Quick-surface state lease has been released."
+        case .leaseRootMismatch:
+            return "Quick-surface state lease belongs to another root."
+        case .leaseIdentityMismatch:
+            return "Quick-surface state lease no longer matches its lock."
+        case .leaseReleaseFailed:
+            return "Quick-surface state lease could not be released."
         }
     }
 }
@@ -118,6 +139,7 @@ struct QuickSurfaceStateStoreAttributeIO: Sendable {
 // annotations. Store access is synchronous, uses a fresh coordinator per access,
 // and never crosses an async boundary inside coordinated work.
 struct QuickSurfaceStateStoreV1: @unchecked Sendable {
+    static let lockFileName = "hourleaf-quick-state-v1.lock"
     static let relativePathComponents = [
         "Library",
         "Application Support",
@@ -131,6 +153,7 @@ struct QuickSurfaceStateStoreV1: @unchecked Sendable {
     let fileManager: FileManager
     let faults: QuickSurfaceStateStoreFaults
     let attributeIO: QuickSurfaceStateStoreAttributeIO
+    private let heldLease: QuickSurfaceStateStoreLease?
 
     init(
         rootDirectory: URL,
@@ -138,13 +161,141 @@ struct QuickSurfaceStateStoreV1: @unchecked Sendable {
         faults: QuickSurfaceStateStoreFaults = .init(),
         attributeIO: QuickSurfaceStateStoreAttributeIO = .init()
     ) {
+        self.init(
+            rootDirectory: rootDirectory,
+            fileManager: fileManager,
+            faults: faults,
+            attributeIO: attributeIO,
+            heldLease: nil
+        )
+    }
+
+    private init(
+        rootDirectory: URL,
+        fileManager: FileManager,
+        faults: QuickSurfaceStateStoreFaults,
+        attributeIO: QuickSurfaceStateStoreAttributeIO,
+        heldLease: QuickSurfaceStateStoreLease?
+    ) {
         self.rootDirectory = rootDirectory
         self.fileManager = fileManager
         self.faults = faults
         self.attributeIO = attributeIO
+        self.heldLease = heldLease
+    }
+
+    static func lockFileURL(root: URL) -> URL {
+        root
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Application Support", isDirectory: true)
+            .appendingPathComponent("QuickSurfaces", isDirectory: true)
+            .appendingPathComponent(lockFileName, isDirectory: false)
+    }
+
+    func acquireExclusiveRestoreLease() throws -> QuickSurfaceStateStoreLease {
+        let paths = try makePaths()
+        try validateRoot(paths.root)
+        try validateFixedPath(paths, allowMissingFile: true)
+        try ensureParentDirectoryExists(paths.directory, root: paths.root)
+        let lease = try QuickSurfaceStateStoreLease.acquire(
+            mode: .exclusive,
+            rootURL: paths.root,
+            lockURL: paths.lock
+        )
+        do {
+            try applyRequiredAttributes(to: paths.directory)
+            try applyRequiredAttributes(to: paths.lock)
+            try lease.validate(root: paths.root, lock: paths.lock)
+            return lease
+        } catch {
+            try? lease.release()
+            throw error
+        }
+    }
+
+    func leasedView(using lease: QuickSurfaceStateStoreLease) throws -> QuickSurfaceStateStoreV1 {
+        let paths = try makePaths()
+        try validateRoot(paths.root)
+        guard lease.mode == .exclusive else {
+            throw QuickSurfaceStateStoreError.leaseUnavailable
+        }
+        try lease.validate(root: paths.root, lock: paths.lock)
+        return QuickSurfaceStateStoreV1(
+            rootDirectory: rootDirectory,
+            fileManager: fileManager,
+            faults: faults,
+            attributeIO: attributeIO,
+            heldLease: lease
+        )
     }
 
     func read() throws -> QuickSurfaceStateV1 {
+        try withOrdinaryAccess {
+            try readUnlocked()
+        }
+    }
+
+    func write(_ state: QuickSurfaceStateV1) throws {
+        let persisted: QuickSurfaceStateV1
+        if state.revision == 1 {
+            persisted = try createIfAbsent(state)
+        } else {
+            persisted = try replace { _ in state }
+        }
+        guard persisted == state else {
+            throw QuickSurfaceStateStoreError.currentStateMismatch
+        }
+    }
+
+    func createIfAbsent(_ initialState: QuickSurfaceStateV1) throws -> QuickSurfaceStateV1 {
+        try replace { current in
+            current ?? initialState
+        }
+    }
+
+    func replace(
+        expectedCurrent: QuickSurfaceStateV1? = nil,
+        transform: (QuickSurfaceStateV1?) throws -> QuickSurfaceStateV1
+    ) throws -> QuickSurfaceStateV1 {
+        try withOrdinaryAccess {
+            try replaceUnlocked(expectedCurrent: expectedCurrent, transform: transform)
+        }
+    }
+
+    /// Deletes only the JSON sidecar while holding one ordinary shared lease.
+    /// The persistent lock file and its inode are intentionally untouched.
+    func removeStateFile() throws {
+        guard heldLease == nil else {
+            throw QuickSurfaceStateStoreError.accessBusy
+        }
+        try withOrdinaryAccess {
+            let paths = try makePaths()
+            try validateFixedPath(paths, allowMissingFile: true)
+            var coordinationError: NSError?
+            var removalError: Error?
+            NSFileCoordinator().coordinate(
+                writingItemAt: paths.file,
+                options: .forDeleting,
+                error: &coordinationError
+            ) { coordinatedURL in
+                do {
+                    if try fileExists(at: coordinatedURL) {
+                        try fileManager.removeItem(at: coordinatedURL)
+                    }
+                } catch {
+                    removalError = error
+                }
+            }
+            if let coordinationError {
+                throw mapUnknownError(coordinationError, defaultError: .coordinationFailed)
+            }
+            if let removalError {
+                throw mapUnknownError(removalError, defaultError: .writeFailed)
+            }
+        }
+    }
+
+    private func readUnlocked() throws -> QuickSurfaceStateV1 {
         let paths = try makePaths()
         try validateRoot(paths.root)
 
@@ -168,25 +319,7 @@ struct QuickSurfaceStateStoreV1: @unchecked Sendable {
         return try result.get()
     }
 
-    func write(_ state: QuickSurfaceStateV1) throws {
-        let persisted: QuickSurfaceStateV1
-        if state.revision == 1 {
-            persisted = try createIfAbsent(state)
-        } else {
-            persisted = try replace { _ in state }
-        }
-        guard persisted == state else {
-            throw QuickSurfaceStateStoreError.currentStateMismatch
-        }
-    }
-
-    func createIfAbsent(_ initialState: QuickSurfaceStateV1) throws -> QuickSurfaceStateV1 {
-        try replace { current in
-            current ?? initialState
-        }
-    }
-
-    func replace(
+    private func replaceUnlocked(
         expectedCurrent: QuickSurfaceStateV1? = nil,
         transform: (QuickSurfaceStateV1?) throws -> QuickSurfaceStateV1
     ) throws -> QuickSurfaceStateV1 {
@@ -262,8 +395,45 @@ struct QuickSurfaceStateStoreV1: @unchecked Sendable {
         let applicationSupport = library.appendingPathComponent(Self.relativePathComponents[1], isDirectory: true)
         let directory = applicationSupport.appendingPathComponent(Self.relativePathComponents[2], isDirectory: true)
         let file = directory.appendingPathComponent(Self.relativePathComponents[3], isDirectory: false)
+        let lock = directory.appendingPathComponent(Self.lockFileName, isDirectory: false)
         try ensureContained(root: root, candidate: file)
-        return Paths(root: root, library: library, applicationSupport: applicationSupport, directory: directory, file: file)
+        try ensureContained(root: root, candidate: lock)
+        return Paths(
+            root: root,
+            library: library,
+            applicationSupport: applicationSupport,
+            directory: directory,
+            file: file,
+            lock: lock
+        )
+    }
+
+    private func withOrdinaryAccess<T>(_ operation: () throws -> T) throws -> T {
+        let paths = try makePaths()
+        try validateRoot(paths.root)
+        if let heldLease {
+            try heldLease.validate(root: paths.root, lock: paths.lock)
+            return try operation()
+        }
+
+        try validateFixedPath(paths, allowMissingFile: true)
+        try ensureParentDirectoryExists(paths.directory, root: paths.root)
+        let lease = try QuickSurfaceStateStoreLease.acquire(
+            mode: .shared,
+            rootURL: paths.root,
+            lockURL: paths.lock
+        )
+        do {
+            try applyRequiredAttributes(to: paths.directory)
+            try applyRequiredAttributes(to: paths.lock)
+            try lease.validateShared(root: paths.root, lock: paths.lock)
+            let value = try operation()
+            try lease.release()
+            return value
+        } catch {
+            try? lease.release()
+            throw error
+        }
     }
 
     private func validateRoot(_ root: URL) throws {
@@ -648,5 +818,6 @@ private extension QuickSurfaceStateStoreV1 {
         let applicationSupport: URL
         let directory: URL
         let file: URL
+        let lock: URL
     }
 }

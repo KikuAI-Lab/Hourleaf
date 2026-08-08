@@ -173,19 +173,10 @@ struct DataManagementActions {
                 guard let candidateID = preview.candidateID else {
                     throw HourleafRestoreError.candidateUnavailable
                 }
-                await appModel.prepareForWholeStoreRestore()
-                // Re-read immediately before the destructive store swap. The
-                // preview may have remained open while a timer was started.
-                try await appModel.requireQuickSurfaceIdleForRestore()
-                _ = try await restoreCoordinator.confirm(candidateID)
-                backupStatus.requestRefresh()
-                do {
-                    try await appModel.refreshAfterRestore()
-                } catch {
-                    // The store replacement is already durable. AppModel marks
-                    // itself failed so RootView blocks instead of presenting a
-                    // retry that could no longer refer to this candidate.
+                try await appModel.performWholeStoreRestore {
+                    try await restoreCoordinator.confirm(candidateID)
                 }
+                backupStatus.requestRefresh()
             },
             discardRestorePreview: { preview in
                 guard let candidateID = preview.candidateID else { return }
