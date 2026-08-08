@@ -286,6 +286,85 @@ final class CSVExporterTests: XCTestCase {
         XCTAssertNil(state.preview)
     }
 
+    func testCSVImportVisibleFailureKeepsCandidateForRetry() {
+        let preview = csvImportPreview()
+        var state = DataManagementCSVImportState()
+        state.replacePreview(with: preview)
+
+        XCTAssertNil(state.finishImportFailure())
+        XCTAssertEqual(state.preview, preview)
+    }
+
+    func testCSVImportSuccessConsumesCandidateAndStoresUndoToken() {
+        let preview = csvImportPreview()
+        let token = CSVImportUndoToken(
+            members: [],
+            importedAt: Date(timeIntervalSinceReferenceDate: 10),
+            expiresAt: Date(timeIntervalSinceReferenceDate: 610)
+        )
+        let result = CSVImportResult(
+            importedCount: 2,
+            previouslyImportedCount: 1,
+            skippedPossibleMatchCount: 3,
+            undoToken: token
+        )
+        var state = DataManagementCSVImportState()
+        state.replacePreview(with: preview)
+
+        state.finishImport(with: result)
+
+        XCTAssertNil(state.preview)
+        XCTAssertEqual(state.result, result)
+        XCTAssertEqual(state.undoToken, token)
+    }
+
+    func testCSVImportDisappearanceDiscardsUnconfirmedCandidate() {
+        let preview = csvImportPreview()
+        var state = DataManagementCSVImportState()
+        state.replacePreview(with: preview)
+
+        XCTAssertEqual(state.disappear(importInFlight: false), preview)
+        XCTAssertNil(state.preview)
+        XCTAssertFalse(state.isVisible)
+    }
+
+    func testCSVImportUndoResultClearsTokenAndUpdatesResult() {
+        let preview = csvImportPreview()
+        let token = CSVImportUndoToken(
+            members: [],
+            importedAt: Date(timeIntervalSinceReferenceDate: 10),
+            expiresAt: Date(timeIntervalSinceReferenceDate: 610)
+        )
+        var state = DataManagementCSVImportState()
+        state.replacePreview(with: preview)
+        state.finishImport(with: CSVImportResult(
+            importedCount: 1,
+            previouslyImportedCount: 0,
+            skippedPossibleMatchCount: 0,
+            undoToken: token
+        ))
+
+        let undoResult = CSVImportUndoResult(deletedCount: 1)
+        state.finishUndo(with: undoResult)
+
+        XCTAssertNil(state.undoToken)
+        XCTAssertEqual(state.undoResult, undoResult)
+        XCTAssertEqual(state.result?.importedCount, 1)
+    }
+
+    private func csvImportPreview() -> DataManagementCSVImportPreview {
+        let day = LocalDay(year: 2026, month: 7, day: 11)
+        return DataManagementCSVImportPreview(
+            totalRows: 5,
+            noteCount: 1,
+            dateRange: day...day,
+            previouslyImportedCount: 2,
+            possibleMatchCount: 1,
+            importableWhenSkippingMatches: 2,
+            importableWhenIncludingMatches: 3
+        )
+    }
+
     private func record(
         id: String,
         kind: EntryKind,

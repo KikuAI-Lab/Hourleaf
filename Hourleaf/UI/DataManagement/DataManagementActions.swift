@@ -27,6 +27,54 @@ enum DataManagementRestoreAvailability: Equatable, Sendable {
     var isAvailable: Bool { self == .available }
 }
 
+/// Aggregate-only CSV import information. The staged document and its source
+/// URL stay inside `CSVImportCoordinator`; the view receives only the values
+/// needed to make a safe decision.
+struct DataManagementCSVImportPreview: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let totalRows: Int
+    let noteCount: Int
+    let dateRange: ClosedRange<LocalDay>?
+    let previouslyImportedCount: Int
+    let possibleMatchCount: Int
+    let importableWhenSkippingMatches: Int
+    let importableWhenIncludingMatches: Int
+    fileprivate let candidateID: UUID?
+
+    init(
+        id: UUID = UUID(),
+        totalRows: Int,
+        noteCount: Int,
+        dateRange: ClosedRange<LocalDay>?,
+        previouslyImportedCount: Int,
+        possibleMatchCount: Int,
+        importableWhenSkippingMatches: Int,
+        importableWhenIncludingMatches: Int
+    ) {
+        self.id = id
+        self.totalRows = totalRows
+        self.noteCount = noteCount
+        self.dateRange = dateRange
+        self.previouslyImportedCount = previouslyImportedCount
+        self.possibleMatchCount = possibleMatchCount
+        self.importableWhenSkippingMatches = importableWhenSkippingMatches
+        self.importableWhenIncludingMatches = importableWhenIncludingMatches
+        candidateID = nil
+    }
+
+    fileprivate init(_ preview: CSVImportPreview) {
+        id = preview.candidateID
+        totalRows = preview.totalRows
+        noteCount = preview.noteCount
+        dateRange = preview.dateRange
+        previouslyImportedCount = preview.previouslyImportedCount
+        possibleMatchCount = preview.possibleMatchCount
+        importableWhenSkippingMatches = preview.importableWhenSkippingMatches
+        importableWhenIncludingMatches = preview.importableWhenIncludingMatches
+        candidateID = preview.candidateID
+    }
+}
+
 /// Pure UI lifecycle state so restore completion and view disappearance cannot
 /// race the backend's candidate cleanup.
 struct DataManagementRestoreState: Equatable {
@@ -79,6 +127,10 @@ struct DataManagementActions {
     let restore: (DataManagementRestorePreview) async throws -> Void
     let discardRestorePreview: (DataManagementRestorePreview) async -> Void
     let exportCSV: (Bool) async throws -> FileSharePayload
+    let previewCSVImport: (URL) async throws -> DataManagementCSVImportPreview
+    let confirmCSVImport: (DataManagementCSVImportPreview, CSVImportDuplicatePolicy) async throws -> CSVImportResult
+    let discardCSVImportPreview: (DataManagementCSVImportPreview) async -> Void
+    let undoCSVImport: (CSVImportUndoToken) async throws -> CSVImportUndoResult
 
     static func live(
         repository: CoreDataLedgerRepository,
@@ -92,6 +144,7 @@ struct DataManagementActions {
                 snapshot: { try await repository.portableBackupRecords() }
             )
         )
+        let csvImportCoordinator = CSVImportCoordinator(repository: repository)
         return Self(
             restoreAvailability: .available,
             backupStatus: backupStatus,
@@ -152,6 +205,34 @@ struct DataManagementActions {
                     try? FileManager.default.removeItem(at: directory)
                     throw error
                 }
+            },
+            previewCSVImport: { url in
+                let preview = try await csvImportCoordinator.prepare(from: url)
+                return DataManagementCSVImportPreview(preview)
+            },
+            confirmCSVImport: { preview, policy in
+                guard let candidateID = preview.candidateID else {
+                    throw CSVImportCoordinatorError.noPreparedCandidate
+                }
+                let result = try await csvImportCoordinator.confirm(candidateID, policy: policy)
+                // The ledger result is already verified before this refresh is
+                // requested. Projection failures must not turn a durable
+                // import into a false failure or trigger a rollback.
+                await appModel.refreshAfterExternalLedgerChange()
+                backupStatus.requestRefresh()
+                return result
+            },
+            discardCSVImportPreview: { preview in
+                guard let candidateID = preview.candidateID else { return }
+                await csvImportCoordinator.discard(candidateID)
+            },
+            undoCSVImport: { token in
+                let result = try await csvImportCoordinator.undo(token)
+                // Undo is durable before the same authoritative model refresh
+                // and backup-confidence read are requested.
+                await appModel.refreshAfterExternalLedgerChange()
+                backupStatus.requestRefresh()
+                return result
             }
         )
     }

@@ -808,6 +808,53 @@ final class HourleafUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["createBackupButton"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["chooseRestoreBackupButton"].waitForExistence(timeout: 5))
+
+        let importIntro = app.staticTexts["Choose an Hourleaf CSV. It adds entries only; it does not change settings or report history."]
+        XCTAssertTrue(scrollUntilVisible(importIntro, in: app))
+        XCTAssertTrue(app.staticTexts["CSV can add entries back to Hourleaf, but it is not a full backup and does not include settings or report history."].exists)
+        let chooseImport = app.buttons["chooseCSVImportButton"]
+        XCTAssertTrue(chooseImport.exists)
+        chooseImport.tap()
+
+        let pickerCancel = app.buttons["Cancel"]
+        XCTAssertTrue(pickerCancel.waitForExistence(timeout: 5))
+        pickerCancel.tap()
+        XCTAssertTrue(chooseImport.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.alerts["Error"].exists)
+    }
+
+    func testRussianDataManagementImportCopy() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-AppleLanguages", "(ru)"]
+        app.launch()
+        XCTAssertTrue(app.tabBars.buttons["Настройки"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["Настройки"].tap()
+        let dataManagement = app.buttons["dataManagementButton"]
+        XCTAssertTrue(scrollUntilVisible(dataManagement, in: app))
+        dataManagement.tap()
+
+        let intro = app.staticTexts["Выберите CSV-файл Hourleaf. Он добавит только записи и не изменит настройки или историю отчётов."]
+        XCTAssertTrue(scrollUntilVisible(intro, in: app))
+        XCTAssertTrue(app.staticTexts["Импорт записей"].exists)
+        XCTAssertTrue(app.buttons["chooseCSVImportButton"].label == "Выбрать CSV-файл")
+        XCTAssertTrue(app.staticTexts["Из CSV можно снова добавить записи в Hourleaf, но это не полная резервная копия: в нём нет настроек и истории отчётов."].exists)
+    }
+
+    func testUkrainianDataManagementImportCopy() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTesting", "-AppleLanguages", "(uk)"]
+        app.launch()
+        XCTAssertTrue(app.tabBars.buttons["Налаштування"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["Налаштування"].tap()
+        let dataManagement = app.buttons["dataManagementButton"]
+        XCTAssertTrue(scrollUntilVisible(dataManagement, in: app))
+        dataManagement.tap()
+
+        let intro = app.staticTexts["Виберіть CSV-файл Hourleaf. Він додасть лише записи й не змінить налаштування чи історію звітів."]
+        XCTAssertTrue(scrollUntilVisible(intro, in: app))
+        XCTAssertTrue(app.staticTexts["Імпорт записів"].exists)
+        XCTAssertTrue(app.buttons["chooseCSVImportButton"].label == "Вибрати CSV-файл")
+        XCTAssertTrue(app.staticTexts["З CSV можна знову додати записи до Hourleaf, але це не повна резервна копія: у ньому немає налаштувань та історії звітів."].exists)
     }
 
     func testRussianInterfaceLaunches() {

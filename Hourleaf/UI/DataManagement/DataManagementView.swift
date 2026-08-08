@@ -1,6 +1,72 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// View-owned lifecycle for one staged CSV import. It deliberately keeps the
+/// coordinator candidate separate from the durable result and short-lived Undo
+/// token so replacing or dismissing a preview cannot reuse old raw rows.
+struct DataManagementCSVImportState: Equatable {
+    private(set) var preview: DataManagementCSVImportPreview?
+    private(set) var result: CSVImportResult?
+    private(set) var undoResult: CSVImportUndoResult?
+    private(set) var undoToken: CSVImportUndoToken?
+    var skipPossibleMatches = true
+    private(set) var isVisible = true
+
+    mutating func appear() {
+        isVisible = true
+    }
+
+    @discardableResult
+    mutating func beginNewChoice() -> DataManagementCSVImportPreview? {
+        let previous = preview
+        preview = nil
+        result = nil
+        undoResult = nil
+        undoToken = nil
+        skipPossibleMatches = true
+        return previous
+    }
+
+    @discardableResult
+    mutating func replacePreview(with preview: DataManagementCSVImportPreview) -> DataManagementCSVImportPreview? {
+        let previous = beginNewChoice()
+        self.preview = preview
+        return previous
+    }
+
+    mutating func disappear(importInFlight: Bool) -> DataManagementCSVImportPreview? {
+        isVisible = false
+        guard !importInFlight else { return nil }
+        return takePreviewForDiscard()
+    }
+
+    /// A verified success consumes the staged candidate and stores only the
+    /// aggregate result plus its process-memory Undo token.
+    mutating func finishImport(with result: CSVImportResult) {
+        preview = nil
+        self.result = result
+        undoResult = nil
+        undoToken = result.undoToken
+    }
+
+    /// If confirmation failed after dismissal, the coordinator candidate must
+    /// still be discarded. A visible failure keeps it for an explicit retry.
+    mutating func finishImportFailure() -> DataManagementCSVImportPreview? {
+        guard !isVisible else { return nil }
+        return takePreviewForDiscard()
+    }
+
+    mutating func finishUndo(with result: CSVImportUndoResult) {
+        undoResult = result
+        undoToken = nil
+    }
+
+    mutating func takePreviewForDiscard() -> DataManagementCSVImportPreview? {
+        defer { preview = nil }
+        return preview
+    }
+}
+
 @MainActor
 struct DataManagementView: View {
     let actions: DataManagementActions
@@ -10,9 +76,11 @@ struct DataManagementView: View {
 
     @State private var busyOperation: BusyOperation?
     @State private var restoreState = DataManagementRestoreState()
+    @State private var csvImportState = DataManagementCSVImportState()
     @State private var includeNotes = false
     @State private var sharePayload: FileSharePayload?
     @State private var isRestoreImporterPresented = false
+    @State private var isCSVImporterPresented = false
     @State private var errorMessage: String?
 
     init(actions: DataManagementActions) {
@@ -25,6 +93,7 @@ struct DataManagementView: View {
             backupSection
             restoreSection
             csvSection
+            csvImportSection
         }
         .navigationTitle("data_management.title")
         .fileImporter(
@@ -32,6 +101,12 @@ struct DataManagementView: View {
             allowedContentTypes: [.hourleafBackup],
             allowsMultipleSelection: false,
             onCompletion: handleRestoreImport
+        )
+        .fileImporter(
+            isPresented: $isCSVImporterPresented,
+            allowedContentTypes: [.commaSeparatedText],
+            allowsMultipleSelection: false,
+            onCompletion: handleCSVImport
         )
         .sheet(item: $sharePayload) { payload in
             FileActivityView(payload: payload) { _ in
@@ -45,6 +120,7 @@ struct DataManagementView: View {
         }
         .onAppear {
             restoreState.appear()
+            csvImportState.appear()
             backupStatus.requestRefresh()
         }
         .onChange(of: scenePhase) { _, phase in
@@ -54,7 +130,10 @@ struct DataManagementView: View {
         .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)) { _ in
             backupStatus.requestRefresh()
         }
-        .onDisappear(perform: discardRestorePreviewOnDisappear)
+        .onDisappear {
+            discardRestorePreviewOnDisappear()
+            discardCSVImportPreviewOnDisappear()
+        }
     }
 
     private var backupSection: some View {
@@ -163,10 +242,126 @@ struct DataManagementView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if busyOperation == .csv {
-                progressRow(for: .csv)
+            if busyOperation == .csvExport {
+                progressRow(for: .csvExport)
             }
         }
+    }
+
+    private var csvImportSection: some View {
+        Section("data_management.csv_import") {
+            Text("data_management.csv_import.intro")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                isCSVImporterPresented = true
+            } label: {
+                Label("data_management.csv_import.choose", systemImage: "doc.badge.plus")
+            }
+            .accessibilityIdentifier("chooseCSVImportButton")
+            .accessibilityLabel(Text("data_management.csv_import.choose"))
+            .disabled(isBusy)
+
+            if let preview = csvImportState.preview {
+                csvImportPreviewView(preview)
+            }
+
+            if let result = csvImportState.result {
+                csvImportResultView(result)
+            }
+
+            if busyOperation == .csvImportPreview {
+                progressRow(for: .csvImportPreview)
+            } else if busyOperation == .csvImport {
+                progressRow(for: .csvImport)
+            } else if busyOperation == .csvImportUndo {
+                progressRow(for: .csvImportUndo)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func csvImportPreviewView(_ preview: DataManagementCSVImportPreview) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(String(format: String(localized: "data_management.csv_import.preview_rows"), Int64(preview.totalRows)))
+                .accessibilityIdentifier("csvImportPreviewRows")
+                .accessibilityLabel(Text(String(format: String(localized: "data_management.csv_import.preview_rows"), Int64(preview.totalRows))))
+            if let dateRange = preview.dateRange {
+                Text(String(format: String(localized: "data_management.csv_import.preview_dates"), dateRangeStart(dateRange), dateRangeEnd(dateRange)))
+                    .accessibilityIdentifier("csvImportPreviewDateRange")
+            }
+            Text(String(format: String(localized: "data_management.csv_import.preview_notes"), Int64(preview.noteCount)))
+                .accessibilityIdentifier("csvImportPreviewNotes")
+            Text(String(format: String(localized: "data_management.csv_import.preview_previously_imported"), Int64(preview.previouslyImportedCount)))
+                .accessibilityIdentifier("csvImportPreviewPreviouslyImported")
+            Text(String(format: String(localized: "data_management.csv_import.preview_possible_matches"), Int64(preview.possibleMatchCount)))
+                .accessibilityIdentifier("csvImportPreviewPossibleMatches")
+
+            if preview.possibleMatchCount > 0 {
+                Toggle(
+                    "data_management.csv_import.skip_possible_matches",
+                    isOn: $csvImportState.skipPossibleMatches
+                )
+                .accessibilityIdentifier("csvImportSkipPossibleMatchesToggle")
+                .accessibilityLabel(Text("data_management.csv_import.skip_possible_matches"))
+                .disabled(isBusy)
+
+                if csvImportState.skipPossibleMatches {
+                    Text("data_management.csv_import.skip_possible_matches_detail")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text("data_management.csv_import.skip_possible_matches_detail_off")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Button {
+                startCSVImport(using: preview)
+            } label: {
+                Text(String(format: String(localized: "data_management.csv_import.confirm"), Int64(csvImportCount(for: preview))))
+            }
+            .accessibilityIdentifier("confirmCSVImportButton")
+            .accessibilityLabel(Text(String(format: String(localized: "data_management.csv_import.confirm"), Int64(csvImportCount(for: preview)))))
+            .disabled(isBusy)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func csvImportResultView(_ result: CSVImportResult) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(String(
+                format: String(localized: "data_management.csv_import.result"),
+                Int64(result.importedCount),
+                Int64(result.previouslyImportedCount),
+                Int64(result.skippedPossibleMatchCount)
+            ))
+            .accessibilityIdentifier("csvImportResult")
+
+            if let undoResult = csvImportState.undoResult {
+                Text(String(
+                    format: String(localized: "data_management.csv_import.undo_result"),
+                    Int64(undoResult.deletedCount)
+                ))
+                .accessibilityIdentifier("csvImportUndoResult")
+            } else if csvImportState.undoToken != nil {
+                Button("data_management.csv_import.undo") {
+                    startCSVImportUndo()
+                }
+                .accessibilityIdentifier("undoCSVImportButton")
+                .accessibilityLabel(Text("data_management.csv_import.undo"))
+                .disabled(isBusy)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.vertical, 4)
     }
 
     private func progressRow(for operation: BusyOperation) -> some View {
@@ -198,8 +393,71 @@ struct DataManagementView: View {
 
     private func startCSVExport() {
         let includesNotes = includeNotes
-        start(.csv) {
+        start(.csvExport) {
             sharePayload = try await actions.exportCSV(includesNotes)
+        }
+    }
+
+    private func handleCSVImport(_ result: Result<[URL], Error>) {
+        guard busyOperation == nil else { return }
+
+        switch result {
+        case let .success(urls):
+            guard let url = urls.first else { return }
+            busyOperation = .csvImportPreview
+            Task { @MainActor in
+                await discardCurrentCSVImportPreviewForNewChoice()
+                do {
+                    let preview = try await actions.previewCSVImport(url)
+                    if csvImportState.isVisible {
+                        _ = csvImportState.replacePreview(with: preview)
+                    } else {
+                        await actions.discardCSVImportPreview(preview)
+                    }
+                } catch {
+                    showSanitizedError(for: .csvImportPreview)
+                }
+                busyOperation = nil
+            }
+        case let .failure(error):
+            guard !isCancellation(error) else { return }
+            showSanitizedError(for: .csvImportPreview)
+        }
+    }
+
+    private func startCSVImport(using preview: DataManagementCSVImportPreview) {
+        guard busyOperation == nil, csvImportState.preview == preview else { return }
+
+        busyOperation = .csvImport
+        let policy: CSVImportDuplicatePolicy = csvImportState.skipPossibleMatches
+            ? .skipPossibleMatches
+            : .includePossibleMatches
+        Task { @MainActor in
+            do {
+                let result = try await actions.confirmCSVImport(preview, policy)
+                csvImportState.finishImport(with: result)
+            } catch {
+                if let candidate = csvImportState.finishImportFailure() {
+                    await actions.discardCSVImportPreview(candidate)
+                }
+                showSanitizedError(for: .csvImport)
+            }
+            busyOperation = nil
+        }
+    }
+
+    private func startCSVImportUndo() {
+        guard busyOperation == nil, let token = csvImportState.undoToken else { return }
+
+        busyOperation = .csvImportUndo
+        Task { @MainActor in
+            do {
+                let result = try await actions.undoCSVImport(token)
+                csvImportState.finishUndo(with: result)
+            } catch {
+                showSanitizedError(for: .csvImportUndo)
+            }
+            busyOperation = nil
         }
     }
 
@@ -280,11 +538,24 @@ struct DataManagementView: View {
         await actions.discardRestorePreview(preview)
     }
 
+    private func discardCurrentCSVImportPreviewForNewChoice() async {
+        guard let preview = csvImportState.beginNewChoice() else { return }
+        await actions.discardCSVImportPreview(preview)
+    }
+
     private func discardRestorePreviewOnDisappear() {
         let preview = restoreState.disappear(restoreInFlight: busyOperation == .restore)
         guard let preview else { return }
         Task { @MainActor in
             await actions.discardRestorePreview(preview)
+        }
+    }
+
+    private func discardCSVImportPreviewOnDisappear() {
+        let preview = csvImportState.disappear(importInFlight: busyOperation == .csvImport)
+        guard let preview else { return }
+        Task { @MainActor in
+            await actions.discardCSVImportPreview(preview)
         }
     }
 
@@ -296,9 +567,30 @@ struct DataManagementView: View {
             errorMessage = String(localized: "data_management.error.restore_preview")
         case .restore:
             errorMessage = String(localized: "data_management.error.restore")
-        case .csv:
+        case .csvExport:
             errorMessage = String(localized: "data_management.error.csv")
+        case .csvImportPreview, .csvImport, .csvImportUndo:
+            errorMessage = String(localized: "data_management.error.csv_import")
         }
+    }
+
+    private func csvImportCount(for preview: DataManagementCSVImportPreview) -> Int {
+        csvImportState.skipPossibleMatches
+            ? preview.importableWhenSkippingMatches
+            : preview.importableWhenIncludingMatches
+    }
+
+    private func dateRangeStart(_ range: ClosedRange<LocalDay>) -> String {
+        range.lowerBound.date().formatted(date: .abbreviated, time: .omitted)
+    }
+
+    private func dateRangeEnd(_ range: ClosedRange<LocalDay>) -> String {
+        range.upperBound.date().formatted(date: .abbreviated, time: .omitted)
+    }
+
+    private func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        return (error as NSError).code == CocoaError.Code.userCancelled.rawValue
     }
 
     private func showRestoreInterlockErrorIfSafe(
@@ -329,14 +621,20 @@ private enum BusyOperation: Equatable {
     case backup
     case restorePreview
     case restore
-    case csv
+    case csvExport
+    case csvImportPreview
+    case csvImport
+    case csvImportUndo
 
     var progressTitle: LocalizedStringKey {
         switch self {
         case .backup: "data_management.progress.backup"
         case .restorePreview: "data_management.progress.restore_preview"
         case .restore: "data_management.progress.restore"
-        case .csv: "data_management.progress.csv"
+        case .csvExport: "data_management.progress.csv"
+        case .csvImportPreview: "data_management.progress.csv_import_preview"
+        case .csvImport: "data_management.progress.csv_import"
+        case .csvImportUndo: "data_management.progress.csv_import_undo"
         }
     }
 }
