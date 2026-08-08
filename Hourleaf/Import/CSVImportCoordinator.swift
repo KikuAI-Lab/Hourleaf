@@ -63,7 +63,7 @@ actor CSVImportCoordinator {
                 document: document
             )
             return preview
-        } catch let error as CSVImportRepositoryError {
+        } catch is CSVImportRepositoryError {
             throw CSVImportCoordinatorError.importFailed
         } catch {
             throw CSVImportCoordinatorError.importFailed
