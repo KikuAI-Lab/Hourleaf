@@ -180,6 +180,7 @@ struct QuickEntryView: View {
                 }
             }
             .pickerStyle(.segmented)
+            .accessibilityLabel(Text("entry.type"))
             .accessibilityIdentifier("entryKindPicker")
 
             dateInput
@@ -232,10 +233,12 @@ struct QuickEntryView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .contain)
+            .accessibilityLabel(Text("entry.date"))
             .accessibilityIdentifier("entryDatePicker")
         } else {
             DatePicker("entry.date", selection: selection, in: range, displayedComponents: .date)
                 .datePickerStyle(.compact)
+                .accessibilityLabel(Text("entry.date"))
                 .accessibilityIdentifier("entryDatePicker")
         }
     }

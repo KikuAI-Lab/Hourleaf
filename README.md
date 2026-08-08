@@ -49,3 +49,11 @@ active Apple Developer Program membership. Personal Team provisioning is
 temporary, so the app must be rebuilt periodically. Its data lives in a
 separate app sandbox and will not automatically move into the future App Store
 build.
+
+To move data to a later TestFlight or App Store build:
+
+1. In the old local build, create and save a backup.
+2. Install and open the new Hourleaf build.
+3. In Data Management, choose that backup and restore it.
+4. Check entries, reports, reminders, and settings in the new app.
+5. Remove the old local build only after those checks, if you wish.

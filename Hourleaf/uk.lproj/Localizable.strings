@@ -241,6 +241,10 @@
 "intent.shortcut.add_credit" = "Додати кредит";
 "intent.shortcut.open_quick_entry" = "Відкрити додавання часу";
 "data_management.title" = "Резервні копії та експорт";
+"data_management.local_migration.title" = "Перехід на версію з TestFlight або App Store";
+"data_management.local_migration.create" = "Створіть резервну копію в цьому застосунку.";
+"data_management.local_migration.restore" = "Установіть і відкрийте новий Hourleaf, потім відновіть у ньому цю копію.";
+"data_management.local_migration.keep" = "Не видаляйте цей застосунок, доки не перевірите в новому застосунку записи, звіти, нагадування й налаштування.";
 "data_management.backup" = "Резервна копія";
 "data_management.backup.create" = "Створити резервну копію";
 "data_management.backup.move" = "Ця копія допоможе перенести дані Hourleaf на інший iPhone.";

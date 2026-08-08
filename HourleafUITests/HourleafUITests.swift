@@ -903,6 +903,211 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.textFields["baselineHoursField"].exists)
     }
 
+    func testOnboardingInputsAndFinalActionRemainReachableAtAccessibilityXXXL() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-onboardingUITest",
+            "-AppleLanguages",
+            "(en)",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL"
+        ]
+        app.launch()
+
+        let baselineHours = app.textFields["baselineHoursField"]
+        XCTAssertTrue(baselineHours.waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollUntilHittable(baselineHours, in: app))
+
+        let minutesWheel = app.pickerWheels.element(boundBy: 0)
+        XCTAssertTrue(minutesWheel.waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollUntilHittable(minutesWheel, in: app))
+
+        let finish = app.buttons["finishOnboardingButton"]
+        XCTAssertTrue(scrollUntilHittable(finish, in: app))
+        XCTAssertTrue(finish.isEnabled)
+        finish.tap()
+
+        XCTAssertTrue(app.navigationBars["Add time"].waitForExistence(timeout: 5))
+    }
+
+    func testDataManagementActionsRemainReachableAtAccessibilityXXXL() {
+        let app = launchApp(
+            additionalArguments: [
+                "-UIPreferredContentSizeCategoryName",
+                "UICTContentSizeCategoryAccessibilityXXXL"
+            ]
+        )
+        app.tabBars.buttons["Settings"].tap()
+
+        let dataManagement = app.buttons["dataManagementButton"]
+        XCTAssertTrue(scrollUntilHittable(dataManagement, in: app))
+        dataManagement.tap()
+
+        for identifier in [
+            "createBackupButton",
+            "chooseRestoreBackupButton",
+            "exportCSVButton",
+            "chooseCSVImportButton"
+        ] {
+            let action = app.descendants(matching: .any)[identifier]
+            XCTAssertTrue(scrollUntilHittable(action, in: app), "Not hittable: \(identifier)")
+        }
+    }
+
+    func testDarkAppearanceKeepsCriticalSurfacesUsable() {
+        let app = launchApp(
+            additionalArguments: [
+                "-seedUITestData",
+                "-hourleafTestNow",
+                "2026-10-02T12:00:00Z",
+                "-AppleInterfaceStyle",
+                "Dark"
+            ]
+        )
+        XCTAssertTrue(app.navigationBars["Add time"].exists)
+
+        let wheels = app.pickerWheels
+        XCTAssertTrue(wheels.element(boundBy: 0).waitForExistence(timeout: 5))
+        wheels.element(boundBy: 0).adjust(toPickerWheelValue: "1")
+        let save = app.buttons["saveEntryButton"]
+        wheels.element(boundBy: 1).adjust(toPickerWheelValue: "15")
+        XCTAssertTrue(save.isEnabled)
+        XCTAssertTrue(save.isHittable)
+        save.tap()
+
+        app.tabBars.buttons["History"].tap()
+        let historyEntry = firstHistoryEntry(in: app)
+        XCTAssertTrue(historyEntry.waitForExistence(timeout: 5))
+        XCTAssertTrue(historyEntry.isHittable)
+
+        app.tabBars.buttons["Progress"].tap()
+        let review = app.buttons["reportReviewButton"]
+        XCTAssertTrue(review.waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollUntilHittable(review, in: app))
+
+        app.tabBars.buttons["Settings"].tap()
+        let dataManagement = app.buttons["dataManagementButton"]
+        XCTAssertTrue(scrollUntilHittable(dataManagement, in: app))
+        XCTAssertTrue(dataManagement.isHittable)
+        dataManagement.tap()
+
+        let createBackup = app.buttons["createBackupButton"]
+        XCTAssertTrue(createBackup.waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollUntilHittable(createBackup, in: app))
+        XCTAssertTrue(createBackup.isHittable)
+    }
+
+    func testCriticalControlsExposeLocalizedAccessibilityLabels() {
+        for language in ["en", "ru", "uk"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-uiTesting", "-AppleLanguages", "(\(language))"]
+            app.launch()
+            XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
+
+            for identifier in ["entryKindPicker", "entryDatePicker", "saveEntryButton"] {
+                assertNonEmptyAccessibilityLabel(identifier, in: app)
+            }
+
+            app.tabBars.buttons.element(boundBy: 2).tap()
+            for identifier in ["previousReportMonthButton", "nextReportMonthButton"] {
+                assertNonEmptyAccessibilityLabel(identifier, in: app)
+            }
+
+            app.tabBars.buttons.element(boundBy: 3).tap()
+            let dataManagement = app.buttons["dataManagementButton"]
+            XCTAssertTrue(scrollUntilHittable(dataManagement, in: app))
+            assertNonEmptyAccessibilityLabel("dataManagementButton", in: app)
+            dataManagement.tap()
+
+            for identifier in [
+                "createBackupButton",
+                "chooseRestoreBackupButton",
+                "exportCSVButton",
+                "chooseCSVImportButton"
+            ] {
+                let action = app.descendants(matching: .any)[identifier]
+                XCTAssertTrue(scrollUntilHittable(action, in: app), "Missing \(identifier) in \(language)")
+                assertNonEmptyAccessibilityLabel(identifier, in: app)
+            }
+
+            app.terminate()
+        }
+    }
+
+    func testReduceMotionKeepsManualEntryAndTimerReviewUsable() {
+        let app = launchQuickSurfaceApp(
+            additionalArguments: ["-UIAccessibilityReduceMotionEnabled", "YES"]
+        )
+
+        let wheels = app.pickerWheels
+        XCTAssertTrue(wheels.element(boundBy: 0).waitForExistence(timeout: 5))
+        let kindPicker = app.segmentedControls["entryKindPicker"]
+        let noteField = app.textFields["entryNoteField"]
+        let save = app.buttons["saveEntryButton"]
+        XCTAssertTrue(kindPicker.buttons["Service"].isSelected)
+        XCTAssertFalse(save.isEnabled)
+        XCTAssertEqual(noteField.value as? String, "Short note (optional)")
+
+        enableQuickSurfaceTimer(in: app)
+        XCTAssertTrue(kindPicker.buttons["Service"].isSelected)
+        XCTAssertFalse(save.isEnabled)
+        XCTAssertEqual(noteField.value as? String, "Short note (optional)")
+
+        let start = app.buttons["startQuickSurfaceTimerButton"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
+        XCTAssertTrue(start.isHittable)
+        assertNonEmptyAccessibilityLabel("startQuickSurfaceTimerButton", in: app)
+        start.tap()
+
+        let stop = app.buttons["stopQuickSurfaceTimerButton"]
+        XCTAssertTrue(stop.waitForExistence(timeout: 5))
+        XCTAssertTrue(stop.isHittable)
+        assertNonEmptyAccessibilityLabel("stopQuickSurfaceTimerButton", in: app)
+        stop.tap()
+
+        XCTAssertTrue(app.navigationBars["Review timer"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["saveTimerReviewButton"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["discardTimerReviewButton"].exists)
+    }
+
+#if !HOURLEAF_LOCAL_DEVICE
+    func testStandardBuildOmitsLocalMigrationGuidance() {
+        let app = launchApp()
+        app.tabBars.buttons["Settings"].tap()
+
+        let dataManagement = app.buttons["dataManagementButton"]
+        XCTAssertTrue(scrollUntilHittable(dataManagement, in: app))
+        dataManagement.tap()
+        XCTAssertTrue(app.buttons["createBackupButton"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.descendants(matching: .any)["localBuildMigrationGuidance"].exists)
+    }
+#endif
+
+#if HOURLEAF_LOCAL_DEVICE
+    func testLocalBuildShowsMigrationGuidanceAndKeepsBackupReachable() {
+        let app = launchApp(
+            additionalArguments: [
+                "-UIPreferredContentSizeCategoryName",
+                "UICTContentSizeCategoryAccessibilityXXXL"
+            ]
+        )
+        app.tabBars.buttons["Settings"].tap()
+
+        let dataManagement = app.buttons["dataManagementButton"]
+        XCTAssertTrue(scrollUntilHittable(dataManagement, in: app))
+        dataManagement.tap()
+
+        let guidance = app.descendants(matching: .any)["localBuildMigrationGuidance"]
+        XCTAssertTrue(guidance.waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollUntilVisible(guidance, in: app))
+        XCTAssertFalse(guidance.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+        let createBackup = app.buttons["createBackupButton"]
+        XCTAssertTrue(scrollUntilHittable(createBackup, in: app))
+        XCTAssertTrue(createBackup.isHittable)
+    }
+#endif
+
     func testSettingsDoesNotOfferServiceYearCarry() {
         let app = launchApp()
         app.tabBars.buttons["Settings"].tap()
@@ -963,9 +1168,12 @@ final class HourleafUITests: XCTestCase {
         return app
     }
 
-    private func launchQuickSurfaceApp(testID: UUID = UUID()) -> XCUIApplication {
+    private func launchQuickSurfaceApp(
+        testID: UUID = UUID(),
+        additionalArguments: [String] = []
+    ) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = quickSurfaceLaunchArguments(testID: testID, reset: true)
+        app.launchArguments = quickSurfaceLaunchArguments(testID: testID, reset: true) + additionalArguments
         app.launch()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         return app
@@ -1071,6 +1279,29 @@ final class HourleafUITests: XCTestCase {
             app.swipeUp()
         }
         return element.exists && app.frame.intersects(element.frame) && element.frame.height > 0
+    }
+
+    private func scrollUntilHittable(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
+        for _ in 0..<12 {
+            if element.exists, element.isHittable {
+                return true
+            }
+            app.swipeUp()
+        }
+        return element.exists && element.isHittable
+    }
+
+    private func assertNonEmptyAccessibilityLabel(
+        _ identifier: String,
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let element = app.descendants(matching: .any)[identifier]
+        XCTAssertTrue(element.waitForExistence(timeout: 5), "Missing \(identifier)", file: file, line: line)
+        let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertFalse(label.isEmpty, "Empty accessibility label for \(identifier)", file: file, line: line)
+        XCTAssertNotEqual(label, identifier, "Raw identifier exposed as label for \(identifier)", file: file, line: line)
     }
 
     private func reportBreakdownLine(_ label: String, in app: XCUIApplication) -> XCUIElement {

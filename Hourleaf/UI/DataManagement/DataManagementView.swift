@@ -90,6 +90,9 @@ struct DataManagementView: View {
 
     var body: some View {
         Form {
+#if HOURLEAF_LOCAL_DEVICE
+            localBuildMigrationGuidance
+#endif
             backupSection
             restoreSection
             csvSection
@@ -135,6 +138,24 @@ struct DataManagementView: View {
             discardCSVImportPreviewOnDisappear()
         }
     }
+
+#if HOURLEAF_LOCAL_DEVICE
+    private var localBuildMigrationGuidance: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("data_management.local_migration.create")
+                Text("data_management.local_migration.restore")
+                Text("data_management.local_migration.keep")
+            }
+            .font(.caption)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("localBuildMigrationGuidance")
+        } header: {
+            Text("data_management.local_migration.title")
+        }
+    }
+#endif
 
     private var backupSection: some View {
         Section("data_management.backup") {

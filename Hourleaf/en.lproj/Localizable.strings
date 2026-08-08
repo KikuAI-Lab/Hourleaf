@@ -241,6 +241,10 @@
 "intent.shortcut.add_credit" = "Add Credit";
 "intent.shortcut.open_quick_entry" = "Open Add Time";
 "data_management.title" = "Backup and export";
+"data_management.local_migration.title" = "Moving to the TestFlight or App Store version";
+"data_management.local_migration.create" = "Create a backup in this app.";
+"data_management.local_migration.restore" = "Install and open the new Hourleaf, then restore that backup there.";
+"data_management.local_migration.keep" = "Keep this app until you check entries, reports, reminders, and settings in the new app.";
 "data_management.backup" = "Backup";
 "data_management.backup.create" = "Create backup";
 "data_management.backup.move" = "Use this backup to move your Hourleaf data to another iPhone.";
