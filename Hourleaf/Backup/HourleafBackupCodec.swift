@@ -536,7 +536,7 @@ enum HourleafBackupCodec {
 
     private static func isValidCreateSource(_ source: EntryMutationSource) -> Bool {
         switch source {
-        case .appQuickEntry, .appOneTap, .shortcut, .widget, .watch, .timer, .migration:
+        case .appQuickEntry, .appOneTap, .shortcut, .widget, .watch, .timer, .csvImport, .migration:
             true
         case .appHistory, .restore, .undo:
             false

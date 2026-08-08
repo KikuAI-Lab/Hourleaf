@@ -13,6 +13,7 @@ enum EntryMutationOperation: String, Codable, CaseIterable, Sendable {
 
 enum EntryMutationSource: String, Codable, CaseIterable, Sendable {
     case appQuickEntry
+    case csvImport
     /// Reserved sources keep future foreground and system entry points on the
     /// same durable mutation contract without widening the operation surface.
     case appOneTap

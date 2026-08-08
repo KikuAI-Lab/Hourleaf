@@ -1,5 +1,41 @@
 @preconcurrency import CoreData
+import CryptoKit
 import Foundation
+
+enum CSVImportRepositoryError: LocalizedError, Equatable, Sendable {
+    case unavailable
+    case identityCollision
+    case validationFailed
+    case transactionFailed
+    case verificationFailed
+    case undoUnavailable
+    case undoExpired
+
+    var errorDescription: String? {
+        switch self {
+        case .undoUnavailable, .undoExpired:
+            String(localized: "error.undo_unavailable")
+        case .unavailable,
+             .identityCollision,
+             .validationFailed,
+             .transactionFailed,
+             .verificationFailed:
+            "The CSV file could not be imported."
+        }
+    }
+}
+
+/// Test-only failure points for proving CSV import's atomic save/readback
+/// boundary. The default repository initializer installs a no-op injector, so
+/// production behavior is unchanged.
+enum CSVImportFaultPoint: Hashable, Sendable {
+    case importBeforeSave
+    case importAfterSaveBeforeReadback
+    case undoBeforeSave
+    case undoAfterSaveBeforeReadback
+}
+
+typealias CSVImportFaultInjector = @Sendable (CSVImportFaultPoint) throws -> Void
 
 protocol LedgerRepository: Sendable {
     func ledgerSnapshot() async throws -> LedgerSnapshot
@@ -27,9 +63,54 @@ protocol LedgerRepository: Sendable {
     func prepareReport(_ request: PrepareReportRequest) async throws -> PreparedReportResult
     func markReportSent(_ request: MarkReportSentRequest) async throws -> LedgerSnapshot
     func closeServiceYear(_ request: CloseServiceYearRequest) async throws -> ServiceYearArchiveResult
+    func previewCSVImport(
+        _ document: CSVImportDocument,
+        candidateID: UUID
+    ) async throws -> CSVImportPreview
+    func applyCSVImport(
+        _ document: CSVImportDocument,
+        policy: CSVImportDuplicatePolicy
+    ) async throws -> CSVImportResult
+    func undoCSVImport(_ token: CSVImportUndoToken) async throws -> CSVImportUndoResult
 }
 
 extension LedgerRepository {
+    func previewCSVImport(
+        document: CSVImportDocument,
+        candidateID: UUID = UUID()
+    ) async throws -> CSVImportPreview {
+        try await previewCSVImport(document, candidateID: candidateID)
+    }
+
+    func applyCSVImport(
+        document: CSVImportDocument,
+        policy: CSVImportDuplicatePolicy
+    ) async throws -> CSVImportResult {
+        try await applyCSVImport(document, policy: policy)
+    }
+
+    func undoCSVImport(token: CSVImportUndoToken) async throws -> CSVImportUndoResult {
+        try await undoCSVImport(token)
+    }
+
+    func previewCSVImport(
+        _ document: CSVImportDocument,
+        candidateID: UUID
+    ) async throws -> CSVImportPreview {
+        throw CSVImportRepositoryError.unavailable
+    }
+
+    func applyCSVImport(
+        _ document: CSVImportDocument,
+        policy: CSVImportDuplicatePolicy
+    ) async throws -> CSVImportResult {
+        throw CSVImportRepositoryError.unavailable
+    }
+
+    func undoCSVImport(_ token: CSVImportUndoToken) async throws -> CSVImportUndoResult {
+        throw CSVImportRepositoryError.unavailable
+    }
+
     func saveQuickSurfacePreferences(_ value: QuickSurfacePreferences) async throws {
         throw LedgerRepositoryError.invalidManagedObject(
             "This repository does not support quick surface preferences."
@@ -63,16 +144,19 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
 
     private let persistence: PersistenceController
     private let clock: @Sendable () -> Date
+    private let csvImportFaultInjector: CSVImportFaultInjector
     private var normalizationComplete = false
     private var normalizationFailure: LedgerRepositoryError?
     private var maintenanceLease: LedgerMaintenanceLease?
 
     init(
         persistence: PersistenceController,
-        clock: @escaping @Sendable () -> Date = { .now }
+        clock: @escaping @Sendable () -> Date = { .now },
+        csvImportFaultInjector: @escaping CSVImportFaultInjector = { _ in }
     ) {
         self.persistence = persistence
         self.clock = clock
+        self.csvImportFaultInjector = csvImportFaultInjector
     }
 
     func ledgerSnapshot() async throws -> LedgerSnapshot {
@@ -104,6 +188,126 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
     func fetchAllEntries() async throws -> [LedgerEntryRecord] {
         try requireAvailable()
         return try await ledgerSnapshot().entries
+    }
+
+    func previewCSVImport(
+        _ document: CSVImportDocument,
+        candidateID: UUID
+    ) async throws -> CSVImportPreview {
+        try requireAvailable()
+        try ensureNormalized()
+        let authorizationTime = clock()
+        do {
+            return try perform { context in
+                let snapshot = try Self.snapshot(in: context)
+                let classification = try Self.classifyCSVImport(
+                    document,
+                    in: snapshot
+                )
+                for row in classification.newRows + classification.possibleMatches {
+                    do {
+                        guard try Self.validatedValues(
+                            row.values,
+                            in: context,
+                            authorizationTime: authorizationTime
+                        ) != nil else {
+                            throw CSVImportRepositoryError.validationFailed
+                        }
+                    } catch let error as CSVImportRepositoryError {
+                        throw error
+                    } catch {
+                        throw CSVImportRepositoryError.validationFailed
+                    }
+                }
+                return CSVImportPreview(
+                    candidateID: candidateID,
+                    totalRows: document.rows.count,
+                    noteCount: document.noteCount,
+                    dateRange: document.dateRange,
+                    previouslyImportedCount: classification.previouslyImported.count,
+                    possibleMatchCount: classification.possibleMatches.count,
+                    importableWhenSkippingMatches: classification.newRows.count,
+                    importableWhenIncludingMatches: classification.newRows.count
+                        + classification.possibleMatches.count
+                )
+            }
+        } catch let error as CSVImportRepositoryError {
+            throw error
+        } catch {
+            throw Self.sanitizedCSVImportError(error)
+        }
+    }
+
+    func applyCSVImport(
+        _ document: CSVImportDocument,
+        policy: CSVImportDuplicatePolicy
+    ) async throws -> CSVImportResult {
+        try requireAvailable()
+        try ensureNormalized()
+        let authorizationTime = clock()
+        do {
+            return try applyCSVImportOnce(
+                document,
+                policy: policy,
+                authorizationTime: authorizationTime
+            )
+        } catch let retry as CSVImportRetry {
+            guard case let .import(plan) = retry else {
+                throw CSVImportRepositoryError.verificationFailed
+            }
+            do {
+                return try replayOrRetryCSVImport(
+                    plan,
+                    document: document,
+                    policy: policy,
+                    authorizationTime: authorizationTime
+                )
+            } catch let retry as CSVImportRetry {
+                _ = retry
+                throw CSVImportRepositoryError.verificationFailed
+            } catch let error as CSVImportRepositoryError {
+                throw error
+            } catch {
+                throw Self.sanitizedCSVImportError(error)
+            }
+        } catch let error as CSVImportRepositoryError {
+            throw error
+        } catch {
+            throw Self.sanitizedCSVImportError(error)
+        }
+    }
+
+    func undoCSVImport(_ token: CSVImportUndoToken) async throws -> CSVImportUndoResult {
+        try requireAvailable()
+        try ensureNormalized()
+        let authorizationTime = clock()
+        do {
+            return try undoCSVImportOnce(
+                token,
+                authorizationTime: authorizationTime
+            )
+        } catch let retry as CSVImportRetry {
+            guard case let .undo(plan) = retry else {
+                throw CSVImportRepositoryError.verificationFailed
+            }
+            do {
+                return try replayOrRetryCSVImportUndo(
+                    plan,
+                    authorizationTime: authorizationTime
+                )
+            } catch let retry as CSVImportRetry {
+                _ = retry
+                throw CSVImportRepositoryError.verificationFailed
+            } catch let error as CSVImportRepositoryError {
+                throw error
+            } catch {
+                throw Self.sanitizedCSVImportError(error)
+            }
+        } catch let error as CSVImportRepositoryError {
+            throw error
+        } catch {
+            throw Self.sanitizedCSVImportError(error)
+        }
     }
 
     func apply(_ command: EntryMutationCommand) async throws -> EntryMutationReceipt {
@@ -1125,6 +1329,41 @@ private struct EntryMutationWrite: Sendable {
     let appliedRevision: Int64
 }
 
+private struct CSVImportClassification: Sendable {
+    let previouslyImported: [CSVImportRow]
+    let possibleMatches: [CSVImportRow]
+    let newRows: [CSVImportRow]
+}
+
+private struct CSVImportRetryPlan: Sendable {
+    let selectedRows: [CSVImportRow]
+    let previouslyImportedCount: Int
+    let skippedPossibleMatchCount: Int
+    let authorizationTime: Date
+}
+
+private struct CSVImportUndoRetryPlan: Sendable {
+    let token: CSVImportUndoToken
+    let authorizationTime: Date
+}
+
+private enum CSVImportRetry: Error {
+    case `import`(CSVImportRetryPlan)
+    case undo(CSVImportUndoRetryPlan)
+}
+
+private enum CSVImportReplayStatus: Equatable, Sendable {
+    case exact
+    case absent
+    case mismatch
+}
+
+private enum CSVImportUndoMemberState: Equatable, Sendable {
+    case active
+    case alreadyUndone
+    case mismatch
+}
+
 private enum EntryMutationRetry: Error {
     case required
 }
@@ -1176,6 +1415,526 @@ private enum StableReportReference: Sendable {
 }
 
 private extension CoreDataLedgerRepository {
+    static func sanitizedCSVImportError(_ error: Error) -> CSVImportRepositoryError {
+        if let error = error as? CSVImportRepositoryError { return error }
+        if error is EntryMutationError || error is EntryValidationError {
+            return .validationFailed
+        }
+        return .transactionFailed
+    }
+
+    static func classifyCSVImport(
+        _ document: CSVImportDocument,
+        in snapshot: LedgerSnapshot
+    ) throws -> CSVImportClassification {
+        let entriesByID = Dictionary(
+            uniqueKeysWithValues: snapshot.entries.map { ($0.id, $0) }
+        )
+        let revisionsByMutationID = Dictionary(
+            uniqueKeysWithValues: snapshot.entryRevisions.map { ($0.mutationID, $0) }
+        )
+        let importedRevisionByEntryID = Dictionary(
+            snapshot.entryRevisions.compactMap { revision -> (UUID, EntryRevisionRecord)? in
+                guard
+                    revision.operation == EntryMutationOperation.create.rawValue,
+                    revision.source == EntryMutationSource.csvImport.rawValue,
+                    revision.revision == 1
+                else { return nil }
+                return (revision.entryID, revision)
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let importedEntryIDs = Set(importedRevisionByEntryID.keys)
+        let activeManualEntries = snapshot.entries.filter {
+            !$0.isDeleted && !importedEntryIDs.contains($0.id)
+        }
+
+        var consumedManualIDs = Set<UUID>()
+        var previouslyImported = [CSVImportRow]()
+        var possibleMatches = [CSVImportRow]()
+        var newRows = [CSVImportRow]()
+        previouslyImported.reserveCapacity(document.rows.count)
+        possibleMatches.reserveCapacity(document.rows.count)
+        newRows.reserveCapacity(document.rows.count)
+
+        for row in document.rows {
+            if let entry = entriesByID[row.entryID] {
+                guard
+                    let importedRevision = importedRevisionByEntryID[row.entryID],
+                    importedRevision.mutationID == row.mutationID,
+                    importedRevision.kind == row.values.kind.rawValue,
+                    importedRevision.localDay == row.values.day.key,
+                    importedRevision.minutes == row.values.minutes,
+                    importedRevision.note == row.values.note
+                else {
+                    throw CSVImportRepositoryError.identityCollision
+                }
+                _ = entry
+                previouslyImported.append(row)
+                continue
+            }
+
+            if let existingRevision = revisionsByMutationID[row.mutationID] {
+                guard
+                    existingRevision.entryID == row.entryID,
+                    existingRevision.operation == EntryMutationOperation.create.rawValue,
+                    existingRevision.source == EntryMutationSource.csvImport.rawValue,
+                    existingRevision.revision == 1,
+                    existingRevision.kind == row.values.kind.rawValue,
+                    existingRevision.localDay == row.values.day.key,
+                    existingRevision.minutes == row.values.minutes,
+                    existingRevision.note == row.values.note
+                else {
+                    throw CSVImportRepositoryError.identityCollision
+                }
+                throw CSVImportRepositoryError.transactionFailed
+            }
+
+            if let matching = activeManualEntries.first(where: {
+                !consumedManualIDs.contains($0.id)
+                    && $0.entry.kind == row.values.kind
+                    && $0.entry.day == row.values.day
+                    && $0.entry.minutes == row.values.minutes
+                    && $0.entry.note == row.values.note
+            }) {
+                consumedManualIDs.insert(matching.id)
+                possibleMatches.append(row)
+            } else {
+                newRows.append(row)
+            }
+        }
+
+        return CSVImportClassification(
+            previouslyImported: previouslyImported,
+            possibleMatches: possibleMatches,
+            newRows: newRows
+        )
+    }
+
+    static func csvImportResult(
+        plan: CSVImportRetryPlan,
+        importedCount: Int? = nil
+    ) -> CSVImportResult {
+        let imported = importedCount ?? plan.selectedRows.count
+        guard imported > 0 else {
+            return CSVImportResult(
+                importedCount: 0,
+                previouslyImportedCount: plan.previouslyImportedCount,
+                skippedPossibleMatchCount: plan.skippedPossibleMatchCount,
+                undoToken: nil
+            )
+        }
+        let members = plan.selectedRows.map {
+            CSVImportUndoMember(
+                entryID: $0.entryID,
+                importMutationID: $0.mutationID,
+                expectedRevision: 1,
+                undoMutationID: csvImportUndoMutationID(
+                    entryID: $0.entryID,
+                    importMutationID: $0.mutationID
+                )
+            )
+        }
+        let token = CSVImportUndoToken(
+            id: csvImportUndoTokenID(members: members),
+            members: members,
+            importedAt: plan.authorizationTime,
+            expiresAt: plan.authorizationTime.addingTimeInterval(Self.undoWindow)
+        )
+        return CSVImportResult(
+            importedCount: imported,
+            previouslyImportedCount: plan.previouslyImportedCount,
+            skippedPossibleMatchCount: plan.skippedPossibleMatchCount,
+            undoToken: token
+        )
+    }
+
+    func applyCSVImportOnce(
+        _ document: CSVImportDocument,
+        policy: CSVImportDuplicatePolicy,
+        authorizationTime: Date
+    ) throws -> CSVImportResult {
+        try performMutation { context in
+            let before = try Self.snapshot(in: context)
+            let classification = try Self.classifyCSVImport(document, in: before)
+            let selectedRows: [CSVImportRow]
+            let skippedPossibleMatchCount: Int
+            switch policy {
+            case .skipPossibleMatches:
+                selectedRows = classification.newRows
+                skippedPossibleMatchCount = classification.possibleMatches.count
+            case .includePossibleMatches:
+                selectedRows = classification.newRows + classification.possibleMatches
+                skippedPossibleMatchCount = 0
+            }
+
+            let plan = CSVImportRetryPlan(
+                selectedRows: selectedRows,
+                previouslyImportedCount: classification.previouslyImported.count,
+                skippedPossibleMatchCount: skippedPossibleMatchCount,
+                authorizationTime: authorizationTime
+            )
+            guard !selectedRows.isEmpty else {
+                return Self.csvImportResult(plan: plan, importedCount: 0)
+            }
+
+            for row in selectedRows {
+                guard
+                    try Self.entry(in: context, id: row.entryID) == nil,
+                    try Self.revision(in: context, mutationID: row.mutationID) == nil
+                else {
+                    throw CSVImportRepositoryError.identityCollision
+                }
+                let values: EntryMutationValues
+                do {
+                    guard let validated = try Self.validatedValues(
+                        row.values,
+                        in: context,
+                        authorizationTime: authorizationTime
+                    ) else {
+                        throw CSVImportRepositoryError.validationFailed
+                    }
+                    values = validated
+                } catch let error as CSVImportRepositoryError {
+                    throw error
+                } catch {
+                    throw CSVImportRepositoryError.validationFailed
+                }
+
+                let object = context.insert(EntryEntity.self)
+                object.id = row.entryID
+                Self.write(values, to: object)
+                object.createdAt = authorizationTime
+                object.updatedAt = authorizationTime
+                object.deletedAt = nil
+                object.source = EntryMutationSource.csvImport.rawValue
+                object.revision = 1
+                object.lastMutationID = row.mutationID
+                Self.appendRevision(
+                    for: object,
+                    in: context,
+                    mutationID: row.mutationID,
+                    parentMutationID: nil,
+                    operation: EntryMutationOperation.create.rawValue,
+                    source: EntryMutationSource.csvImport.rawValue,
+                    occurredAt: authorizationTime
+                )
+            }
+
+            do {
+                try Self.reconcileReportLifecycleAfterChange(
+                    in: context,
+                    before: before,
+                    asOf: authorizationTime
+                )
+            } catch {
+                throw CSVImportRepositoryError.transactionFailed
+            }
+
+            do {
+                try self.csvImportFaultInjector(.importBeforeSave)
+                try Self.saveIfNeeded(context)
+            } catch {
+                throw CSVImportRepositoryError.transactionFailed
+            }
+
+            do {
+                try self.csvImportFaultInjector(.importAfterSaveBeforeReadback)
+                context.refreshAllObjects()
+                let after = try Self.snapshot(in: context)
+                guard selectedRows.allSatisfy({ Self.csvImportRowIsExact($0, in: after) }) else {
+                    throw CSVImportRepositoryError.verificationFailed
+                }
+                let finalClassification = try Self.classifyCSVImport(document, in: after)
+                guard
+                    finalClassification.previouslyImported.count
+                        == classification.previouslyImported.count + selectedRows.count,
+                    finalClassification.possibleMatches.count == skippedPossibleMatchCount,
+                    finalClassification.newRows.isEmpty
+                else {
+                    throw CSVImportRepositoryError.verificationFailed
+                }
+            } catch {
+                throw CSVImportRetry.import(plan)
+            }
+            return Self.csvImportResult(plan: plan)
+        }
+    }
+
+    func replayOrRetryCSVImport(
+        _ plan: CSVImportRetryPlan,
+        document: CSVImportDocument,
+        policy: CSVImportDuplicatePolicy,
+        authorizationTime: Date
+    ) throws -> CSVImportResult {
+        let statuses = try perform { context in
+            let snapshot = try Self.snapshot(in: context)
+            return plan.selectedRows.map { Self.csvImportReplayStatus($0, in: snapshot) }
+        }
+        if statuses.allSatisfy({ $0 == .exact }) {
+            return Self.csvImportResult(plan: plan)
+        }
+        guard statuses.allSatisfy({ $0 == .absent }) else {
+            throw CSVImportRepositoryError.verificationFailed
+        }
+        return try applyCSVImportOnce(
+            document,
+            policy: policy,
+            authorizationTime: authorizationTime
+        )
+    }
+
+    static func csvImportReplayStatus(
+        _ row: CSVImportRow,
+        in snapshot: LedgerSnapshot
+    ) -> CSVImportReplayStatus {
+        if Self.csvImportRowIsExact(row, in: snapshot) { return .exact }
+        if snapshot.entries.contains(where: { $0.id == row.entryID })
+            || snapshot.entryRevisions.contains(where: { $0.mutationID == row.mutationID }) {
+            return .mismatch
+        }
+        return .absent
+    }
+
+    static func csvImportRowIsExact(
+        _ row: CSVImportRow,
+        in snapshot: LedgerSnapshot
+    ) -> Bool {
+        guard let entry = snapshot.entries.first(where: { $0.id == row.entryID }) else {
+            return false
+        }
+        guard
+            !entry.isDeleted,
+            entry.revision == 1,
+            entry.lastMutationID == row.mutationID,
+            entry.source == EntryMutationSource.csvImport.rawValue,
+            entry.entry.kind == row.values.kind,
+            entry.entry.day == row.values.day,
+            entry.entry.minutes == row.values.minutes,
+            entry.entry.note == row.values.note,
+            let revision = snapshot.entryRevisions.first(where: {
+                $0.mutationID == row.mutationID
+            })
+        else { return false }
+        return revision.entryID == row.entryID
+            && revision.revision == 1
+            && revision.operation == EntryMutationOperation.create.rawValue
+            && revision.source == EntryMutationSource.csvImport.rawValue
+            && revision.kind == row.values.kind.rawValue
+            && revision.localDay == row.values.day.key
+            && revision.minutes == row.values.minutes
+            && revision.note == row.values.note
+    }
+
+    static func validateCSVImportUndoToken(
+        _ token: CSVImportUndoToken,
+        asOf now: Date
+    ) throws {
+        guard
+            token.expiresAt == token.importedAt.addingTimeInterval(Self.undoWindow),
+            now >= token.importedAt,
+            now < token.expiresAt
+        else { throw CSVImportRepositoryError.undoExpired }
+        guard
+            !token.members.isEmpty
+        else { throw CSVImportRepositoryError.undoUnavailable }
+        let entryIDs = token.members.map(\.entryID)
+        let mutationIDs = token.members.map(\.importMutationID)
+        let undoIDs = token.members.map(\.undoMutationID)
+        guard
+            Set(entryIDs).count == entryIDs.count,
+            Set(mutationIDs).count == mutationIDs.count,
+            Set(undoIDs).count == undoIDs.count,
+            token.members.allSatisfy({
+                $0.expectedRevision == 1
+                    && $0.undoMutationID == Self.csvImportUndoMutationID(
+                        entryID: $0.entryID,
+                        importMutationID: $0.importMutationID
+                    )
+            })
+        else { throw CSVImportRepositoryError.undoUnavailable }
+    }
+
+    static func csvImportUndoMemberState(
+        _ member: CSVImportUndoMember,
+        in snapshot: LedgerSnapshot
+    ) -> CSVImportUndoMemberState {
+        guard let entry = snapshot.entries.first(where: { $0.id == member.entryID }) else {
+            return .mismatch
+        }
+        guard let importedRevision = snapshot.entryRevisions.first(where: {
+            $0.mutationID == member.importMutationID
+        }) else { return .mismatch }
+        guard
+            importedRevision.entryID == member.entryID,
+            importedRevision.revision == member.expectedRevision,
+            importedRevision.operation == EntryMutationOperation.create.rawValue,
+            importedRevision.source == EntryMutationSource.csvImport.rawValue
+        else { return .mismatch }
+
+        if entry.revision == member.expectedRevision,
+           !entry.isDeleted,
+           entry.lastMutationID == member.importMutationID {
+            guard !snapshot.entryRevisions.contains(where: {
+                $0.mutationID == member.undoMutationID
+            }) else { return .mismatch }
+            return .active
+        }
+
+        guard
+            entry.isDeleted,
+            entry.revision == member.expectedRevision + 1,
+            entry.lastMutationID == member.undoMutationID,
+            let undoRevision = snapshot.entryRevisions.first(where: {
+                $0.mutationID == member.undoMutationID
+            }),
+            undoRevision.entryID == member.entryID,
+            undoRevision.revision == member.expectedRevision + 1,
+            undoRevision.operation == EntryMutationOperation.undo.rawValue,
+            undoRevision.source == EntryMutationSource.undo.rawValue,
+            undoRevision.revertedMutationID == member.importMutationID
+        else { return .mismatch }
+        return .alreadyUndone
+    }
+
+    func undoCSVImportOnce(
+        _ token: CSVImportUndoToken,
+        authorizationTime: Date
+    ) throws -> CSVImportUndoResult {
+        try performMutation { context in
+            try Self.validateCSVImportUndoToken(token, asOf: authorizationTime)
+            let before = try Self.snapshot(in: context)
+            let states = token.members.map {
+                Self.csvImportUndoMemberState($0, in: before)
+            }
+            if states.allSatisfy({ $0 == .alreadyUndone }) {
+                return CSVImportUndoResult(deletedCount: token.members.count)
+            }
+            guard states.allSatisfy({ $0 == .active }) else {
+                throw CSVImportRepositoryError.undoUnavailable
+            }
+
+            for member in token.members {
+                guard let object = try Self.entry(in: context, id: member.entryID) else {
+                    throw CSVImportRepositoryError.undoUnavailable
+                }
+                guard
+                    object.revision == member.expectedRevision,
+                    object.deletedAt == nil,
+                    object.lastMutationID == member.importMutationID
+                else { throw CSVImportRepositoryError.undoUnavailable }
+                let nextRevision = try Self.nextRevision(after: object.revision)
+                let parentMutationID = object.lastMutationID
+                object.deletedAt = authorizationTime
+                object.updatedAt = authorizationTime
+                object.source = EntryMutationSource.undo.rawValue
+                object.revision = nextRevision
+                object.lastMutationID = member.undoMutationID
+                Self.appendRevision(
+                    for: object,
+                    in: context,
+                    mutationID: member.undoMutationID,
+                    parentMutationID: parentMutationID,
+                    revertedMutationID: member.importMutationID,
+                    operation: EntryMutationOperation.undo.rawValue,
+                    source: EntryMutationSource.undo.rawValue,
+                    occurredAt: authorizationTime
+                )
+            }
+
+            do {
+                try Self.reconcileReportLifecycleAfterChange(
+                    in: context,
+                    before: before,
+                    asOf: authorizationTime
+                )
+                try self.csvImportFaultInjector(.undoBeforeSave)
+                try Self.saveIfNeeded(context)
+            } catch {
+                throw CSVImportRepositoryError.transactionFailed
+            }
+
+            do {
+                try self.csvImportFaultInjector(.undoAfterSaveBeforeReadback)
+                context.refreshAllObjects()
+                let after = try Self.snapshot(in: context)
+                guard token.members.allSatisfy({
+                    Self.csvImportUndoMemberState($0, in: after) == .alreadyUndone
+                }) else {
+                    throw CSVImportRepositoryError.verificationFailed
+                }
+            } catch {
+                throw CSVImportRetry.undo(
+                    CSVImportUndoRetryPlan(
+                        token: token,
+                        authorizationTime: authorizationTime
+                    )
+                )
+            }
+            return CSVImportUndoResult(deletedCount: token.members.count)
+        }
+    }
+
+    func replayOrRetryCSVImportUndo(
+        _ plan: CSVImportUndoRetryPlan,
+        authorizationTime: Date
+    ) throws -> CSVImportUndoResult {
+        try Self.validateCSVImportUndoToken(plan.token, asOf: authorizationTime)
+        let states = try perform { context in
+            let snapshot = try Self.snapshot(in: context)
+            return plan.token.members.map {
+                Self.csvImportUndoMemberState($0, in: snapshot)
+            }
+        }
+        if states.allSatisfy({ $0 == .alreadyUndone }) {
+            return CSVImportUndoResult(deletedCount: plan.token.members.count)
+        }
+        guard states.allSatisfy({ $0 == .active }) else {
+            throw CSVImportRepositoryError.undoUnavailable
+        }
+        return try undoCSVImportOnce(
+            plan.token,
+            authorizationTime: authorizationTime
+        )
+    }
+
+    static func csvImportUndoMutationID(
+        entryID: UUID,
+        importMutationID: UUID
+    ) -> UUID {
+        deterministicCSVImportUUID(fields: [
+            CSVImportIdentity.namespace,
+            "undo",
+            entryID.uuidString,
+            importMutationID.uuidString
+        ])
+    }
+
+    static func csvImportUndoTokenID(
+        members: [CSVImportUndoMember]
+    ) -> UUID {
+        var fields = [CSVImportIdentity.namespace, "batch-undo"]
+        for member in members.sorted(by: { $0.entryID.uuidString < $1.entryID.uuidString }) {
+            fields.append(member.entryID.uuidString)
+            fields.append(member.importMutationID.uuidString)
+            fields.append(member.undoMutationID.uuidString)
+        }
+        return deterministicCSVImportUUID(fields: fields)
+    }
+
+    static func deterministicCSVImportUUID(fields: [String]) -> UUID {
+        let digest = SHA256.hash(data: CSVImportIdentity.frame(fields: fields))
+        var bytes = Array(digest.prefix(16))
+        bytes[6] = (bytes[6] & 0x0f) | 0x80
+        bytes[8] = (bytes[8] & 0x3f) | 0x80
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
+    }
+
     /// Snapshot and raw DTO fetches must observe one Core Data generation even
     /// when a CloudKit/import context saves outside this repository actor.
     /// Query generations are unavailable for the in-memory store used by unit
@@ -1326,7 +2085,8 @@ private extension CoreDataLedgerRepository {
                     .shortcut,
                     .widget,
                     .watch,
-                    .timer
+                    .timer,
+                    .csvImport
                 ].contains(command.source)
             else { throw EntryMutationError.invalidCommand }
         case .update:
@@ -1492,7 +2252,11 @@ private extension CoreDataLedgerRepository {
         asOf: Date
     ) throws -> EntryUndoCandidate? {
         let request: NSFetchRequest<EntryRevisionEntity> = EntryRevisionEntity.request()
-        request.predicate = NSPredicate(format: "source != %@", EntryMutationSource.migration.rawValue)
+        request.predicate = NSPredicate(
+            format: "source != %@ AND source != %@",
+            EntryMutationSource.migration.rawValue,
+            EntryMutationSource.csvImport.rawValue
+        )
         request.sortDescriptors = [
             NSSortDescriptor(key: "occurredAt", ascending: false),
             NSSortDescriptor(key: "mutationID", ascending: false)
