@@ -41,6 +41,9 @@ struct QuickEntryView: View {
                     if let proposal = model.oneTapProposal {
                         oneTapAction(proposal)
                     }
+                    if shouldShowQuickSurfaceTimer {
+                        QuickSurfaceTimerRow(manualDraftIsPristine: manualDraftIsPristine)
+                    }
                     entryCard
                     monthSummary
                 }
@@ -275,6 +278,19 @@ struct QuickEntryView: View {
             minutes = 0
             note = ""
         }
+    }
+
+    private var shouldShowQuickSurfaceTimer: Bool {
+        model.quickSurfacePreferences.timerVisible || model.quickSurfaceTimerWasRequested
+    }
+
+    private var manualDraftIsPristine: Bool {
+        kind == .service
+            && LocalDay(date, calendar: .hourleaf) == LocalDay(model.currentDate, calendar: .hourleaf)
+            && hours == 0
+            && minutes == 0
+            && note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !noteFocused
     }
 
     private func resetDraft() {

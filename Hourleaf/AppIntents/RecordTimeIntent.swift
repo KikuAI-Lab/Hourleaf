@@ -24,6 +24,32 @@ enum ShortcutEntryKind: String, AppEnum {
     }
 }
 
+struct QuickSurfaceIntentProjectionRefresher: Sendable {
+    private let operation: @Sendable () async -> Void
+
+    static let disabled = QuickSurfaceIntentProjectionRefresher(operation: {})
+
+    init(
+        repository: CoreDataLedgerRepository,
+        quickSurfaceHost: QuickSurfaceHostController
+    ) {
+        operation = {
+            guard quickSurfaceHost.capabilityExpected,
+                  let snapshot = try? await repository.ledgerSnapshot()
+            else { return }
+            _ = await quickSurfaceHost.reconcile(snapshot)
+        }
+    }
+
+    private init(operation: @escaping @Sendable () async -> Void) {
+        self.operation = operation
+    }
+
+    func refreshAfterMutation() async {
+        await operation()
+    }
+}
+
 /// Registers the exact objects built by `HourleafApp` for production and an
 /// isolated manager for tests. Neither dependency has a fallback factory.
 enum HourleafAppIntentDependencies {
@@ -32,6 +58,7 @@ enum HourleafAppIntentDependencies {
     struct Registration: Sendable {
         let repository: CoreDataLedgerRepository
         let router: AppRouter
+        let quickSurfaceRefresher: QuickSurfaceIntentProjectionRefresher
 
         func resolveRepository() -> CoreDataLedgerRepository {
             repository
@@ -41,17 +68,27 @@ enum HourleafAppIntentDependencies {
         func resolveRouter() -> AppRouter {
             router
         }
+
+        func resolveQuickSurfaceRefresher() -> QuickSurfaceIntentProjectionRefresher {
+            quickSurfaceRefresher
+        }
     }
 
     @discardableResult
     static func register(
         repository: CoreDataLedgerRepository,
         router: AppRouter,
+        quickSurfaceRefresher: QuickSurfaceIntentProjectionRefresher = .disabled,
         manager: AppDependencyManager = .shared
     ) -> Registration {
-        let registration = Registration(repository: repository, router: router)
+        let registration = Registration(
+            repository: repository,
+            router: router,
+            quickSurfaceRefresher: quickSurfaceRefresher
+        )
         manager.add(dependency: registration.repository)
         manager.add(dependency: registration.router)
+        manager.add(dependency: registration.quickSurfaceRefresher)
         return registration
     }
 }
@@ -102,10 +139,12 @@ struct RecordTimeIntent: AppIntent {
 
     @AppDependency private var repository: CoreDataLedgerRepository
     @AppDependency private var router: AppRouter
+    @AppDependency private var quickSurfaceRefresher: QuickSurfaceIntentProjectionRefresher
 
     init() {
         _repository = AppDependency()
         _router = AppDependency()
+        _quickSurfaceRefresher = AppDependency()
     }
 
     init(
@@ -125,6 +164,7 @@ struct RecordTimeIntent: AppIntent {
         self.date = date
         _repository = AppDependency(manager: dependencyManager)
         _router = AppDependency(manager: dependencyManager)
+        _quickSurfaceRefresher = AppDependency(manager: dependencyManager)
     }
 
     static var parameterSummary: some ParameterSummary {
@@ -137,7 +177,11 @@ struct RecordTimeIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        try await persist(using: repository, notifying: router)
+        try await persist(
+            using: repository,
+            notifying: router,
+            refreshing: quickSurfaceRefresher
+        )
         return .result(dialog: IntentDialog("intent.record.success"))
     }
 
@@ -146,7 +190,8 @@ struct RecordTimeIntent: AppIntent {
     /// `@AppDependency` in `perform()` above.
     func persist(
         using repository: CoreDataLedgerRepository,
-        notifying router: AppRouter? = nil
+        notifying router: AppRouter? = nil,
+        refreshing quickSurfaceRefresher: QuickSurfaceIntentProjectionRefresher? = nil
     ) async throws {
         let now = Date.now
         let mutationID = UUID()
@@ -164,6 +209,7 @@ struct RecordTimeIntent: AppIntent {
                 occurredAt: now,
                 source: .shortcut
             )
+            await quickSurfaceRefresher?.refreshAfterMutation()
             if let router {
                 await router.notifyLedgerChanged()
             }

@@ -109,6 +109,7 @@ struct DataManagementActions {
                 }
             },
             previewRestore: { url in
+                try await appModel.requireQuickSurfaceIdleForRestore()
                 let preview = try await restoreCoordinator.prepare(from: url)
                 return DataManagementRestorePreview(
                     candidateID: preview.candidateID,
@@ -120,6 +121,9 @@ struct DataManagementActions {
                     throw HourleafRestoreError.candidateUnavailable
                 }
                 await appModel.prepareForWholeStoreRestore()
+                // Re-read immediately before the destructive store swap. The
+                // preview may have remained open while a timer was started.
+                try await appModel.requireQuickSurfaceIdleForRestore()
                 _ = try await restoreCoordinator.confirm(candidateID)
                 backupStatus.requestRefresh()
                 do {

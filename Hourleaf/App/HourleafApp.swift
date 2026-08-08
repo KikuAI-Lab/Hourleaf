@@ -195,9 +195,15 @@ final class HourleafAppLauncher: ObservableObject {
         router: AppRouter,
         reminderScheduler: any ReminderScheduling
     ) -> HourleafAppSession {
+        let quickSurfaceHost = QuickSurfaceHostController(
+            repository: runtime.repository,
+            capability: makeQuickSurfaceCapability(),
+            now: clock
+        )
         let model = AppModel(
             repository: runtime.repository,
             reminderScheduler: reminderScheduler,
+            quickSurfaceHost: quickSurfaceHost,
             now: clock
         )
         let restoreCoordinator = HourleafRestoreCoordinator(
@@ -214,7 +220,11 @@ final class HourleafAppLauncher: ObservableObject {
 
         HourleafAppIntentDependencies.register(
             repository: runtime.repository,
-            router: router
+            router: router,
+            quickSurfaceRefresher: QuickSurfaceIntentProjectionRefresher(
+                repository: runtime.repository,
+                quickSurfaceHost: quickSurfaceHost
+            )
         )
         HourleafShortcuts.updateAppShortcutParameters()
 
@@ -225,6 +235,65 @@ final class HourleafAppLauncher: ObservableObject {
             router: router,
             dataManagementActions: actions
         )
+    }
+
+    /// M2 exercises host integration against a disposable UI-test root only.
+    /// Production intentionally remains core-only until the separate owner
+    /// signing/App Group gate is approved and read back.
+    private func makeQuickSurfaceCapability() -> QuickSurfaceHostCapability {
+#if DEBUG
+        guard isUITesting, arguments.contains("-quickSurfacesUITest") else {
+            return .notExpected
+        }
+        guard
+            let flag = arguments.firstIndex(of: "-quickSurfacesTestID"),
+            arguments.indices.contains(flag + 1),
+            let identifier = UUID(uuidString: arguments[flag + 1])
+        else {
+            return .expectedButUnavailable
+        }
+
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "Hourleaf-UITest-QuickSurfaces-\(identifier.uuidString.lowercased())",
+            isDirectory: true
+        )
+        do {
+            if arguments.contains("-resetQuickSurfacesUITest"),
+               FileManager.default.fileExists(atPath: root.path) {
+                try FileManager.default.removeItem(at: root)
+            }
+            try FileManager.default.createDirectory(
+                at: root,
+                withIntermediateDirectories: true,
+                attributes: [
+                    .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication
+                ]
+            )
+            // CoreSimulator stores app data on the host file system, where
+            // `NSFileProtectionKey` has no readable value. Keep the production
+            // store strict while giving this disposable DEBUG-only UI-test
+            // root a deterministic protection readback. Backup exclusion and
+            // every other store invariant still use the real implementation.
+#if targetEnvironment(simulator)
+            let attributeIO = QuickSurfaceStateStoreAttributeIO(
+                setProtection: { _ in },
+                readProtection: { _ in QuickSurfaceStateStoreV1.fileProtection }
+            )
+            return .available(
+                QuickSurfaceStateStoreV1(
+                    rootDirectory: root,
+                    attributeIO: attributeIO
+                )
+            )
+#else
+            return .available(QuickSurfaceStateStoreV1(rootDirectory: root))
+#endif
+        } catch {
+            return .expectedButUnavailable
+        }
+#else
+        return .notExpected
+#endif
     }
 
     private func initialize(_ session: HourleafAppSession) async {
@@ -374,6 +443,17 @@ final class HourleafAppLauncher: ObservableObject {
             } else {
                 await model.saveSettings(settings)
             }
+#if DEBUG
+            // UI tests use an in-memory Core Data store on every launch while
+            // intentionally preserving the disposable quick-surface sidecar.
+            // Re-enable the host preference through the real asymmetric flow
+            // so a running session remains visible after process relaunch.
+            if arguments.contains("-quickSurfacesUITestTimerVisible"),
+               arguments.contains("-quickSurfacesUITest"),
+               !model.quickSurfacePreferences.timerVisible {
+                await model.updateQuickSurfaceTimerVisibility(true)
+            }
+#endif
             if arguments.contains("-enablePlanningUITest") {
                 await model.updatePlanningVisibility(true)
             }

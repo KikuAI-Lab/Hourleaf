@@ -10,6 +10,7 @@ struct SettingsScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var backupStatus: BackupConfidenceStatusModel
     @State private var showAddReminder = false
+    @State private var showQuickSurfaceResetConfirmation = false
     @State private var creditLabelDraft = ""
     @State private var creditLabelLanguage: ReportLanguage = .preferredForCurrentLocale
     @FocusState private var creditLabelIsFocused: Bool
@@ -134,6 +135,70 @@ struct SettingsScreen: View {
                         .accessibilityIdentifier("shortcutsFooter")
                 }
 
+                if model.quickSurfaceAvailability.isVisibleInSettings {
+                    Section {
+                        if model.quickSurfaceAvailability.allowsInteraction {
+                            Toggle(
+                                "quick_surfaces.settings.timer_toggle",
+                                isOn: Binding(
+                                    get: { model.quickSurfacePreferences.timerVisible },
+                                    set: { value in
+                                        Task { await model.updateQuickSurfaceTimerVisibility(value) }
+                                    }
+                                )
+                            )
+                            .disabled(model.isQuickSurfaceActionInFlight)
+                            .accessibilityIdentifier("quickSurfaceTimerToggle")
+
+                            Toggle(
+                                "quick_surfaces.settings.show_monthly_totals",
+                                isOn: Binding(
+                                    get: { model.quickSurfacePreferences.privacyMode == .showTotals },
+                                    set: { value in
+                                        Task {
+                                            await model.updateQuickSurfacePrivacyMode(
+                                                value ? .showTotals : .hideTotals
+                                            )
+                                        }
+                                    }
+                                )
+                            )
+                            .disabled(model.isQuickSurfaceActionInFlight)
+                            .accessibilityIdentifier("quickSurfaceTotalsToggle")
+                        } else {
+                            Label(
+                                model.quickSurfaceAvailability == .resetRequired
+                                    ? "quick_surfaces.settings.corrupt"
+                                    : "quick_surfaces.settings.unavailable",
+                                systemImage: "exclamationmark.triangle"
+                            )
+                            .foregroundStyle(.secondary)
+                            Text(
+                                model.quickSurfaceAvailability == .resetRequired
+                                    ? "quick_surfaces.settings.read_only"
+                                    : "quick_surfaces.settings.unavailable_detail"
+                            )
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+
+                            if model.quickSurfaceAvailability == .resetRequired {
+                                Button(role: .destructive) {
+                                    showQuickSurfaceResetConfirmation = true
+                                } label: {
+                                    Label("quick_surfaces.settings.reset", systemImage: "arrow.counterclockwise")
+                                }
+                                .disabled(model.isQuickSurfaceActionInFlight)
+                                .accessibilityIdentifier("resetQuickSurfacesButton")
+                            }
+                        }
+                    } header: {
+                        Text("quick_surfaces.settings.title")
+                    } footer: {
+                        Text("quick_surfaces.settings.footer")
+                            .accessibilityIdentifier("quickSurfacesFooter")
+                    }
+                }
+
                 Section {
                     NavigationLink {
                         DataManagementView(actions: dataManagementActions)
@@ -204,6 +269,18 @@ struct SettingsScreen: View {
             .sheet(isPresented: $showAddReminder) {
                 AddReminderView()
                     .environmentObject(model)
+            }
+            .confirmationDialog(
+                "quick_surfaces.settings.reset.title",
+                isPresented: $showQuickSurfaceResetConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("quick_surfaces.settings.reset.confirm", role: .destructive) {
+                    Task { _ = await model.resetQuickSurfaceState() }
+                }
+                Button("common.cancel", role: .cancel) {}
+            } message: {
+                Text("quick_surfaces.settings.reset.message")
             }
         }
     }

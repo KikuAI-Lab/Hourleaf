@@ -266,6 +266,123 @@ final class AppIntentTests: XCTestCase {
         XCTAssertEqual(model.undoCandidate?.entryID, model.entries.first?.id)
     }
 
+    func testRecordIntentRefreshesQuickSurfaceProjectionBeforeReturning() async throws {
+        let repository = try await makeRepository()
+        try await repository.saveQuickSurfacePreferences(
+            QuickSurfacePreferences(timerVisible: false, privacyMode: .showTotals)
+        )
+        let root = try QuickSurfaceStoreTestSupport.makeSandboxRoot()
+        defer { QuickSurfaceStoreTestSupport.cleanup(root) }
+        let attributeLedger = QuickSurfaceStoreTestSupport.makeAttributeLedger()
+        let publishGate = IntentQuickSurfacePublishGate()
+        let store = QuickSurfaceStateStoreV1(
+            rootDirectory: root,
+            faults: QuickSurfaceStateStoreFaults { point in
+                publishGate.interceptFirstPublish(point)
+            },
+            attributeIO: QuickSurfaceStoreTestSupport.simulatedAttributeIO(
+                ledger: attributeLedger
+            )
+        )
+        let entryDate = Date.now
+        let quickSurfaceHost = QuickSurfaceHostController(
+            repository: repository,
+            capability: .available(store),
+            calendar: .hourleaf,
+            timeZone: .autoupdatingCurrent,
+            now: { entryDate }
+        )
+        let refresher = QuickSurfaceIntentProjectionRefresher(
+            repository: repository,
+            quickSurfaceHost: quickSurfaceHost
+        )
+        let router = AppRouter()
+        let manager = makeDependencyManager(repository: repository, router: router)
+
+        let persistTask = Task {
+            try await RecordTimeIntent(
+                kind: .service,
+                hours: 1,
+                minutes: 15,
+                date: entryDate,
+                dependencyManager: manager
+            ).persist(
+                using: repository,
+                notifying: router,
+                refreshing: refresher
+            )
+        }
+
+        await fulfillment(of: [publishGate.reachedExpectation], timeout: 2)
+        XCTAssertTrue(publishGate.wasIntercepted)
+        XCTAssertEqual(router.ledgerChangeGeneration, 0)
+        publishGate.release()
+        try await persistTask.value
+
+        let state = try store.read()
+        XCTAssertEqual(state.projection.privacyMode, .showTotals)
+        XCTAssertEqual(state.projection.monthKey, MonthKey(entryDate, calendar: .hourleaf).key)
+        XCTAssertEqual(state.projection.serviceMinutes, 75)
+        XCTAssertEqual(state.projection.creditMinutes, 0)
+        XCTAssertEqual(router.ledgerChangeGeneration, 1)
+    }
+
+    func testQuickSurfaceRefreshFailureCannotUndoShortcutWriteOrSuppressSignal() async throws {
+        let repository = try await makeRepository()
+        try await repository.saveQuickSurfacePreferences(
+            QuickSurfacePreferences(timerVisible: false, privacyMode: .showTotals)
+        )
+        let root = try QuickSurfaceStoreTestSupport.makeSandboxRoot()
+        defer { QuickSurfaceStoreTestSupport.cleanup(root) }
+        let attributeLedger = QuickSurfaceStoreTestSupport.makeAttributeLedger()
+        let store = QuickSurfaceStateStoreV1(
+            rootDirectory: root,
+            faults: QuickSurfaceStateStoreFaults { point in
+                guard case .beforePublish = point else { return }
+                throw QuickSurfaceStoreInjectedError.marker
+            },
+            attributeIO: QuickSurfaceStoreTestSupport.simulatedAttributeIO(
+                ledger: attributeLedger
+            )
+        )
+        let entryDate = Date.now
+        let quickSurfaceHost = QuickSurfaceHostController(
+            repository: repository,
+            capability: .available(store),
+            calendar: .hourleaf,
+            timeZone: .autoupdatingCurrent,
+            now: { entryDate }
+        )
+        let refresher = QuickSurfaceIntentProjectionRefresher(
+            repository: repository,
+            quickSurfaceHost: quickSurfaceHost
+        )
+        let router = AppRouter()
+        let manager = makeDependencyManager(repository: repository, router: router)
+
+        try await RecordTimeIntent(
+            kind: .credit,
+            hours: 0,
+            minutes: 45,
+            date: entryDate,
+            dependencyManager: manager
+        ).persist(
+            using: repository,
+            notifying: router,
+            refreshing: refresher
+        )
+
+        let snapshot = try await repository.ledgerSnapshot()
+        XCTAssertEqual(snapshot.activeEntries.count, 1)
+        XCTAssertEqual(snapshot.activeEntries.first?.kind, .credit)
+        XCTAssertEqual(snapshot.activeEntries.first?.minutes, 45)
+        XCTAssertEqual(snapshot.entryRevisions.first?.source, EntryMutationSource.shortcut.rawValue)
+        XCTAssertEqual(router.ledgerChangeGeneration, 1)
+        XCTAssertThrowsError(try store.read()) { error in
+            XCTAssertEqual(error as? QuickSurfaceStateStoreError, .missingFile)
+        }
+    }
+
     func testEarlyLedgerSignalWaitsUntilInitialStartupIsReady() async throws {
         let repository = try await makeRepository()
         let router = AppRouter()
@@ -451,6 +568,36 @@ final class AppIntentTests: XCTestCase {
 private final class IntentTestReminderScheduler: ReminderScheduling {
     func requestAuthorization() async throws -> Bool { true }
     func reschedule(_ reminders: [ReminderSchedule]) async throws {}
+}
+
+private final class IntentQuickSurfacePublishGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private let continuation = DispatchSemaphore(value: 0)
+    private var didIntercept = false
+    let reachedExpectation = XCTestExpectation(
+        description: "Quick-surface projection reached its coordinated publish"
+    )
+
+    var wasIntercepted: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return didIntercept
+    }
+
+    func interceptFirstPublish(_ point: QuickSurfaceStateStoreFaultPoint) {
+        guard case .beforePublish = point else { return }
+        lock.lock()
+        let shouldIntercept = !didIntercept
+        didIntercept = true
+        lock.unlock()
+        guard shouldIntercept else { return }
+        reachedExpectation.fulfill()
+        continuation.wait()
+    }
+
+    func release() {
+        continuation.signal()
+    }
 }
 
 /// A test-target-only AppIntent exercises the framework's actual dependency

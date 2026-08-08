@@ -39,9 +39,12 @@ final class AppModel: ObservableObject {
     @Published private(set) var notificationAuthorizationStatus: ReminderAuthorizationStatus = .notDetermined
     @Published private(set) var quickEntryResetGeneration: UInt64 = 0
     @Published private(set) var isRepeatingLastEntry = false
+    @Published private(set) var quickSurfaceHostSnapshot: QuickSurfaceHostSnapshot = .unavailable
+    @Published private(set) var isQuickSurfaceActionInFlight = false
 
     let repository: any LedgerRepository
     private let reminderScheduler: ReminderScheduling
+    private let quickSurfaceHost: QuickSurfaceHostController
     private let now: @Sendable () -> Date
     private var latestLedgerSnapshot: LedgerSnapshot?
     private var initialSnapshotLoaded = false
@@ -62,12 +65,23 @@ final class AppModel: ObservableObject {
     init(
         repository: any LedgerRepository,
         reminderScheduler: ReminderScheduling,
+        quickSurfaceHost: QuickSurfaceHostController? = nil,
         now: @escaping @Sendable () -> Date = { .now }
     ) {
         let initialDate = now()
         let initialMonth = ReportReadiness.currentMonth(asOf: initialDate)
         self.repository = repository
         self.reminderScheduler = reminderScheduler
+        let resolvedQuickSurfaceHost = quickSurfaceHost
+            ?? QuickSurfaceHostController(repository: repository, now: now)
+        self.quickSurfaceHost = resolvedQuickSurfaceHost
+        quickSurfaceHostSnapshot = resolvedQuickSurfaceHost.capabilityAvailable
+            ? QuickSurfaceHostSnapshot(
+                availability: .stale,
+                preferences: .init(),
+                state: nil
+            )
+            : .unavailable
         self.now = now
         currentDate = initialDate
         currentMonth = initialMonth
@@ -80,6 +94,7 @@ final class AppModel: ObservableObject {
         initialSnapshotLoaded = false
         do {
             try await loadReconciledSnapshot(selectDefaultReportMonth: true)
+            await recoverQuickSurfaceFinalizationIfNeeded()
             await refreshUndoCandidate(showBanner: true)
             initialSnapshotLoaded = true
             if markReady { startupState = .ready }
@@ -221,6 +236,7 @@ final class AppModel: ObservableObject {
             storeRefreshShouldShowUndo = false
             do {
                 try await loadReconciledSnapshot(selectDefaultReportMonth: false)
+                await recoverQuickSurfaceFinalizationIfNeeded()
                 await refreshUndoCandidate(showBanner: shouldShowUndoBanner)
                 try await reconcileLoadedReminderState()
             } catch {
@@ -256,7 +272,7 @@ final class AppModel: ObservableObject {
 
             currentDate = refreshInstant
             currentMonth = refreshedMonth
-            apply(snapshot)
+            await applyAuthoritativeSnapshot(snapshot)
             updateSelectedReportMonth(
                 from: snapshot,
                 preferLatestClosed: selectDefaultReportMonth
@@ -280,14 +296,14 @@ final class AppModel: ObservableObject {
                     settingsSaveTask == nil,
                     generationBeforeFetch == settingsSaveGeneration
                 else { continue }
-                apply(snapshot)
+                await applyAuthoritativeSnapshot(snapshot)
                 return
             }
         }
 
         let snapshot = try await repository.ledgerSnapshot()
         if let requiredGeneration, requiredGeneration != settingsSaveGeneration { return }
-        apply(snapshot)
+        await applyAuthoritativeSnapshot(snapshot)
     }
 
     private func apply(_ snapshot: LedgerSnapshot) {
@@ -307,6 +323,266 @@ final class AppModel: ObservableObject {
         planningPreferences = planningPreferences(from: snapshot)
         dayAcknowledgements = snapshot.dayAcknowledgements
         updateSelectedReportMonth(from: snapshot, preferLatestClosed: false)
+    }
+
+    private func applyAuthoritativeSnapshot(_ snapshot: LedgerSnapshot) async {
+        apply(snapshot)
+        await reconcileQuickSurfaces(using: snapshot)
+    }
+
+    var quickSurfaceAvailability: QuickSurfaceHostAvailability {
+        quickSurfaceHostSnapshot.availability
+    }
+
+    var quickSurfacePreferences: QuickSurfacePreferences {
+        quickSurfaceHostSnapshot.preferences
+    }
+
+    var quickSurfaceState: QuickSurfaceStateV1? {
+        quickSurfaceHostSnapshot.state
+    }
+
+    var quickSurfaceTimerWasRequested: Bool {
+        latestLedgerSnapshot?.settingsMetadata.quickSurfacePreferences.timerVisible ?? false
+    }
+
+    private func reconcileQuickSurfaces(using snapshot: LedgerSnapshot) async {
+        guard quickSurfaceHost.capabilityExpected else {
+            quickSurfaceHostSnapshot = .unavailable
+            return
+        }
+        quickSurfaceHostSnapshot = await quickSurfaceHost.reconcile(snapshot)
+    }
+
+    func updateQuickSurfacePrivacyMode(_ mode: WidgetPrivacyMode) async {
+        guard !isQuickSurfaceActionInFlight else { return }
+        isQuickSurfaceActionInFlight = true
+        defer { isQuickSurfaceActionInFlight = false }
+        do {
+            let snapshot = try await authoritativeSnapshotForQuickSurfaces()
+            let update = try await quickSurfaceHost.setPrivacyMode(mode, snapshot: snapshot)
+            await applyAuthoritativeSnapshot(update.ledger)
+            quickSurfaceHostSnapshot = update.host
+        } catch {
+            await refreshQuickSurfaceStateAfterFailure()
+            presentQuickSurfaceError(error, fallbackKey: "quick_surfaces.settings.update_failed")
+        }
+    }
+
+    func updateQuickSurfaceTimerVisibility(_ isVisible: Bool) async {
+        guard !isQuickSurfaceActionInFlight else { return }
+        isQuickSurfaceActionInFlight = true
+        defer { isQuickSurfaceActionInFlight = false }
+        do {
+            let snapshot = try await authoritativeSnapshotForQuickSurfaces()
+            let update = try await quickSurfaceHost.setTimerVisible(isVisible, snapshot: snapshot)
+            await applyAuthoritativeSnapshot(update.ledger)
+            quickSurfaceHostSnapshot = update.host
+        } catch {
+            await refreshQuickSurfaceStateAfterFailure()
+            presentQuickSurfaceError(error, fallbackKey: "quick_surfaces.settings.update_failed")
+        }
+    }
+
+    func startQuickSurfaceTimer() async {
+        guard !isQuickSurfaceActionInFlight else { return }
+        isQuickSurfaceActionInFlight = true
+        defer { isQuickSurfaceActionInFlight = false }
+        do {
+            let state = try await quickSurfaceHost.startTimer()
+            acceptQuickSurfaceState(state)
+        } catch {
+            await refreshQuickSurfaceStateAfterFailure()
+            presentQuickSurfaceError(error, fallbackKey: "quick_surfaces.error.timer_start")
+        }
+    }
+
+    func stopQuickSurfaceTimer() async {
+        guard !isQuickSurfaceActionInFlight else { return }
+        isQuickSurfaceActionInFlight = true
+        defer { isQuickSurfaceActionInFlight = false }
+        do {
+            let state = try await quickSurfaceHost.stopTimer()
+            acceptQuickSurfaceState(state)
+        } catch {
+            await refreshQuickSurfaceStateAfterFailure()
+            let key: String.LocalizationValue = (error as? TimerSessionCommandError) == .invalidWallClock
+                ? "quick_surfaces.error.timer_clock"
+                : "quick_surfaces.error.timer_stop"
+            presentQuickSurfaceError(error, fallbackKey: key)
+        }
+    }
+
+    func discardQuickSurfaceReview(
+        sessionID: UUID,
+        mutationID: UUID,
+        entryID: UUID
+    ) async -> Bool {
+        guard !isQuickSurfaceActionInFlight else { return false }
+        isQuickSurfaceActionInFlight = true
+        defer { isQuickSurfaceActionInFlight = false }
+        do {
+            let state = try await quickSurfaceHost.discardReview(
+                sessionID: sessionID,
+                mutationID: mutationID,
+                entryID: entryID
+            )
+            acceptQuickSurfaceState(state)
+            return true
+        } catch {
+            await refreshQuickSurfaceStateAfterFailure()
+            presentQuickSurfaceError(error, fallbackKey: "quick_surfaces.error.timer_save")
+            return false
+        }
+    }
+
+    func saveQuickSurfaceReview(
+        sessionID: UUID,
+        mutationID: UUID,
+        entryID: UUID,
+        kind: EntryKind,
+        day: LocalDay,
+        minutes: Int
+    ) async -> Bool {
+        guard !isQuickSurfaceActionInFlight else { return false }
+        isQuickSurfaceActionInFlight = true
+        defer { isQuickSurfaceActionInFlight = false }
+        do {
+            let finalizing = try await quickSurfaceHost.authorizeReview(
+                sessionID: sessionID,
+                mutationID: mutationID,
+                entryID: entryID,
+                kind: kind,
+                day: day,
+                minutes: minutes
+            )
+            acceptQuickSurfaceState(finalizing)
+            let result = try await quickSurfaceHost.finalizeTimerEntry()
+            return await handleQuickSurfaceFinalizationResult(result, showError: true)
+        } catch {
+            await refreshQuickSurfaceStateAfterFailure()
+            presentQuickSurfaceError(error, fallbackKey: "quick_surfaces.error.timer_save")
+            return false
+        }
+    }
+
+    func retryQuickSurfaceFinalization() async -> Bool {
+        guard !isQuickSurfaceActionInFlight else { return false }
+        isQuickSurfaceActionInFlight = true
+        defer { isQuickSurfaceActionInFlight = false }
+        do {
+            let result = try await quickSurfaceHost.finalizeTimerEntry()
+            return await handleQuickSurfaceFinalizationResult(result, showError: true)
+        } catch {
+            await refreshQuickSurfaceStateAfterFailure()
+            presentQuickSurfaceError(error, fallbackKey: "quick_surfaces.error.timer_save")
+            return false
+        }
+    }
+
+    func resetQuickSurfaceState() async -> Bool {
+        guard !isQuickSurfaceActionInFlight else { return false }
+        isQuickSurfaceActionInFlight = true
+        defer { isQuickSurfaceActionInFlight = false }
+        do {
+            let snapshot = try await authoritativeSnapshotForQuickSurfaces()
+            quickSurfaceHostSnapshot = try await quickSurfaceHost.resetUnsavedState(using: snapshot)
+            return true
+        } catch {
+            await refreshQuickSurfaceStateAfterFailure()
+            presentQuickSurfaceError(error, fallbackKey: "quick_surfaces.settings.reset_failed")
+            return false
+        }
+    }
+
+    func requireQuickSurfaceIdleForRestore() async throws {
+        // Restore is gated by a fresh actor-owned read at both preview and
+        // confirmation; a cached model snapshot is not evidence of Idle.
+        let snapshot = try await repository.ledgerSnapshot()
+        try await quickSurfaceHost.requireIdleForRestore(using: snapshot)
+    }
+
+    private func authoritativeSnapshotForQuickSurfaces() async throws -> LedgerSnapshot {
+        let snapshot = try await repository.ledgerSnapshot()
+        await applyAuthoritativeSnapshot(snapshot)
+        return snapshot
+    }
+
+    private func acceptQuickSurfaceState(_ state: QuickSurfaceStateV1) {
+        quickSurfaceHostSnapshot = QuickSurfaceHostSnapshot(
+            availability: .ready,
+            preferences: quickSurfaceHostSnapshot.preferences,
+            state: state
+        )
+    }
+
+    private func refreshQuickSurfaceStateAfterFailure() async {
+        guard let snapshot = try? await repository.ledgerSnapshot() else {
+            quickSurfaceHostSnapshot = QuickSurfaceHostSnapshot(
+                availability: .stale,
+                preferences: .init(),
+                state: nil
+            )
+            return
+        }
+        await applyAuthoritativeSnapshot(snapshot)
+    }
+
+    private func recoverQuickSurfaceFinalizationIfNeeded() async {
+        guard !isQuickSurfaceActionInFlight else { return }
+        guard let state = quickSurfaceState, case .finalizing = state.timer else { return }
+        isQuickSurfaceActionInFlight = true
+        defer { isQuickSurfaceActionInFlight = false }
+        do {
+            let result = try await quickSurfaceHost.finalizeTimerEntry()
+            _ = await handleQuickSurfaceFinalizationResult(result, showError: true)
+        } catch {
+            await refreshQuickSurfaceStateAfterFailure()
+            presentQuickSurfaceError(error, fallbackKey: "quick_surfaces.error.timer_save")
+        }
+    }
+
+    private func handleQuickSurfaceFinalizationResult(
+        _ result: TimerEntryFinalizationResult,
+        showError: Bool
+    ) async -> Bool {
+        switch result {
+        case let .idle(receipt):
+            if let receipt {
+                await refreshAfterEntryMutation(receipt, showUndoBanner: true)
+            } else {
+                await refreshFromStore(showUndoBanner: false)
+            }
+            return true
+
+        case .returnedToReview:
+            await refreshQuickSurfaceStateAfterFailure()
+            if showError {
+                errorMessage = String(localized: "quick_surfaces.error.timer_save")
+            }
+            return false
+
+        case .noFinalizingState:
+            await refreshQuickSurfaceStateAfterFailure()
+            return false
+
+        case .finalizing:
+            await refreshQuickSurfaceStateAfterFailure()
+            if showError {
+                errorMessage = String(localized: "quick_surfaces.error.timer_save")
+            }
+            return false
+        }
+    }
+
+    private func presentQuickSurfaceError(_ error: Error, fallbackKey: String.LocalizationValue) {
+        if let hostError = error as? QuickSurfaceHostError,
+           let description = hostError.errorDescription {
+            errorMessage = description
+        } else {
+            errorMessage = String(localized: fallbackKey)
+        }
+        lastErrorDiagnostic = error.localizedDescription
     }
 
     private func planningPreferences(from snapshot: LedgerSnapshot) -> PlanningPreferences {
@@ -625,7 +901,7 @@ final class AppModel: ObservableObject {
                     reviewedAt: reviewedAt
                 )
             )
-            apply(ledger)
+            await applyAuthoritativeSnapshot(ledger)
             return true
         } catch {
             await handleLifecycleFailure(error)
@@ -658,7 +934,7 @@ final class AppModel: ObservableObject {
                     preparedAt: preparedAt
                 )
             )
-            apply(result.ledger)
+            await applyAuthoritativeSnapshot(result.ledger)
             return result.snapshot
         } catch {
             await handleLifecycleFailure(error)
@@ -676,7 +952,7 @@ final class AppModel: ObservableObject {
             let ledger = try await repository.markReportSent(
                 MarkReportSentRequest(snapshotID: snapshot.id, confirmedAt: confirmedAt)
             )
-            apply(ledger)
+            await applyAuthoritativeSnapshot(ledger)
             return true
         } catch {
             await handleLifecycleFailure(error)
@@ -709,7 +985,7 @@ final class AppModel: ObservableObject {
                     createdAt: createdAt
                 )
             )
-            apply(result.ledger)
+            await applyAuthoritativeSnapshot(result.ledger)
             return result.archive
         } catch {
             await handleLifecycleFailure(error)
@@ -827,7 +1103,7 @@ final class AppModel: ObservableObject {
                 try await repository.savePlanningPreferences(updated)
                 let snapshot = try await repository.ledgerSnapshot()
                 guard generation == self.planningSaveGeneration else { return }
-                self.apply(snapshot)
+                await self.applyAuthoritativeSnapshot(snapshot)
                 try await self.reconcileLoadedReminderState()
             } catch {
                 guard generation == self.planningSaveGeneration else { return }
@@ -835,7 +1111,7 @@ final class AppModel: ObservableObject {
                 do {
                     let snapshot = try await repository.ledgerSnapshot()
                     guard generation == self.planningSaveGeneration else { return }
-                    self.apply(snapshot)
+                    await self.applyAuthoritativeSnapshot(snapshot)
                     try await self.reconcileLoadedReminderState()
                 } catch {
                     self.present(error)
@@ -959,7 +1235,7 @@ final class AppModel: ObservableObject {
             }
             try await repository.saveReminder(reminder)
             let snapshot = try await repository.ledgerSnapshot()
-            apply(snapshot)
+            await applyAuthoritativeSnapshot(snapshot)
             try await reconcileLoadedReminderState()
         } catch {
             present(error)
@@ -977,7 +1253,7 @@ final class AppModel: ObservableObject {
             }
             try await repository.saveReminder(updated)
             let snapshot = try await repository.ledgerSnapshot()
-            apply(snapshot)
+            await applyAuthoritativeSnapshot(snapshot)
             try await reconcileLoadedReminderState()
         } catch {
             present(error)
@@ -988,7 +1264,7 @@ final class AppModel: ObservableObject {
         do {
             try await repository.deleteReminder(id: reminder.id)
             let snapshot = try await repository.ledgerSnapshot()
-            apply(snapshot)
+            await applyAuthoritativeSnapshot(snapshot)
             try await reconcileLoadedReminderState()
         } catch {
             present(error)
@@ -1018,7 +1294,7 @@ final class AppModel: ObservableObject {
                 snapshot = latestLedgerSnapshot
             } else {
                 snapshot = try await repository.ledgerSnapshot()
-                apply(snapshot)
+                await applyAuthoritativeSnapshot(snapshot)
             }
             try await reminderScheduler.reconcile(reminderReconciliationRequest(from: snapshot))
             notificationAuthorizationStatus = await reminderScheduler.notificationAuthorizationStatus()
@@ -1037,7 +1313,7 @@ final class AppModel: ObservableObject {
     private func handleReminderResponse(_ context: ReminderNotificationResponseContext) async {
         do {
             let snapshot = try await repository.ledgerSnapshot()
-            apply(snapshot)
+            await applyAuthoritativeSnapshot(snapshot)
 
             switch context.action {
             case .nothingToRecord:
@@ -1052,7 +1328,7 @@ final class AppModel: ObservableObject {
                     at: context.responseDate
                 )
                 let refreshed = try await repository.ledgerSnapshot()
-                apply(refreshed)
+                await applyAuthoritativeSnapshot(refreshed)
                 try await reconcileLoadedReminderState()
 
             case .later:

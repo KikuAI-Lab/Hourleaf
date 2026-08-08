@@ -500,6 +500,142 @@ final class HourleafUITests: XCTestCase {
         XCTAssertEqual(repeatButton.value as? String, "Service · 1 hr 15 min")
     }
 
+    func testQuickSurfaceTimerIsOffUntilEnabledAndLeavesManualEntryUnchanged() {
+        let app = launchQuickSurfaceApp()
+
+        XCTAssertFalse(quickSurfaceTimerRow(in: app).exists)
+        XCTAssertFalse(app.buttons["startQuickSurfaceTimerButton"].exists)
+        XCTAssertTrue(app.pickerWheels.element(boundBy: 0).waitForExistence(timeout: 5))
+        XCTAssertTrue(app.segmentedControls["entryKindPicker"].buttons["Service"].isSelected)
+        XCTAssertFalse(app.buttons["saveEntryButton"].isEnabled)
+        XCTAssertEqual(app.textFields["entryNoteField"].value as? String, "Short note (optional)")
+
+        enableQuickSurfaceTimer(in: app)
+
+        let row = quickSurfaceTimerRow(in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["startQuickSurfaceTimerButton"].exists)
+        XCTAssertFalse(app.buttons["stopQuickSurfaceTimerButton"].exists)
+        XCTAssertTrue(app.segmentedControls["entryKindPicker"].buttons["Service"].isSelected)
+        XCTAssertFalse(app.buttons["saveEntryButton"].isEnabled)
+        XCTAssertEqual(app.textFields["entryNoteField"].value as? String, "Short note (optional)")
+    }
+
+    func testQuickSurfaceRunningTimerPersistsAcrossTerminationAndRelaunch() {
+        let testID = UUID()
+        let app = launchQuickSurfaceApp(testID: testID)
+        enableQuickSurfaceTimer(in: app)
+
+        app.buttons["startQuickSurfaceTimerButton"].tap()
+        XCTAssertTrue(app.buttons["stopQuickSurfaceTimerButton"].waitForExistence(timeout: 5))
+
+        app.terminate()
+        app.launchArguments = quickSurfaceLaunchArguments(
+            testID: testID,
+            reset: false,
+            makeTimerVisible: true
+        )
+        app.launch()
+
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
+        let row = quickSurfaceTimerRow(in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["stopQuickSurfaceTimerButton"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["startQuickSurfaceTimerButton"].exists)
+    }
+
+    func testQuickSurfaceStopPresentsReviewWithoutNoteField() {
+        let app = launchQuickSurfaceApp()
+        enableQuickSurfaceTimer(in: app)
+        startAndStopQuickSurfaceTimer(in: app)
+
+        let reviewNavigationBar = app.navigationBars["Review timer"]
+        XCTAssertTrue(reviewNavigationBar.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Review timer"].exists)
+        XCTAssertTrue(app.segmentedControls["timerReviewKindPicker"].buttons["Service"].isSelected)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["timerReviewDurationPicker"].waitForExistence(timeout: 5)
+        )
+        XCTAssertFalse(app.textFields["entryNoteField"].isHittable)
+        XCTAssertTrue(app.buttons["saveTimerReviewButton"].exists)
+        XCTAssertTrue(app.buttons["discardTimerReviewButton"].exists)
+    }
+
+    func testQuickSurfaceReviewPendingDoesNotOverwriteManualDraftOrCoverIt() {
+        let app = launchQuickSurfaceApp()
+        enableQuickSurfaceTimer(in: app)
+
+        let wheels = app.pickerWheels
+        app.segmentedControls["entryKindPicker"].buttons["Credit"].tap()
+        wheels.element(boundBy: 0).adjust(toPickerWheelValue: "2")
+        wheels.element(boundBy: 1).adjust(toPickerWheelValue: "30")
+        let noteField = app.textFields["entryNoteField"]
+        noteField.tap()
+        noteField.typeText("Unsaved timer draft")
+        app.buttons["dismissEntryKeyboardButton"].tap()
+
+        startAndStopQuickSurfaceTimer(in: app)
+
+        XCTAssertTrue(app.buttons["reviewQuickSurfaceTimerButton"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.navigationBars["Review timer"].exists)
+        XCTAssertTrue(app.segmentedControls["entryKindPicker"].buttons["Credit"].isSelected)
+        XCTAssertEqual(wheels.element(boundBy: 0).value as? String, "2")
+        XCTAssertEqual(wheels.element(boundBy: 1).value as? String, "30")
+        XCTAssertEqual(noteField.value as? String, "Unsaved timer draft")
+        XCTAssertTrue(app.buttons["saveEntryButton"].isEnabled)
+    }
+
+    func testQuickSurfaceReviewSaveCreatesOneHistoryEntryAndUndo() {
+        let app = launchQuickSurfaceApp()
+        enableQuickSurfaceTimer(in: app)
+        startAndStopQuickSurfaceTimer(in: app)
+
+        XCTAssertTrue(app.navigationBars["Review timer"].waitForExistence(timeout: 5))
+        setTimerReviewDuration(minutes: "5", in: app)
+        let save = app.buttons["saveTimerReviewButton"]
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+
+        let banner = app.descendants(matching: .any)["mutationBanner"]
+        XCTAssertTrue(banner.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["undoMutationButton"].waitForExistence(timeout: 5))
+
+        app.tabBars.buttons["History"].tap()
+        let entries = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH 'historyEntry_'")
+        )
+        XCTAssertTrue(entries.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertTrue(app.staticTexts["Service"].exists)
+        XCTAssertTrue(app.staticTexts["5 min"].exists)
+    }
+
+    func testQuickSurfaceConfirmedDiscardCreatesNoHistoryEntry() {
+        let app = launchQuickSurfaceApp()
+        enableQuickSurfaceTimer(in: app)
+        startAndStopQuickSurfaceTimer(in: app)
+
+        XCTAssertTrue(app.navigationBars["Review timer"].waitForExistence(timeout: 5))
+        app.buttons["discardTimerReviewButton"].tap()
+        let confirmDiscard = app.buttons.matching(
+            NSPredicate(
+                format: "label == %@ AND identifier != %@",
+                "Discard",
+                "discardTimerReviewButton"
+            )
+        ).firstMatch
+        XCTAssertTrue(confirmDiscard.waitForExistence(timeout: 5))
+        confirmDiscard.tap()
+
+        XCTAssertTrue(app.buttons["startQuickSurfaceTimerButton"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["History"].tap()
+        XCTAssertTrue(app.staticTexts["No entries yet"].waitForExistence(timeout: 5))
+        let entries = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH 'historyEntry_'")
+        )
+        XCTAssertEqual(entries.count, 0)
+    }
+
     func testRecentlyDeletedCanRestoreAnEntry() {
         let app = launchApp()
         addEntry(in: app, hours: "1", minutes: "15")
@@ -778,6 +914,98 @@ final class HourleafUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         return app
+    }
+
+    private func launchQuickSurfaceApp(testID: UUID = UUID()) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = quickSurfaceLaunchArguments(testID: testID, reset: true)
+        app.launch()
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
+        return app
+    }
+
+    private func quickSurfaceLaunchArguments(
+        testID: UUID,
+        reset: Bool,
+        makeTimerVisible: Bool = false
+    ) -> [String] {
+        var arguments = [
+            "-uiTesting",
+            "-AppleLanguages",
+            "(en)",
+            "-quickSurfacesUITest",
+            "-quickSurfacesTestID",
+            testID.uuidString,
+            "-hourleafTestNow",
+            "2026-10-02T12:00:00Z"
+        ]
+        if reset {
+            arguments.append("-resetQuickSurfacesUITest")
+        }
+        if makeTimerVisible {
+            arguments.append("-quickSurfacesUITestTimerVisible")
+        }
+        return arguments
+    }
+
+    private func enableQuickSurfaceTimer(in app: XCUIApplication) {
+        app.tabBars.buttons["Settings"].tap()
+        let toggle = app.switches["quickSurfaceTimerToggle"]
+        XCTAssertTrue(scrollQuickSurfaceSettingsUntilVisible(toggle, in: app))
+        XCTAssertEqual(toggle.value as? String, "0")
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        expectation(for: NSPredicate(format: "value == %@", "1"), evaluatedWith: toggle)
+        waitForExpectations(timeout: 5)
+
+        app.tabBars.buttons["Add"].tap()
+        XCTAssertTrue(app.buttons["startQuickSurfaceTimerButton"].waitForExistence(timeout: 5))
+    }
+
+    private func startAndStopQuickSurfaceTimer(in app: XCUIApplication) {
+        let start = app.buttons["startQuickSurfaceTimerButton"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
+        expectation(
+            for: NSPredicate(format: "isEnabled == true AND isHittable == true"),
+            evaluatedWith: start
+        )
+        waitForExpectations(timeout: 5)
+        start.tap()
+        let stop = app.buttons["stopQuickSurfaceTimerButton"]
+        XCTAssertTrue(stop.waitForExistence(timeout: 5))
+        stop.tap()
+    }
+
+    private func setTimerReviewDuration(minutes: String, in app: XCUIApplication) {
+        let picker = app.descendants(matching: .any)["timerReviewDurationPicker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        let wheels = picker.pickerWheels
+        XCTAssertTrue(wheels.element(boundBy: 0).waitForExistence(timeout: 5))
+        wheels.element(boundBy: 0).adjust(toPickerWheelValue: "0")
+        wheels.element(boundBy: 1).adjust(toPickerWheelValue: minutes)
+    }
+
+    private func quickSurfaceTimerRow(in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["quickSurfaceTimerRow"]
+    }
+
+    private func scrollQuickSurfaceSettingsUntilVisible(
+        _ element: XCUIElement,
+        in app: XCUIApplication
+    ) -> Bool {
+        for _ in 0..<8 {
+            if element.exists,
+               app.frame.intersects(element.frame),
+               element.frame.height > 0 {
+                return true
+            }
+            let form = app.collectionViews.firstMatch
+            if form.exists {
+                form.swipeUp()
+            } else {
+                app.swipeUp()
+            }
+        }
+        return element.exists && app.frame.intersects(element.frame) && element.frame.height > 0
     }
 
     private func addEntry(in app: XCUIApplication, hours: String, minutes: String) {

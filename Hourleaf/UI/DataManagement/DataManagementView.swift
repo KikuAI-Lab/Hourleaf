@@ -225,7 +225,7 @@ struct DataManagementView: View {
                         await actions.discardRestorePreview(preview)
                     }
                 } catch {
-                    showSanitizedError(for: .restorePreview)
+                    showRestoreInterlockErrorIfSafe(error, fallback: .restorePreview)
                 }
                 busyOperation = nil
             }
@@ -255,7 +255,7 @@ struct DataManagementView: View {
                     await actions.discardRestorePreview(candidate)
                 }
                 if shouldShowError {
-                    showSanitizedError(for: .restore)
+                    showRestoreInterlockErrorIfSafe(error, fallback: .restore)
                 }
             }
             busyOperation = nil
@@ -298,6 +298,29 @@ struct DataManagementView: View {
             errorMessage = String(localized: "data_management.error.restore")
         case .csv:
             errorMessage = String(localized: "data_management.error.csv")
+        }
+    }
+
+    private func showRestoreInterlockErrorIfSafe(
+        _ error: Error,
+        fallback operation: BusyOperation
+    ) {
+        guard let hostError = error as? QuickSurfaceHostError else {
+            showSanitizedError(for: operation)
+            return
+        }
+        switch hostError {
+        case .timerMustBeResolved:
+            errorMessage = String(localized: "quick_surfaces.restore.blocked")
+        case .resetRequired:
+            errorMessage = String(localized: "quick_surfaces.restore.reset_required")
+        case .stateUnreadable:
+            errorMessage = String(localized: "quick_surfaces.restore.unavailable")
+        case .unavailable,
+             .preferenceUpdateFailed,
+             .invalidReview,
+             .resetFailed:
+            showSanitizedError(for: operation)
         }
     }
 }

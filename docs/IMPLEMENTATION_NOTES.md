@@ -160,3 +160,27 @@ MVP is accepted.
 - This slice was not installed on or read from the physical iPhone. Signed
   device work remains gated on a verified portable backup, disposable restore
   canary, and explicit owner permission.
+
+## Verification snapshot — 2026-08-08 (Quick Surfaces + Timer M2)
+
+- The host-only M2 implementation adds redacted projection reconciliation, a
+  default-off timer, explicit review before saving, stable idempotent
+  finalization, restore interlocks, compact settings and quick-entry UI, and
+  post-write refresh for App Intents. It does not add an extension target, App
+  Group entitlement, or ledger access outside the host app.
+- 379 unit/integration tests and 41 UI tests passed on the iPhone 17 simulator
+  with iOS 26.5. The six timer acceptance flows cover default-off behavior,
+  relaunch persistence, review without notes, save plus Undo, confirmed
+  discard, and preservation of an existing manual draft.
+- Generic-simulator Release build and Xcode Analyze passed. The three
+  localization catalogs contain the same 343 keys, exactly three App Shortcuts
+  remain promoted, the Xcode project and both Core Data schemas are unchanged,
+  and the Release binary contains no simulator UI-test injection strings.
+- One bounded adversarial pass found no P0 or P1 issue. Its invalid-wall-clock
+  privacy edge is fixed: an existing shown projection can still be physically
+  redacted using its last validated timestamp, while new or shown projections
+  continue to fail closed without a valid clock.
+- Signed-device, App Group, widget, and Control Center work remains M3-gated.
+  Before a future extension can write timer state, restore also needs an atomic
+  cross-process lease; the current host-only double-read interlock is sufficient
+  only while no extension exists.
