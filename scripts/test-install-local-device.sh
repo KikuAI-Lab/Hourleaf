@@ -33,6 +33,8 @@ grep -Fq -- 'slice3_smoke_quick_entry_url_scheme="hourleaf-slice3smoke"' "$insta
     || fail "installer smoke quick-entry URL scheme override drifted"
 grep -Fq -- 'disposable quick-entry URL schemes must differ' "$installer" \
     || fail "installer does not reject colliding quick-entry URL schemes"
+grep -Fq -- 'CODE_SIGN_ENTITLEMENTS=' "$installer" \
+    || fail "installer does not support the explicit no-App-Group Personal Team mode"
 if grep -Fq -- '--source .' "$installer"; then
     fail "installer still attempts a whole-container directory copy"
 fi
@@ -203,6 +205,32 @@ backup_dir="$(<"$state_root/last-backup-dir")"
 assert_manifest "$backup_dir"
 assert_temp_clean
 
+# A Personal Team can explicitly install the standard app without App Group;
+# the same protected-data workflow still runs before the mocked build.
+reset_state
+run_installer --without-app-group
+assert_success
+assert_stdout "Hourleaf update without App Group"
+assert_stdout "Verified SHA-256 manifest before build/install"
+assert_stdout "Fixture mode: build, install, and launch skipped."
+assert_no_runtime_values
+backup_dir="$(<"$state_root/last-backup-dir")"
+assert_manifest "$backup_dir"
+assert_temp_clean
+
+# Current devicectl omits a synthetic "." item and reports the three readable
+# app-container roots directly. That complete shape must also be accepted.
+reset_state
+ledger_size="$(stat -f '%z' "$state_root/app-data/Documents/ledger.sqlite")"
+set_inventory "$(directory_entry Documents Documents),$(directory_entry Library Library),$(directory_entry tmp tmp),$(inventory_entry ledger.sqlite Documents/ledger.sqlite "$ledger_size")"
+run_installer
+assert_success
+assert_stdout "Verified SHA-256 manifest before build/install (1 regular files)."
+assert_no_runtime_values
+backup_dir="$(<"$state_root/last-backup-dir")"
+assert_manifest "$backup_dir"
+assert_temp_clean
+
 # A running standard app must be closed before SQLite/WAL files are copied.
 reset_state
 set_process_running
@@ -325,7 +353,7 @@ reset_state
 set_inventory ""
 run_installer
 assert_failure
-assert_stderr "missing exactly one readable root directory"
+assert_stderr "missing the readable app-container roots"
 assert_no_build_receipt
 [[ ! -e "$state_root/last-backup-dir" ]] || fail "empty inventory produced a verified backup"
 assert_temp_clean
@@ -335,9 +363,18 @@ reset_state
 set_inventory "$(inventory_entry ledger.sqlite Documents/ledger.sqlite 15)"
 run_installer
 assert_failure
-assert_stderr "missing exactly one readable root directory"
+assert_stderr "missing the readable app-container roots"
 assert_no_build_receipt
 [[ ! -e "$state_root/last-backup-dir" ]] || fail "file-only inventory produced a verified backup"
+assert_temp_clean
+
+# A partial direct-root inventory must fail closed even when it contains data.
+reset_state
+set_inventory "$(directory_entry Documents Documents),$(directory_entry Library Library),$(inventory_entry ledger.sqlite Documents/ledger.sqlite 15)"
+run_installer
+assert_failure
+assert_stderr "missing the readable app-container roots"
+assert_no_build_receipt
 assert_temp_clean
 
 # Every array item must be validated; a primitive item cannot be silently ignored.

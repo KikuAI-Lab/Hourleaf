@@ -4,7 +4,7 @@ set -euo pipefail
 umask 077
 
 usage() {
-    print -u2 "Usage: install-local-device.sh <personal-team-id> <device-id> [--slice3-smoke]"
+    print -u2 "Usage: install-local-device.sh <personal-team-id> <device-id> [--slice3-smoke|--without-app-group]"
     exit 64
 }
 
@@ -16,7 +16,7 @@ fail() {
 if (( $# != 2 && $# != 3 )); then
     usage
 fi
-if (( $# == 3 )) && [[ "$3" != "--slice3-smoke" ]]; then
+if (( $# == 3 )) && [[ "$3" != "--slice3-smoke" && "$3" != "--without-app-group" ]]; then
     usage
 fi
 
@@ -66,18 +66,22 @@ if [[ -z "$device_id" || "$device_id" == *$'\n'* ]]; then
 fi
 
 is_smoke=0
+without_app_group=0
 local_bundle_id="$standard_local_bundle_id"
 local_extension_bundle_id="$standard_local_extension_bundle_id"
 local_app_group_id="$standard_local_app_group_id"
 local_quick_entry_url_scheme="$standard_local_quick_entry_url_scheme"
-typeset -a smoke_build_settings=()
-if (( $# == 3 )); then
+typeset -a local_build_settings=()
+if (( $# == 3 )) && [[ "$3" == "--slice3-smoke" ]]; then
     is_smoke=1
     local_bundle_id="$slice3_smoke_bundle_id"
     local_extension_bundle_id="$slice3_smoke_extension_bundle_id"
     local_app_group_id="$slice3_smoke_app_group_id"
     local_quick_entry_url_scheme="$slice3_smoke_quick_entry_url_scheme"
-    smoke_build_settings=("INFOPLIST_KEY_CFBundleDisplayName=Hourleaf Shortcut Smoke")
+    local_build_settings=("INFOPLIST_KEY_CFBundleDisplayName=Hourleaf Shortcut Smoke")
+elif (( $# == 3 )) && [[ "$3" == "--without-app-group" ]]; then
+    without_app_group=1
+    local_build_settings=("CODE_SIGN_ENTITLEMENTS=")
 fi
 
 test_mode="${HOURLEAF_INSTALLER_TEST_MODE:-0}"
@@ -108,6 +112,8 @@ trap cleanup EXIT
 
 if (( is_smoke )); then
     print "Hourleaf Shortcut Smoke installation: disposable bundle $slice3_smoke_bundle_id; standard Hourleaf data is untouched."
+elif (( without_app_group )); then
+    print "Hourleaf update without App Group: standard data will be protected; widgets and controls will remain unavailable."
 else
     print "Hourleaf update: standard bundle $standard_local_bundle_id will be protected before build and install."
 fi
@@ -358,6 +364,9 @@ prepare_expected_files() {
     typeset -A seen_files=()
     local -a all_paths=()
     local root_seen=0
+    local documents_root_seen=0
+    local library_root_seen=0
+    local temporary_root_seen=0
     local file_index name relative is_directory is_readable is_writable size normalized ancestor existing
     for (( file_index = 0; file_index < file_count; file_index++ )); do
         name="$(extract_inventory_field "$file_index" name string)"
@@ -413,6 +422,17 @@ prepare_expected_files() {
         all_paths+=("$normalized")
 
         if [[ "$is_directory" == true ]]; then
+            case "$normalized" in
+                Documents)
+                    documents_root_seen=1
+                    ;;
+                Library)
+                    library_root_seen=1
+                    ;;
+                tmp)
+                    temporary_root_seen=1
+                    ;;
+            esac
             continue
         fi
         size="$(extract_inventory_field "$file_index" metadata.size integer)"
@@ -424,8 +444,10 @@ prepare_expected_files() {
         expected_remote_paths+=("$normalized")
         expected_remote_sizes[$normalized]="$size"
     done
-    (( root_seen == 1 )) \
-        || fail "app-data inventory is missing exactly one readable root directory"
+    if (( root_seen != 1 )); then
+        (( documents_root_seen == 1 && library_root_seen == 1 && temporary_root_seen == 1 )) \
+            || fail "app-data inventory is missing the readable app-container roots"
+    fi
 }
 
 copy_inventory_file() {
@@ -654,7 +676,7 @@ build_and_install() {
         HOURLEAF_APP_GROUP_IDENTIFIER="$local_app_group_id" \
         HOURLEAF_QUICK_ENTRY_URL_SCHEME="$local_quick_entry_url_scheme" \
         SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) DEBUG HOURLEAF_LOCAL_DEVICE' \
-        "${smoke_build_settings[@]}" \
+        "${local_build_settings[@]}" \
         build
 
     app_path="$derived_data/Build/Products/Debug-iphoneos/Hourleaf.app"
