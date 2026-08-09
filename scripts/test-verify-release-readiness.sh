@@ -167,6 +167,12 @@ assert_failure_contains "bundle identifiers must be distinct"
 
 reset_fixture
 replace_in_file \
+    "$fixture_root/scripts/install-local-device.sh" \
+    '/--exclude build/d'
+assert_failure_contains "local installer does not exclude generated build artifacts"
+
+reset_fixture
+replace_in_file \
     "$fixture_root/Hourleaf/UI/DataManagement/DataManagementView.swift" \
     '/^[[:space:]]*#if[[:space:]]+HOURLEAF_LOCAL_DEVICE[[:space:]]*$/d; /^[[:space:]]*#endif[[:space:]]*$/d'
 assert_failure_contains "local migration guidance is not fully compile-time guarded"

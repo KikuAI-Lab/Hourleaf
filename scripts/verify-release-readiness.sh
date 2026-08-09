@@ -130,6 +130,8 @@ if [[ "$production_bundle_id" == "$standard_local_bundle_id" \
     || "$standard_local_bundle_id" == "$smoke_bundle_id" ]]; then
     fail "production, normal local, and disposable smoke bundle identifiers must be distinct"
 fi
+grep -Fq -- '--exclude build' "$installer_file" \
+    || fail "local installer does not exclude generated build artifacts"
 grep -Fq 'PRODUCT_BUNDLE_IDENTIFIER = com.kikuai.hourleaf;' "$project_file" \
     || fail "production bundle identifier is missing from the Xcode project"
 

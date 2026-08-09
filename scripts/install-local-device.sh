@@ -56,7 +56,12 @@ if [[ "$(plutil -extract result.passcodeRequired raw -o - "$lock_state_file")" !
     exit 69
 fi
 
-rsync -a --exclude .git --exclude .DS_Store "$repo_root/" "$temporary_source/"
+rsync -a \
+    --exclude .git \
+    --exclude .DS_Store \
+    --exclude build \
+    "$repo_root/" \
+    "$temporary_source/"
 
 project_file="$temporary_source/Hourleaf.xcodeproj/project.pbxproj"
 entitlements_file="$temporary_source/Hourleaf/Hourleaf.entitlements"
