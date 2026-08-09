@@ -24,12 +24,37 @@ personal_team_id="$1"
 device_id="$2"
 repo_root="${0:A:h:h}"
 production_bundle_id="com.kikuai.hourleaf"
+production_extension_bundle_id="com.kikuai.hourleaf.quick-surfaces"
+production_app_group_id="group.com.kikuai.hourleaf"
+production_quick_entry_url_scheme="hourleaf"
 standard_local_bundle_id="com.kikuai.hourleaf.local"
+standard_local_extension_bundle_id="com.kikuai.hourleaf.local.quick-surfaces"
+standard_local_app_group_id="group.com.kikuai.hourleaf.local"
+standard_local_quick_entry_url_scheme="hourleaf-local"
 slice3_smoke_bundle_id="com.kikuai.hourleaf.slice3smoke"
+slice3_smoke_extension_bundle_id="com.kikuai.hourleaf.slice3smoke.quick-surfaces"
+slice3_smoke_app_group_id="group.com.kikuai.hourleaf.slice3smoke"
+slice3_smoke_quick_entry_url_scheme="hourleaf-slice3smoke"
 
-if [[ "$slice3_smoke_bundle_id" == "$production_bundle_id" \
-    || "$slice3_smoke_bundle_id" == "$standard_local_bundle_id" ]]; then
+if [[ "$production_bundle_id" == "$standard_local_bundle_id" \
+    || "$production_bundle_id" == "$slice3_smoke_bundle_id" \
+    || "$standard_local_bundle_id" == "$slice3_smoke_bundle_id" ]]; then
     fail "disposable smoke bundle identifier must differ from production and standard local builds"
+fi
+if [[ "$production_extension_bundle_id" == "$standard_local_extension_bundle_id" \
+    || "$production_extension_bundle_id" == "$slice3_smoke_extension_bundle_id" \
+    || "$standard_local_extension_bundle_id" == "$slice3_smoke_extension_bundle_id" ]]; then
+    fail "disposable smoke extension identifier must differ from production and standard local builds"
+fi
+if [[ "$production_app_group_id" == "$standard_local_app_group_id" \
+    || "$production_app_group_id" == "$slice3_smoke_app_group_id" \
+    || "$standard_local_app_group_id" == "$slice3_smoke_app_group_id" ]]; then
+    fail "disposable smoke App Group identifier must differ from production and standard local builds"
+fi
+if [[ "$production_quick_entry_url_scheme" == "$standard_local_quick_entry_url_scheme" \
+    || "$production_quick_entry_url_scheme" == "$slice3_smoke_quick_entry_url_scheme" \
+    || "$standard_local_quick_entry_url_scheme" == "$slice3_smoke_quick_entry_url_scheme" ]]; then
+    fail "disposable quick-entry URL schemes must differ from production and standard local builds"
 fi
 if [[ ! "$personal_team_id" =~ '^[A-Z0-9]{10}$' ]]; then
     print -u2 "Invalid Apple team identifier: expected 10 uppercase letters or digits."
@@ -42,10 +67,16 @@ fi
 
 is_smoke=0
 local_bundle_id="$standard_local_bundle_id"
+local_extension_bundle_id="$standard_local_extension_bundle_id"
+local_app_group_id="$standard_local_app_group_id"
+local_quick_entry_url_scheme="$standard_local_quick_entry_url_scheme"
 typeset -a smoke_build_settings=()
 if (( $# == 3 )); then
     is_smoke=1
     local_bundle_id="$slice3_smoke_bundle_id"
+    local_extension_bundle_id="$slice3_smoke_extension_bundle_id"
+    local_app_group_id="$slice3_smoke_app_group_id"
+    local_quick_entry_url_scheme="$slice3_smoke_quick_entry_url_scheme"
     smoke_build_settings=("INFOPLIST_KEY_CFBundleDisplayName=Hourleaf Shortcut Smoke")
 fi
 
@@ -393,6 +424,8 @@ prepare_expected_files() {
         expected_remote_paths+=("$normalized")
         expected_remote_sizes[$normalized]="$size"
     done
+    (( root_seen == 1 )) \
+        || fail "app-data inventory is missing exactly one readable root directory"
 }
 
 copy_inventory_file() {
@@ -570,6 +603,7 @@ rsync -a \
 
 project_file="$temporary_source/Hourleaf.xcodeproj/project.pbxproj"
 entitlements_file="$temporary_source/Hourleaf/Hourleaf.entitlements"
+extension_entitlements_file="$temporary_source/HourleafQuickSurfaces/HourleafQuickSurfaces.entitlements"
 typeset -a model_files=()
 while IFS= read -r model_file; do
     model_files+=("$model_file")
@@ -581,8 +615,15 @@ fi
 if (( ${#model_files[@]} == 0 )); then
     fail "expected Hourleaf Core Data model files"
 fi
-if [[ -e "$entitlements_file" ]] || grep -Fq 'CODE_SIGN_ENTITLEMENTS = Hourleaf/Hourleaf.entitlements;' "$project_file"; then
-    fail "the base Hourleaf target must not ship iCloud entitlements"
+[[ -f "$entitlements_file" ]] || fail "the Hourleaf app App Group entitlements are missing"
+[[ -f "$extension_entitlements_file" ]] || fail "the Hourleaf Quick Surfaces App Group entitlements are missing"
+if ! plutil -lint -s "$entitlements_file" >/dev/null 2>&1 \
+    || ! plutil -lint -s "$extension_entitlements_file" >/dev/null 2>&1; then
+    fail "the Hourleaf App Group entitlements are not valid property lists"
+fi
+if ! grep -Fq 'CODE_SIGN_ENTITLEMENTS = Hourleaf/Hourleaf.entitlements;' "$project_file" \
+    || ! grep -Fq 'CODE_SIGN_ENTITLEMENTS = HourleafQuickSurfaces/HourleafQuickSurfaces.entitlements;' "$project_file"; then
+    fail "the Hourleaf App Group entitlements are not configured for both targets"
 fi
 
 for model_file in "${model_files[@]}"; do
@@ -608,8 +649,10 @@ build_and_install() {
         -allowProvisioningUpdates \
         -allowProvisioningDeviceRegistration \
         DEVELOPMENT_TEAM="$personal_team_id" \
-        PRODUCT_BUNDLE_IDENTIFIER="$local_bundle_id" \
-        CODE_SIGN_ENTITLEMENTS='' \
+        HOURLEAF_APP_BUNDLE_IDENTIFIER="$local_bundle_id" \
+        HOURLEAF_QUICK_SURFACES_BUNDLE_IDENTIFIER="$local_extension_bundle_id" \
+        HOURLEAF_APP_GROUP_IDENTIFIER="$local_app_group_id" \
+        HOURLEAF_QUICK_ENTRY_URL_SCHEME="$local_quick_entry_url_scheme" \
         SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) DEBUG HOURLEAF_LOCAL_DEVICE' \
         "${smoke_build_settings[@]}" \
         build

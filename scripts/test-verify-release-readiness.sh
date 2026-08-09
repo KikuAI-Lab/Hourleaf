@@ -46,6 +46,9 @@ replace_in_file() {
 copy_fixture() {
     mkdir -p \
         "$fixture_root/Hourleaf.xcodeproj" \
+        "$fixture_root/Hourleaf" \
+        "$fixture_root/HourleafQuickSurfaces" \
+        "$fixture_root/HourleafShared" \
         "$fixture_root/scripts" \
         "$fixture_root/Hourleaf/AppIntents" \
         "$fixture_root/Hourleaf/Persistence/HourleafModel.xcdatamodeld/HourleafModelV1.xcdatamodel" \
@@ -56,6 +59,18 @@ copy_fixture() {
         "$fixture_root/Hourleaf/PrivacyInfo.xcprivacy"
     cp "$repo_root/Hourleaf.xcodeproj/project.pbxproj" \
         "$fixture_root/Hourleaf.xcodeproj/project.pbxproj"
+    cp "$repo_root/Hourleaf/Hourleaf.entitlements" \
+        "$fixture_root/Hourleaf/Hourleaf.entitlements"
+    cp "$repo_root/Hourleaf/Info.plist" \
+        "$fixture_root/Hourleaf/Info.plist"
+    cp "$repo_root/HourleafQuickSurfaces/HourleafQuickSurfaces.entitlements" \
+        "$fixture_root/HourleafQuickSurfaces/HourleafQuickSurfaces.entitlements"
+    cp "$repo_root/HourleafQuickSurfaces/Info.plist" \
+        "$fixture_root/HourleafQuickSurfaces/Info.plist"
+    cp "$repo_root/HourleafQuickSurfaces/HourleafQuickSurfacesEntry.swift" \
+        "$fixture_root/HourleafQuickSurfaces/HourleafQuickSurfacesEntry.swift"
+    cp "$repo_root/HourleafShared/QuickSurfaceState.swift" \
+        "$fixture_root/HourleafShared/QuickSurfaceState.swift"
     cp "$repo_root/scripts/install-local-device.sh" \
         "$fixture_root/scripts/install-local-device.sh"
     cp "$repo_root/Hourleaf/AppIntents/HourleafShortcuts.swift" \
@@ -117,6 +132,44 @@ else
 fi
 
 reset_fixture
+replace_in_file \
+    "$fixture_root/Hourleaf.xcodeproj/project.pbxproj" \
+    's/GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = Hourleaf\/Info.plist;/GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = Hourleaf\/Info.plist;/g'
+assert_failure_contains "Hourleaf app target must use Hourleaf/Info.plist"
+
+reset_fixture
+print 'import CoreData' >> "$fixture_root/HourleafShared/QuickSurfaceState.swift"
+assert_failure_contains "forbidden extension source dependency"
+
+reset_fixture
+print 'let backupReference = HourleafBackupV1.self' >> "$fixture_root/HourleafQuickSurfaces/HourleafQuickSurfacesEntry.swift"
+assert_failure_contains "forbidden extension source dependency"
+
+reset_fixture
+replace_in_file \
+    "$fixture_root/HourleafQuickSurfaces/Info.plist" \
+    's#<string>\$(EXECUTABLE_NAME)</string>#<string></string>#'
+assert_failure_contains "HourleafQuickSurfaces Info.plist has an empty CFBundleExecutable"
+
+reset_fixture
+replace_in_file \
+    "$fixture_root/Hourleaf/Info.plist" \
+    's#<string>\$(HOURLEAF_APP_GROUP_IDENTIFIER)</string>#<string>group.invalid.hourleaf</string>#'
+assert_failure_contains "Hourleaf Info.plist HourleafAppGroupIdentifier is not the required build setting"
+
+reset_fixture
+replace_in_file \
+    "$fixture_root/Hourleaf/Info.plist" \
+    's#<string>\$(HOURLEAF_QUICK_ENTRY_URL_SCHEME)</string>#<string>hourleaf</string>#g'
+assert_failure_contains "Hourleaf Info.plist HourleafQuickEntryURLScheme is not the required build setting"
+
+reset_fixture
+replace_in_file \
+    "$fixture_root/HourleafQuickSurfaces/Info.plist" \
+    's#<string>\$(HOURLEAF_QUICK_ENTRY_URL_SCHEME)</string>#<string>hourleaf</string>#'
+assert_failure_contains "HourleafQuickSurfaces Info.plist HourleafQuickEntryURLScheme is not the required build setting"
+
+reset_fixture
 print 'let documentationLink = "https://developer.apple.com/documentation/foundation/urlsession"' \
     >> "$fixture_root/Hourleaf/AppIntents/HourleafShortcuts.swift"
 if ! run_guard "$fixture_root"; then
@@ -138,15 +191,21 @@ print 'import Network' \
 assert_failure_contains "forbidden privacy-sensitive framework or SDK reference"
 
 reset_fixture
+print 'import Network' \
+    >> "$fixture_root/HourleafQuickSurfaces/HourleafQuickSurfacesEntry.swift"
+assert_failure_contains "forbidden privacy-sensitive framework or SDK reference"
+
+reset_fixture
 replace_in_file \
     "$fixture_root/Hourleaf/PrivacyInfo.xcprivacy" \
     's#<false/>#<true/>#'
 assert_failure_contains "privacy manifest enables tracking"
 
 reset_fixture
-print 'CODE_SIGN_ENTITLEMENTS = Hourleaf/Hourleaf.entitlements;' \
-    >> "$fixture_root/Hourleaf.xcodeproj/project.pbxproj"
-assert_failure_contains "code-sign entitlements are configured"
+replace_in_file \
+    "$fixture_root/Hourleaf/Hourleaf.entitlements" \
+    's/\$(HOURLEAF_APP_GROUP_IDENTIFIER)/group.invalid.hourleaf/'
+assert_failure_contains "App Group entitlement is not parameterized"
 
 reset_fixture
 replace_in_file \
@@ -164,6 +223,12 @@ replace_in_file \
     "$fixture_root/scripts/install-local-device.sh" \
     's/slice3_smoke_bundle_id="com.kikuai.hourleaf.slice3smoke"/slice3_smoke_bundle_id="com.kikuai.hourleaf"/'
 assert_failure_contains "bundle identifiers must be distinct"
+
+reset_fixture
+replace_in_file \
+    "$fixture_root/scripts/install-local-device.sh" \
+    's/slice3_smoke_quick_entry_url_scheme="hourleaf-slice3smoke"/slice3_smoke_quick_entry_url_scheme="hourleaf"/'
+assert_failure_contains "quick-entry URL schemes must be distinct"
 
 reset_fixture
 replace_in_file \

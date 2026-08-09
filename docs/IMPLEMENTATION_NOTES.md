@@ -184,3 +184,36 @@ MVP is accepted.
   Before a future extension can write timer state, restore also needs an atomic
   cross-process lease; the current host-only double-read interlock is sufficient
   only while no extension exists.
+
+## Verification snapshot — 2026-08-09 (Quick Surfaces M4)
+
+- Hourleaf now builds one iOS 17 system-small WidgetKit extension and one
+  iOS 18 timer control. The extension shares only the versioned redacted
+  sidecar, access lease, display reducer, and timer state machine. It has no
+  Core Data, entry history, notes, reports, backup, CSV, or network access.
+- Starting and stopping from the control is atomic in the shared sidecar.
+  Stopping publishes `reviewPending`; only the host app can review and finalize
+  a ledger entry. Host reconciliations, restore completion, and App Intent
+  projections request WidgetKit and Control Center refreshes only after a
+  verified readback.
+- Widget taps open the existing blank Quick Entry surface through one exact,
+  payload-free URL. Production, standard local, and disposable smoke builds use
+  isolated schemes. A dormant widget hides prior-month totals at the civil
+  month boundary while preserving valid timer state.
+- The guarded local-device installer now refuses an update unless the existing
+  app-data inventory contains exactly one readable container root and every
+  copied regular file passes exact path, type, size, and SHA-256 readback.
+  Empty or truncated inventories cannot produce a verified backup receipt or
+  proceed to installation.
+- Fresh evidence on the iPhone 17 simulator (iOS 26.5): 475/475
+  unit/integration tests and 49/49 UI tests passed. A generic iOS Release build
+  passed; packaged host and extension metadata contain the expected production
+  bundle, App Group, URL scheme, and WidgetKit extension identifiers. Static
+  release guards, installer/readiness self-tests, property-list validation,
+  localization parity, and `git diff --check` passed.
+- One bounded adversarial pass found four issues before final verification:
+  fail-open backup inventory, missing widget routing, stale month totals, and
+  incomplete release guards. All four were corrected before the green matrices.
+  Signed App Group resolution, real widget/control placement, lock-screen
+  privacy, and Shortcuts/Action Button behavior remain owner-controlled
+  physical-device acceptance gates.

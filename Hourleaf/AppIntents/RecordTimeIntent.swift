@@ -31,13 +31,15 @@ struct QuickSurfaceIntentProjectionRefresher: Sendable {
 
     init(
         repository: CoreDataLedgerRepository,
-        quickSurfaceHost: QuickSurfaceHostController
+        quickSurfaceHost: QuickSurfaceHostController,
+        systemReloader: QuickSurfaceSystemReloader = .disabled
     ) {
         operation = {
             guard quickSurfaceHost.capabilityExpected,
                   let snapshot = try? await repository.ledgerSnapshot()
             else { return }
             _ = await quickSurfaceHost.reconcile(snapshot)
+            systemReloader.reload()
         }
     }
 

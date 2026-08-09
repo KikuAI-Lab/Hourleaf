@@ -23,6 +23,16 @@ grep -Fq -- '-destination "platform=iOS,id=$device_id"' "$installer" \
     || fail "installer does not build for the selected physical device"
 grep -Fq -- '--recurse' "$installer" \
     || fail "installer does not request recursive app-data inventory"
+grep -Fq -- 'HOURLEAF_QUICK_ENTRY_URL_SCHEME="$local_quick_entry_url_scheme"' "$installer" \
+    || fail "installer does not override the quick-entry URL scheme for local builds"
+grep -Fq -- 'production_quick_entry_url_scheme="hourleaf"' "$installer" \
+    || fail "installer production quick-entry URL scheme default drifted"
+grep -Fq -- 'standard_local_quick_entry_url_scheme="hourleaf-local"' "$installer" \
+    || fail "installer standard local quick-entry URL scheme override drifted"
+grep -Fq -- 'slice3_smoke_quick_entry_url_scheme="hourleaf-slice3smoke"' "$installer" \
+    || fail "installer smoke quick-entry URL scheme override drifted"
+grep -Fq -- 'disposable quick-entry URL schemes must differ' "$installer" \
+    || fail "installer does not reject colliding quick-entry URL schemes"
 if grep -Fq -- '--source .' "$installer"; then
     fail "installer still attempts a whole-container directory copy"
 fi
@@ -44,11 +54,17 @@ fixture_installer="$fixture_root/scripts/install-local-device.sh"
 copy_fixture() {
     mkdir -p \
         "$fixture_root/Hourleaf.xcodeproj" \
+        "$fixture_root/Hourleaf" \
+        "$fixture_root/HourleafQuickSurfaces" \
         "$fixture_root/Hourleaf/Persistence/HourleafModel.xcdatamodeld/HourleafModelV1.xcdatamodel" \
         "$fixture_root/Hourleaf/Persistence/HourleafModel.xcdatamodeld/HourleafModelV2.xcdatamodel" \
         "$fixture_root/scripts"
     cp -- "$repo_root/Hourleaf.xcodeproj/project.pbxproj" \
         "$fixture_root/Hourleaf.xcodeproj/project.pbxproj"
+    cp -- "$repo_root/Hourleaf/Hourleaf.entitlements" \
+        "$fixture_root/Hourleaf/Hourleaf.entitlements"
+    cp -- "$repo_root/HourleafQuickSurfaces/HourleafQuickSurfaces.entitlements" \
+        "$fixture_root/HourleafQuickSurfaces/HourleafQuickSurfaces.entitlements"
     cp -- "$repo_root/Hourleaf/Persistence/HourleafModel.xcdatamodeld/HourleafModelV1.xcdatamodel/contents" \
         "$fixture_root/Hourleaf/Persistence/HourleafModel.xcdatamodeld/HourleafModelV1.xcdatamodel/contents"
     cp -- "$repo_root/Hourleaf/Persistence/HourleafModel.xcdatamodeld/HourleafModelV2.xcdatamodel/contents" \
@@ -302,6 +318,26 @@ run_installer
 assert_failure
 assert_stderr "could not enumerate the existing app data container"
 assert_no_build_receipt
+assert_temp_clean
+
+# An empty app-data inventory is not a trustworthy container snapshot.
+reset_state
+set_inventory ""
+run_installer
+assert_failure
+assert_stderr "missing exactly one readable root directory"
+assert_no_build_receipt
+[[ ! -e "$state_root/last-backup-dir" ]] || fail "empty inventory produced a verified backup"
+assert_temp_clean
+
+# A file-only inventory is also invalid when the appDataContainer root marker is absent.
+reset_state
+set_inventory "$(inventory_entry ledger.sqlite Documents/ledger.sqlite 15)"
+run_installer
+assert_failure
+assert_stderr "missing exactly one readable root directory"
+assert_no_build_receipt
+[[ ! -e "$state_root/last-backup-dir" ]] || fail "file-only inventory produced a verified backup"
 assert_temp_clean
 
 # Every array item must be validated; a primitive item cannot be silently ignored.
