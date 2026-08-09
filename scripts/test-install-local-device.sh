@@ -68,7 +68,7 @@ reset_state() {
     local ledger_size metadata_size
     ledger_size="$(stat -f '%z' "$state_root/app-data/Documents/ledger.sqlite")"
     metadata_size="$(stat -f '%z' "$state_root/app-data/metadata.json")"
-    print -r -- "{\"result\":{\"files\":[{\"name\":\".\",\"relativePath\":\".\",\"resources\":{\"isDirectory\":true,\"isReadable\":true,\"isWritable\":true},\"metadata\":{\"size\":0}},{\"name\":\"Documents\",\"relativePath\":\"Documents\",\"resources\":{\"isDirectory\":true,\"isReadable\":true,\"isWritable\":true},\"metadata\":{\"size\":0}},{\"name\":\"ledger.sqlite\",\"relativePath\":\"Documents/ledger.sqlite\",\"resources\":{\"isDirectory\":false,\"isReadable\":true,\"isWritable\":true},\"metadata\":{\"size\":$ledger_size}},{\"name\":\"metadata.json\",\"relativePath\":\"metadata.json\",\"resources\":{\"isDirectory\":false,\"isReadable\":true,\"isWritable\":true},\"metadata\":{\"size\":$metadata_size}}]}}" \
+    print -r -- "{\"result\":{\"files\":[{\"name\":\".\",\"relativePath\":\".\",\"resources\":{\"isDirectory\":true,\"isReadable\":true,\"isWritable\":true},\"metadata\":{\"size\":0}},{\"name\":\"Documents\",\"relativePath\":\"Documents\",\"resources\":{\"isDirectory\":true,\"isReadable\":true,\"isWritable\":true},\"metadata\":{\"size\":0}},{\"name\":\"Documents/ledger.sqlite\",\"relativePath\":\"Documents/ledger.sqlite\",\"resources\":{\"isDirectory\":false,\"isReadable\":true,\"isWritable\":true},\"metadata\":{\"size\":$ledger_size}},{\"name\":\"metadata.json\",\"relativePath\":\"metadata.json\",\"resources\":{\"isDirectory\":false,\"isReadable\":true,\"isWritable\":true},\"metadata\":{\"size\":$metadata_size}}]}}" \
         > "$state_root/files.json"
 }
 
@@ -91,11 +91,11 @@ set_process_running_on_second_read() {
 }
 
 inventory_entry() {
-    print -r -- "{\"name\":\"$1\",\"relativePath\":\"$2\",\"resources\":{\"isDirectory\":false,\"isReadable\":true,\"isWritable\":true},\"metadata\":{\"size\":$3}}"
+    print -r -- "{\"name\":\"$2\",\"relativePath\":\"$2\",\"resources\":{\"isDirectory\":false,\"isReadable\":true,\"isWritable\":true},\"metadata\":{\"size\":$3}}"
 }
 
 directory_entry() {
-    print -r -- "{\"name\":\"$1\",\"relativePath\":\"$2\",\"resources\":{\"isDirectory\":true,\"isReadable\":true,\"isWritable\":true}}"
+    print -r -- "{\"name\":\"$2\",\"relativePath\":\"$2\",\"resources\":{\"isDirectory\":true,\"isReadable\":true,\"isWritable\":true}}"
 }
 
 set_inventory() {
@@ -323,6 +323,14 @@ set_inventory "$(inventory_entry ledger.sqlite Documents/ledger.sqlite 15),$(inv
 run_installer
 assert_failure
 assert_stderr "duplicate file path"
+assert_no_build_receipt
+assert_temp_clean
+
+reset_state
+set_inventory '{"name":"other","relativePath":"Documents/ledger.sqlite","resources":{"isDirectory":false,"isReadable":true,"isWritable":true},"metadata":{"size":15}}'
+run_installer
+assert_failure
+assert_stderr "mismatched name and path"
 assert_no_build_receipt
 assert_temp_clean
 

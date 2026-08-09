@@ -334,7 +334,7 @@ prepare_expected_files() {
         is_directory="$(extract_inventory_field "$file_index" resources.isDirectory bool)"
         is_readable="$(extract_inventory_field "$file_index" resources.isReadable bool)"
         is_writable="$(extract_inventory_field "$file_index" resources.isWritable bool)"
-        [[ -n "$name" && "$name" != *$'\n'* && "$name" != *$'\t'* && "$name" != */* ]] \
+        [[ -n "$name" && "$name" != *$'\n'* && "$name" != *$'\t'* ]] \
             || fail "app-data inventory item $file_index has an ambiguous name"
         [[ "$is_directory" == true || "$is_directory" == false ]] \
             || fail "app-data inventory item $file_index has an ambiguous directory flag"
@@ -344,6 +344,8 @@ prepare_expected_files() {
             || fail "app-data inventory item $file_index has an ambiguous writability flag"
 
         if [[ "$is_directory" == true && ( -z "$relative" || "$relative" == "." ) ]]; then
+            [[ "$name" == "$relative" ]] \
+                || fail "app-data inventory item $file_index has mismatched name and path"
             (( root_seen == 0 )) \
                 || fail "app-data inventory contains a duplicate root path"
             [[ "$is_readable" == true ]] \
@@ -356,7 +358,7 @@ prepare_expected_files() {
         normalized="${normalized%/}"
         [[ -n "$normalized" && "$normalized" != . ]] \
             || fail "app-data inventory contains an empty relative path"
-        [[ "$name" == "${normalized:t}" ]] \
+        [[ "$name" == "$relative" ]] \
             || fail "app-data inventory item $file_index has mismatched name and path"
         [[ "$is_readable" == true ]] \
             || fail "app-data inventory contains an unreadable item"
