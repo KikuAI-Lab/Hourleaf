@@ -40,6 +40,9 @@ private struct HourleafLaunchView: View {
             }
         }
         .task { await launcher.startIfNeeded() }
+        .onOpenURL { url in
+            launcher.handleOpenURL(url)
+        }
     }
 }
 
@@ -64,6 +67,7 @@ final class HourleafAppLauncher: ObservableObject {
     private let usesTestStore: Bool
     private let clock: @Sendable () -> Date
     private var pendingRecovery: PendingRecovery?
+    private var pendingQuickEntryRoute = false
     private var didStart = false
 
     init(arguments: [String]) {
@@ -175,10 +179,38 @@ final class HourleafAppLauncher: ObservableObject {
                 reminderScheduler: pendingRecovery.reminderScheduler
             )
             await initialize(session)
+            applyPendingQuickEntryRoute(to: session.router)
             state = .ready(session)
         case .blocked:
             state = .blocked
         }
+    }
+
+    /// SwiftUI can deliver an external URL while a restore bootstrap is still
+    /// running. Keep that exact route in the existing AppRouter when present;
+    /// retain a one-bit handoff for the short gap after the pending-recovery
+    /// record is consumed and before the ready session is published.
+    func handleOpenURL(_ url: URL, bundle: Bundle = .main) {
+        guard HourleafQuickEntryURL.matches(url: url, bundle: bundle) else { return }
+
+        switch state {
+        case let .ready(session):
+            _ = session.router.routeIfQuickEntryURL(url, bundle: bundle)
+        case .bootstrapping:
+            if let pendingRecovery {
+                _ = pendingRecovery.router.routeIfQuickEntryURL(url, bundle: bundle)
+            } else {
+                pendingQuickEntryRoute = true
+            }
+        case .blocked:
+            break
+        }
+    }
+
+    private func applyPendingQuickEntryRoute(to router: AppRouter) {
+        guard pendingQuickEntryRoute else { return }
+        pendingQuickEntryRoute = false
+        router.route(to: .quickEntry)
     }
 
     nonisolated private static func makeLocalRuntime() -> RestoreReadyRuntime {
@@ -195,6 +227,7 @@ final class HourleafAppLauncher: ObservableObject {
         router: AppRouter,
         reminderScheduler: any ReminderScheduling
     ) -> HourleafAppSession {
+        let quickSurfaceSystemReloader = QuickSurfaceSystemReloader.live
         let quickSurfaceHost = QuickSurfaceHostController(
             repository: runtime.repository,
             capability: makeQuickSurfaceCapability(),
@@ -204,6 +237,7 @@ final class HourleafAppLauncher: ObservableObject {
             repository: runtime.repository,
             reminderScheduler: reminderScheduler,
             quickSurfaceHost: quickSurfaceHost,
+            quickSurfaceSystemReloader: quickSurfaceSystemReloader,
             now: clock
         )
         let restoreCoordinator = HourleafRestoreCoordinator(
@@ -223,7 +257,8 @@ final class HourleafAppLauncher: ObservableObject {
             router: router,
             quickSurfaceRefresher: QuickSurfaceIntentProjectionRefresher(
                 repository: runtime.repository,
-                quickSurfaceHost: quickSurfaceHost
+                quickSurfaceHost: quickSurfaceHost,
+                systemReloader: quickSurfaceSystemReloader
             )
         )
         HourleafShortcuts.updateAppShortcutParameters()
@@ -237,63 +272,73 @@ final class HourleafAppLauncher: ObservableObject {
         )
     }
 
-    /// M2 exercises host integration against a disposable UI-test root only.
-    /// Production intentionally remains core-only until the separate owner
-    /// signing/App Group gate is approved and read back.
+    /// UI tests keep their disposable sidecar root. Outside UI testing the
+    /// host resolves the real App Group container from the bundle's declared
+    /// identifier and fails closed if that configured container is unavailable.
     private func makeQuickSurfaceCapability() -> QuickSurfaceHostCapability {
 #if DEBUG
-        guard isUITesting, arguments.contains("-quickSurfacesUITest") else {
-            return .notExpected
-        }
-        guard
-            let flag = arguments.firstIndex(of: "-quickSurfacesTestID"),
-            arguments.indices.contains(flag + 1),
-            let identifier = UUID(uuidString: arguments[flag + 1])
-        else {
-            return .expectedButUnavailable
-        }
-
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "Hourleaf-UITest-QuickSurfaces-\(identifier.uuidString.lowercased())",
-            isDirectory: true
-        )
-        do {
-            if arguments.contains("-resetQuickSurfacesUITest"),
-               FileManager.default.fileExists(atPath: root.path) {
-                try FileManager.default.removeItem(at: root)
+        if isUITesting {
+            guard arguments.contains("-quickSurfacesUITest") else {
+                return .notExpected
             }
-            try FileManager.default.createDirectory(
-                at: root,
-                withIntermediateDirectories: true,
-                attributes: [
-                    .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication
-                ]
+            guard
+                let flag = arguments.firstIndex(of: "-quickSurfacesTestID"),
+                arguments.indices.contains(flag + 1),
+                let identifier = UUID(uuidString: arguments[flag + 1])
+            else {
+                return .expectedButUnavailable
+            }
+
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+                "Hourleaf-UITest-QuickSurfaces-\(identifier.uuidString.lowercased())",
+                isDirectory: true
             )
-            // CoreSimulator stores app data on the host file system, where
-            // `NSFileProtectionKey` has no readable value. Keep the production
-            // store strict while giving this disposable DEBUG-only UI-test
-            // root a deterministic protection readback. Backup exclusion and
-            // every other store invariant still use the real implementation.
-#if targetEnvironment(simulator)
-            let attributeIO = QuickSurfaceStateStoreAttributeIO(
-                setProtection: { _ in },
-                readProtection: { _ in QuickSurfaceStateStoreV1.fileProtection }
-            )
-            return .available(
-                QuickSurfaceStateStoreV1(
-                    rootDirectory: root,
-                    attributeIO: attributeIO
+            do {
+                if arguments.contains("-resetQuickSurfacesUITest"),
+                   FileManager.default.fileExists(atPath: root.path) {
+                    try FileManager.default.removeItem(at: root)
+                }
+                try FileManager.default.createDirectory(
+                    at: root,
+                    withIntermediateDirectories: true,
+                    attributes: [
+                        .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication
+                    ]
                 )
-            )
+                // CoreSimulator stores app data on the host file system, where
+                // `NSFileProtectionKey` has no readable value. Keep the production
+                // store strict while giving this disposable DEBUG-only UI-test
+                // root a deterministic protection readback. Backup exclusion and
+                // every other store invariant still use the real implementation.
+#if targetEnvironment(simulator)
+                let attributeIO = QuickSurfaceStateStoreAttributeIO(
+                    setProtection: { _ in },
+                    readProtection: { _ in QuickSurfaceStateStoreV1.fileProtection }
+                )
+                return .available(
+                    QuickSurfaceStateStoreV1(
+                        rootDirectory: root,
+                        attributeIO: attributeIO
+                    )
+                )
 #else
-            return .available(QuickSurfaceStateStoreV1(rootDirectory: root))
+                return .available(QuickSurfaceStateStoreV1(rootDirectory: root))
 #endif
-        } catch {
+            } catch {
+                return .expectedButUnavailable
+            }
+        }
+#endif
+
+        switch HourleafQuickSurfaceContainer.resolve() {
+        case let .available(root):
+            return .available(QuickSurfaceStateStoreV1(rootDirectory: root))
+        case let .unavailable(reason):
+            if reason == .missingIdentifier {
+                return .notExpected
+            }
             return .expectedButUnavailable
         }
-#else
-        return .notExpected
-#endif
     }
 
     private func initialize(_ session: HourleafAppSession) async {

@@ -46,6 +46,7 @@ final class AppModel: ObservableObject {
     let repository: any LedgerRepository
     private let reminderScheduler: ReminderScheduling
     private let quickSurfaceHost: QuickSurfaceHostController
+    private let quickSurfaceSystemReloader: QuickSurfaceSystemReloader
     private let monthlyReportReminderDefaults: UserDefaults
     private let now: @Sendable () -> Date
     private var latestLedgerSnapshot: LedgerSnapshot?
@@ -69,6 +70,7 @@ final class AppModel: ObservableObject {
         repository: any LedgerRepository,
         reminderScheduler: ReminderScheduling,
         quickSurfaceHost: QuickSurfaceHostController? = nil,
+        quickSurfaceSystemReloader: QuickSurfaceSystemReloader = .disabled,
         now: @escaping @Sendable () -> Date = { .now },
         monthlyReportReminderDefaults: UserDefaults = .standard
     ) {
@@ -82,6 +84,7 @@ final class AppModel: ObservableObject {
         let resolvedQuickSurfaceHost = quickSurfaceHost
             ?? QuickSurfaceHostController(repository: repository, now: now)
         self.quickSurfaceHost = resolvedQuickSurfaceHost
+        self.quickSurfaceSystemReloader = quickSurfaceSystemReloader
         quickSurfaceHostSnapshot = resolvedQuickSurfaceHost.capabilityAvailable
             ? QuickSurfaceHostSnapshot(
                 availability: .stale,
@@ -216,6 +219,7 @@ final class AppModel: ObservableObject {
             initialSnapshotLoaded = true
             errorMessage = nil
             startupState = .ready
+            reloadQuickSurfaceSystemIfExpected()
         } catch {
             startupDiagnostic = error.localizedDescription
             startupState = .failed
@@ -432,6 +436,10 @@ final class AppModel: ObservableObject {
             return
         }
         quickSurfaceHostSnapshot = await quickSurfaceHost.reconcile(snapshot)
+        // The host readback is authoritative even when it reports stale,
+        // reset-required, or unavailable. Retire any cached system projection
+        // instead of leaving an older widget/control visible.
+        reloadQuickSurfaceSystemIfExpected()
     }
 
     func updateQuickSurfacePrivacyMode(_ mode: WidgetPrivacyMode) async {
@@ -567,6 +575,7 @@ final class AppModel: ObservableObject {
         do {
             let snapshot = try await authoritativeSnapshotForQuickSurfaces()
             quickSurfaceHostSnapshot = try await quickSurfaceHost.resetUnsavedState(using: snapshot)
+            reloadQuickSurfaceSystemIfExpected()
             return true
         } catch {
             await refreshQuickSurfaceStateAfterFailure()
@@ -594,6 +603,12 @@ final class AppModel: ObservableObject {
             preferences: quickSurfaceHostSnapshot.preferences,
             state: state
         )
+        reloadQuickSurfaceSystemIfExpected()
+    }
+
+    private func reloadQuickSurfaceSystemIfExpected() {
+        guard quickSurfaceHost.capabilityExpected else { return }
+        quickSurfaceSystemReloader.reload()
     }
 
     private func refreshQuickSurfaceStateAfterFailure() async {
@@ -603,6 +618,7 @@ final class AppModel: ObservableObject {
                 preferences: .init(),
                 state: nil
             )
+            reloadQuickSurfaceSystemIfExpected()
             return
         }
         await applyAuthoritativeSnapshot(snapshot)
