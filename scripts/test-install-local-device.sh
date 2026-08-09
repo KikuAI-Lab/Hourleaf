@@ -17,6 +17,10 @@ grep -Fq -- 'device info files' "$installer" \
     || fail "installer does not enumerate the app-data inventory"
 grep -Fq -- 'device info processes' "$installer" \
     || fail "installer does not inspect running device processes"
+grep -Fq -- '-allowProvisioningDeviceRegistration' "$installer" \
+    || fail "installer cannot register the selected physical device for local signing"
+grep -Fq -- '-destination "platform=iOS,id=$device_id"' "$installer" \
+    || fail "installer does not build for the selected physical device"
 grep -Fq -- '--recurse' "$installer" \
     || fail "installer does not request recursive app-data inventory"
 if grep -Fq -- '--source .' "$installer"; then

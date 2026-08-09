@@ -603,9 +603,10 @@ build_and_install() {
         -project "$temporary_source/Hourleaf.xcodeproj" \
         -scheme Hourleaf \
         -configuration Debug \
-        -destination 'generic/platform=iOS' \
+        -destination "platform=iOS,id=$device_id" \
         -derivedDataPath "$derived_data" \
         -allowProvisioningUpdates \
+        -allowProvisioningDeviceRegistration \
         DEVELOPMENT_TEAM="$personal_team_id" \
         PRODUCT_BUNDLE_IDENTIFIER="$local_bundle_id" \
         CODE_SIGN_ENTITLEMENTS='' \
