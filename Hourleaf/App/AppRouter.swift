@@ -3,6 +3,8 @@ import Foundation
 
 enum AppRoute: Equatable, Sendable {
     case quickEntry
+    case progress
+    case progressReport(MonthKey)
 }
 
 /// Holds the next in-app destination until the root view is ready to consume it.

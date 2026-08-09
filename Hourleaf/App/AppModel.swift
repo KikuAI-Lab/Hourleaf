@@ -37,6 +37,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var undoCandidate: EntryUndoCandidate?
     @Published private(set) var visibleUndoCandidate: EntryUndoCandidate?
     @Published private(set) var notificationAuthorizationStatus: ReminderAuthorizationStatus = .notDetermined
+    @Published private(set) var monthlyReportReminderEnabled: Bool
     @Published private(set) var quickEntryResetGeneration: UInt64 = 0
     @Published private(set) var isRepeatingLastEntry = false
     @Published private(set) var quickSurfaceHostSnapshot: QuickSurfaceHostSnapshot = .unavailable
@@ -45,6 +46,7 @@ final class AppModel: ObservableObject {
     let repository: any LedgerRepository
     private let reminderScheduler: ReminderScheduling
     private let quickSurfaceHost: QuickSurfaceHostController
+    private let monthlyReportReminderDefaults: UserDefaults
     private let now: @Sendable () -> Date
     private var latestLedgerSnapshot: LedgerSnapshot?
     private var initialSnapshotLoaded = false
@@ -67,10 +69,14 @@ final class AppModel: ObservableObject {
         repository: any LedgerRepository,
         reminderScheduler: ReminderScheduling,
         quickSurfaceHost: QuickSurfaceHostController? = nil,
-        now: @escaping @Sendable () -> Date = { .now }
+        now: @escaping @Sendable () -> Date = { .now },
+        monthlyReportReminderDefaults: UserDefaults = .standard
     ) {
         let initialDate = now()
         let initialMonth = ReportReadiness.currentMonth(asOf: initialDate)
+        let monthlyReportReminderPreference = MonthlyReportReminderPreference.load(
+            from: monthlyReportReminderDefaults
+        )
         self.repository = repository
         self.reminderScheduler = reminderScheduler
         let resolvedQuickSurfaceHost = quickSurfaceHost
@@ -84,9 +90,11 @@ final class AppModel: ObservableObject {
             )
             : .unavailable
         self.now = now
+        self.monthlyReportReminderDefaults = monthlyReportReminderDefaults
         currentDate = initialDate
         currentMonth = initialMonth
         selectedReportMonth = initialMonth
+        monthlyReportReminderEnabled = monthlyReportReminderPreference.isEnabled
     }
 
     func loadInitialSnapshot(markReady: Bool = true) async {
@@ -256,6 +264,15 @@ final class AppModel: ObservableObject {
     func prepareQuickEntry() {
         quickEntryResetGeneration &+= 1
         selectedTab = .add
+    }
+
+    func prepareProgress(reportMonth: MonthKey? = nil) {
+        selectedTab = .progress
+        guard let reportMonth else { return }
+        selectedReportMonth = min(
+            max(reportMonth, settings.ledgerStartMonth),
+            currentMonth
+        )
     }
 
     var oneTapProposal: OneTapProposal? {
@@ -668,7 +685,8 @@ final class AppModel: ObservableObject {
                 ledgerStartMonth: snapshot.settings.ledgerStartMonth,
                 entries: snapshot.entries,
                 acknowledgements: snapshot.dayAcknowledgements
-            )
+            ),
+            monthlyReportReminderEnabled: monthlyReportReminderEnabled
         )
     }
 
@@ -680,6 +698,31 @@ final class AppModel: ObservableObject {
 
     func refreshReminderAuthorizationStatus() async {
         notificationAuthorizationStatus = await reminderScheduler.notificationAuthorizationStatus()
+    }
+
+    func setMonthlyReportReminderEnabled(_ isEnabled: Bool) async {
+        monthlyReportReminderEnabled = isEnabled
+        MonthlyReportReminderPreference(isEnabled: isEnabled)
+            .save(to: monthlyReportReminderDefaults)
+
+        do {
+            if isEnabled {
+                _ = try await authorizeReminderSettingsChangeIfNeeded()
+            }
+            try await reconcileLoadedReminderState()
+        } catch {
+            present(error)
+        }
+    }
+
+    func requestMonthlyReportReminderAuthorization() async {
+        guard monthlyReportReminderEnabled else { return }
+        do {
+            _ = try await authorizeReminderSettingsChangeIfNeeded()
+            try await reconcileLoadedReminderState()
+        } catch {
+            present(error)
+        }
     }
 
     private func authorizeReminderSettingsChangeIfNeeded() async throws -> Bool {

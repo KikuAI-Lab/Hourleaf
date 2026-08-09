@@ -59,6 +59,7 @@ struct RootView: View {
         }
         .onChange(of: model.startupState) { _, state in
             guard state == .ready else { return }
+            consumePendingRoute()
             consumePendingReminderEvent()
             consumeLedgerChange()
         }
@@ -142,10 +143,15 @@ struct RootView: View {
     }
 
     private func consumePendingRoute() {
+        guard model.startupState == .ready else { return }
         guard let route = router.consumePendingRoute() else { return }
         switch route {
         case .quickEntry:
             model.prepareQuickEntry()
+        case .progress:
+            model.prepareProgress()
+        case let .progressReport(month):
+            model.prepareProgress(reportMonth: month)
         }
     }
 

@@ -16,8 +16,8 @@
           "stringSet" : {
             "state" : "translated",
             "values" : [
-              "Добавить кредитное время в ${applicationName}",
-              "Записать кредитное время в ${applicationName}"
+              "Добавить кредит в ${applicationName}",
+              "Записать кредит в ${applicationName}"
             ]
           }
         },
@@ -25,8 +25,8 @@
           "stringSet" : {
             "state" : "translated",
             "values" : [
-              "Додати кредитний час у ${applicationName}",
-              "Записати кредитний час у ${applicationName}"
+              "Додати кредит у ${applicationName}",
+              "Записати кредит у ${applicationName}"
             ]
           }
         }

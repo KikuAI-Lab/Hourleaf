@@ -63,7 +63,7 @@ final class HourleafUITests: XCTestCase {
         XCTAssertFalse(app.buttons["sharePreparedReportButton"].exists)
     }
 
-    func testPaceIsHiddenByDefaultAndToggleShowsServiceOnlyGuide() {
+    func testProgressOmitsWeeklyPaceProse() {
         let app = launchApp(
             additionalArguments: [
                 "-seedPaceUITest",
@@ -75,27 +75,12 @@ final class HourleafUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["360 hr"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["serviceYearPaceText"].exists)
-
-        app.tabBars.buttons["Settings"].tap()
-        let planningToggle = app.switches["planningVisibilityToggle"]
-        XCTAssertTrue(scrollUntilVisible(planningToggle, in: app))
-        planningToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
-
-        app.tabBars.buttons["Progress"].tap()
-        let pace = app.staticTexts["serviceYearPaceText"]
-        XCTAssertTrue(pace.waitForExistence(timeout: 5))
-        XCTAssertEqual(
-            pace.label,
-            "For reference: about 10 hr 59 min a week until August 31."
-        )
-        XCTAssertTrue(app.buttons["serviceYearPaceDetails"].exists)
     }
 
-    func testPaceAboveSixHundredShowsUncappedTotal() {
+    func testProgressAboveSixHundredShowsUncappedTotalWithoutWeeklyPace() {
         let app = launchApp(
             additionalArguments: [
                 "-seedPaceAboveGoalUITest",
-                "-enablePlanningUITest",
                 "-hourleafTestNow",
                 "2026-08-01T12:00:00Z"
             ]
@@ -103,11 +88,7 @@ final class HourleafUITests: XCTestCase {
         app.tabBars.buttons["Progress"].tap()
 
         XCTAssertTrue(app.staticTexts["601 hr 15 min"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["serviceYearPaceText"].waitForExistence(timeout: 5))
-        XCTAssertEqual(
-            app.staticTexts["serviceYearPaceText"].label,
-            "600-hour guide reached. Total: 601 hr 15 min."
-        )
+        XCTAssertFalse(app.staticTexts["serviceYearPaceText"].exists)
     }
 
     func testPreviousMonthZeroEntryBannerOpensExactMonth() {
@@ -349,8 +330,7 @@ final class HourleafUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(day.waitForExistence(timeout: 5))
         day.tap()
-        app.navigationBars["Add time"].tap()
-
+        app.navigationBars.firstMatch.tap()
         app.pickerWheels.element(boundBy: 1).adjust(toPickerWheelValue: "20")
         app.textFields["entryNoteField"].tap()
         app.textFields["entryNoteField"].typeText("Past date")
@@ -377,6 +357,55 @@ final class HourleafUITests: XCTestCase {
         app.buttons["saveEditedEntryButton"].tap()
 
         XCTAssertTrue(app.staticTexts["1 hr 30 min"].waitForExistence(timeout: 5))
+    }
+
+    func testHistoryListCalendarDayFilterAndCreatedAtLabels() {
+        let app = launchApp(
+            additionalArguments: [
+                "-seedUITestData",
+                "-hourleafTestNow",
+                "2026-10-02T12:00:00Z"
+            ]
+        )
+        addEntry(in: app, hours: "0", minutes: "5")
+        app.tabBars.buttons["History"].tap()
+
+        let modePicker = app.segmentedControls["historyViewModePicker"]
+        XCTAssertTrue(modePicker.waitForExistence(timeout: 5))
+        XCTAssertTrue(modePicker.buttons["List"].isSelected)
+
+        let entries = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH 'historyEntry_'")
+        )
+        XCTAssertTrue(entries.element(boundBy: 2).waitForExistence(timeout: 5))
+        XCTAssertEqual(entries.count, 3)
+
+        let createdAtLabels = app.staticTexts.matching(
+            NSPredicate(format: "identifier BEGINSWITH 'historyEntryCreatedAt_'")
+        )
+        XCTAssertTrue(createdAtLabels.element(boundBy: 2).waitForExistence(timeout: 5))
+        XCTAssertEqual(createdAtLabels.count, 3)
+        for label in createdAtLabels.allElementsBoundByIndex {
+            XCTAssertFalse(label.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+
+        modePicker.buttons["Calendar"].tap()
+        XCTAssertTrue(app.buttons["historyCalendarPreviousMonthButton"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["historyCalendarMonth"].label, "October 2026")
+        app.buttons["historyCalendarPreviousMonthButton"].tap()
+        XCTAssertEqual(app.staticTexts["historyCalendarMonth"].label, "September 2026")
+
+        let seededDay = app.buttons["historyCalendarDay_2026-09-15"]
+        XCTAssertTrue(scrollUntilHittable(seededDay, in: app))
+        seededDay.tap()
+
+        XCTAssertTrue(entries.element(boundBy: 1).waitForExistence(timeout: 5))
+        XCTAssertEqual(entries.count, 2)
+        XCTAssertTrue(createdAtLabels.element(boundBy: 1).waitForExistence(timeout: 5))
+        XCTAssertEqual(createdAtLabels.count, 2)
+        for label in createdAtLabels.allElementsBoundByIndex {
+            XCTAssertFalse(label.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
     }
 
     func testEntryCanBeDeleted() {
@@ -434,70 +463,36 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.buttons["dismissUndoBannerButton"].isHittable)
     }
 
-    func testRepeatLastEntryKeepsManualDraftAndShowsUndo() {
-        let app = launchApp()
-        let repeatButton = app.buttons["repeatLastEntryButton"]
-        XCTAssertFalse(repeatButton.exists)
-
-        let wheels = app.pickerWheels
-        XCTAssertTrue(wheels.element(boundBy: 0).waitForExistence(timeout: 5))
-        wheels.element(boundBy: 0).adjust(toPickerWheelValue: "1")
-        wheels.element(boundBy: 1).adjust(toPickerWheelValue: "15")
-        let noteField = app.textFields["entryNoteField"]
-        noteField.tap()
-        noteField.typeText("Source note")
-        app.buttons["dismissEntryKeyboardButton"].tap()
-        app.buttons["saveEntryButton"].tap()
-
-        XCTAssertTrue(repeatButton.waitForExistence(timeout: 5))
-        XCTAssertEqual(repeatButton.value as? String, "Service · 1 hr 15 min")
-        expectation(
-            for: NSPredicate(format: "value == %@", "Short note (optional)"),
-            evaluatedWith: noteField
-        )
-        waitForExpectations(timeout: 3)
-
-        app.segmentedControls["entryKindPicker"].buttons["Credit"].tap()
-        wheels.element(boundBy: 0).adjust(toPickerWheelValue: "2")
-        wheels.element(boundBy: 1).adjust(toPickerWheelValue: "30")
-        noteField.tap()
-        noteField.typeText("Unsaved draft")
-        app.buttons["dismissEntryKeyboardButton"].tap()
-        XCTAssertTrue(repeatButton.isHittable)
-        repeatButton.tap()
-
-        XCTAssertTrue(app.staticTexts["2 hr 30 min"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.segmentedControls["entryKindPicker"].buttons["Credit"].isSelected)
-        XCTAssertEqual(noteField.value as? String, "Unsaved draft")
-        XCTAssertTrue(app.buttons["saveEntryButton"].isEnabled)
-        XCTAssertTrue(app.buttons["undoMutationButton"].waitForExistence(timeout: 5))
-
-        app.tabBars.buttons["History"].tap()
-        let historyEntries = app.buttons.matching(
-            NSPredicate(format: "identifier BEGINSWITH 'historyEntry_'")
-        )
-        XCTAssertTrue(historyEntries.firstMatch.waitForExistence(timeout: 5))
-        XCTAssertEqual(historyEntries.count, 2)
-        XCTAssertEqual(
-            app.staticTexts.matching(NSPredicate(format: "label == %@", "Source note")).count,
-            1
-        )
-    }
-
-    func testRepeatLastEntryRemainsHittableAtAccessibilityXXXL() {
+    func testQuickEntryHasNoVisibleTitleOrRepeatAndShareOpensReportMonthChooser() {
         let app = launchApp(
             additionalArguments: [
-                "-UIPreferredContentSizeCategoryName",
-                "UICTContentSizeCategoryAccessibilityXXXL"
+                "-seedUITestData",
+                "-hourleafTestNow",
+                "2026-10-02T12:00:00Z"
             ]
         )
-        addEntry(in: app, hours: "1", minutes: "15")
 
-        let repeatButton = app.buttons["repeatLastEntryButton"]
-        XCTAssertTrue(repeatButton.waitForExistence(timeout: 5))
-        XCTAssertTrue(repeatButton.isHittable)
-        XCTAssertGreaterThanOrEqual(repeatButton.frame.height, 44)
-        XCTAssertEqual(repeatButton.value as? String, "Service · 1 hr 15 min")
+        XCTAssertFalse(app.navigationBars["Add time"].exists)
+        XCTAssertFalse(app.buttons["repeatLastEntryButton"].exists)
+
+        app.tabBars.buttons["Progress"].tap()
+        let selectedMonth = app.staticTexts["selectedReportMonth"]
+        XCTAssertTrue(selectedMonth.waitForExistence(timeout: 5))
+        XCTAssertEqual(selectedMonth.label, "September 2026")
+        app.buttons["nextReportMonthButton"].tap()
+        XCTAssertEqual(selectedMonth.label, "October 2026")
+        app.tabBars.buttons["Add"].tap()
+
+        let share = app.buttons["shareReportButton"]
+        XCTAssertTrue(share.waitForExistence(timeout: 5))
+        share.tap()
+
+        XCTAssertTrue(app.tabBars.buttons["Progress"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["Progress"].isSelected)
+        XCTAssertTrue(selectedMonth.waitForExistence(timeout: 5))
+        XCTAssertEqual(selectedMonth.label, "September 2026")
+        XCTAssertTrue(app.buttons["previousReportMonthButton"].exists)
+        XCTAssertTrue(app.buttons["nextReportMonthButton"].exists)
     }
 
     func testQuickSurfaceTimerIsOffUntilEnabledAndLeavesManualEntryUnchanged() {
@@ -508,7 +503,7 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.pickerWheels.element(boundBy: 0).waitForExistence(timeout: 5))
         XCTAssertTrue(app.segmentedControls["entryKindPicker"].buttons["Service"].isSelected)
         XCTAssertFalse(app.buttons["saveEntryButton"].isEnabled)
-        XCTAssertEqual(app.textFields["entryNoteField"].value as? String, "Short note (optional)")
+        XCTAssertEqual(app.textFields["entryNoteField"].value as? String, "Note")
 
         enableQuickSurfaceTimer(in: app)
 
@@ -518,7 +513,7 @@ final class HourleafUITests: XCTestCase {
         XCTAssertFalse(app.buttons["stopQuickSurfaceTimerButton"].exists)
         XCTAssertTrue(app.segmentedControls["entryKindPicker"].buttons["Service"].isSelected)
         XCTAssertFalse(app.buttons["saveEntryButton"].isEnabled)
-        XCTAssertEqual(app.textFields["entryNoteField"].value as? String, "Short note (optional)")
+        XCTAssertEqual(app.textFields["entryNoteField"].value as? String, "Note")
     }
 
     func testQuickSurfaceRunningTimerPersistsAcrossTerminationAndRelaunch() {
@@ -700,10 +695,10 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["New reminder"].waitForExistence(timeout: 5))
         app.buttons["confirmAddReminderButton"].tap()
 
-        let notificationStatus = app.staticTexts["notificationAuthorizationStatus"]
+        let notificationStatus = app.staticTexts["monthlyReportReminderStatus"]
         XCTAssertTrue(notificationStatus.waitForExistence(timeout: 5))
-        XCTAssertEqual(notificationStatus.label, "Notifications are off for Hourleaf.")
-        let openSettingsButton = app.buttons["openNotificationSettingsButton"]
+        XCTAssertEqual(notificationStatus.label, "Notifications are off in iPhone Settings.")
+        let openSettingsButton = app.buttons["openMonthlyReminderSettingsButton"]
         XCTAssertTrue(scrollUntilVisible(openSettingsButton, in: app))
 
         let reminderRows = app.descendants(matching: .any).matching(
@@ -734,16 +729,19 @@ final class HourleafUITests: XCTestCase {
         XCTAssertEqual(quietGapToggle.value as? String, "0")
         XCTAssertTrue(
             app.staticTexts[
-                "If there is no saved service time, Hourleaf may ask you to check once every seven days. It uses only records in Hourleaf."
+                "After a week without a service entry, Hourleaf can ask you to check."
             ].exists
         )
     }
 
-    func testColdQuickEntryRouteLaunchesOnAddTime() {
+    func testColdQuickEntryRouteLaunchesOnBlankEntry() {
         let app = launchApp(additionalArguments: ["-coldQuickEntryRouteUITest"])
 
-        XCTAssertTrue(app.navigationBars["Add time"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["saveEntryButton"].isHittable)
+        XCTAssertFalse(app.navigationBars["Add time"].exists)
+        let save = app.buttons["saveEntryButton"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertTrue(save.isHittable)
+        XCTAssertTrue(app.buttons["shareReportButton"].waitForExistence(timeout: 5))
     }
 
     func testQuickEntryRouteResetsAnExistingDraftOnForeground() {
@@ -763,7 +761,7 @@ final class HourleafUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(yesterdayButton.waitForExistence(timeout: 5))
         yesterdayButton.tap()
-        app.navigationBars["Add time"].tap()
+        app.navigationBars.firstMatch.tap()
         app.pickerWheels.element(boundBy: 0).adjust(toPickerWheelValue: "2")
         app.pickerWheels.element(boundBy: 1).adjust(toPickerWheelValue: "30")
         let noteField = app.textFields["entryNoteField"]
@@ -775,10 +773,11 @@ final class HourleafUITests: XCTestCase {
         XCUIDevice.shared.press(.home)
         app.activate()
 
-        XCTAssertTrue(app.navigationBars["Add time"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.navigationBars["Add time"].exists)
+        XCTAssertTrue(app.buttons["saveEntryButton"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.segmentedControls["entryKindPicker"].buttons["Service"].isSelected)
         XCTAssertFalse(app.buttons["saveEntryButton"].isEnabled)
-        XCTAssertEqual(noteField.value as? String, "Short note (optional)")
+        XCTAssertEqual(noteField.value as? String, "Note")
 
         app.pickerWheels.element(boundBy: 1).adjust(toPickerWheelValue: "1")
         app.buttons["saveEntryButton"].tap()
@@ -867,16 +866,13 @@ final class HourleafUITests: XCTestCase {
         app.launchArguments = ["-uiTesting", "-AppleLanguages", "(ru)"]
         app.launch()
 
-        XCTAssertTrue(app.navigationBars["Добавить время"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["saveEntryButton"].exists)
-        addEntry(in: app, hours: "1", minutes: "15")
-        let repeatButton = app.buttons["repeatLastEntryButton"]
-        XCTAssertTrue(repeatButton.waitForExistence(timeout: 5))
-        XCTAssertEqual(repeatButton.label, "Повторить последнюю запись")
-        XCTAssertEqual(repeatButton.value as? String, "Служение · 1 ч 15 мин")
+        XCTAssertFalse(app.navigationBars["Добавить время"].exists)
+        XCTAssertTrue(app.buttons["saveEntryButton"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["repeatLastEntryButton"].exists)
+        XCTAssertTrue(app.buttons["shareReportButton"].waitForExistence(timeout: 5))
         app.tabBars.buttons["Настройки"].tap()
         XCTAssertTrue(scrollUntilVisible(app.staticTexts["Быстрые команды"], in: app))
-        XCTAssertTrue(app.staticTexts["shortcutsFooter"].exists)
+        XCTAssertTrue(scrollUntilVisible(app.staticTexts["shortcutsFooter"], in: app))
     }
 
     func testUkrainianInterfaceLaunches() {
@@ -884,16 +880,13 @@ final class HourleafUITests: XCTestCase {
         app.launchArguments = ["-uiTesting", "-AppleLanguages", "(uk)"]
         app.launch()
 
-        XCTAssertTrue(app.navigationBars["Додати час"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["saveEntryButton"].exists)
-        addEntry(in: app, hours: "1", minutes: "15")
-        let repeatButton = app.buttons["repeatLastEntryButton"]
-        XCTAssertTrue(repeatButton.waitForExistence(timeout: 5))
-        XCTAssertEqual(repeatButton.label, "Повторити останній запис")
-        XCTAssertEqual(repeatButton.value as? String, "Служіння · 1 год 15 хв")
+        XCTAssertFalse(app.navigationBars["Додати час"].exists)
+        XCTAssertTrue(app.buttons["saveEntryButton"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["repeatLastEntryButton"].exists)
+        XCTAssertTrue(app.buttons["shareReportButton"].waitForExistence(timeout: 5))
         app.tabBars.buttons["Налаштування"].tap()
         XCTAssertTrue(scrollUntilVisible(app.staticTexts["Швидкі команди"], in: app))
-        XCTAssertTrue(app.staticTexts["shortcutsFooter"].exists)
+        XCTAssertTrue(scrollUntilVisible(app.staticTexts["shortcutsFooter"], in: app))
     }
 
     func testOnboardingExplainsOpeningBalances() {
@@ -932,7 +925,8 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(finish.isEnabled)
         finish.tap()
 
-        XCTAssertTrue(app.navigationBars["Add time"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.navigationBars["Add time"].exists)
+        XCTAssertTrue(app.buttons["saveEntryButton"].waitForExistence(timeout: 5))
     }
 
     func testDataManagementActionsRemainReachableAtAccessibilityXXXL() {
@@ -969,7 +963,7 @@ final class HourleafUITests: XCTestCase {
                 "Dark"
             ]
         )
-        XCTAssertTrue(app.navigationBars["Add time"].exists)
+        XCTAssertFalse(app.navigationBars["Add time"].exists)
 
         let wheels = app.pickerWheels
         XCTAssertTrue(wheels.element(boundBy: 0).waitForExistence(timeout: 5))
@@ -1051,12 +1045,12 @@ final class HourleafUITests: XCTestCase {
         let save = app.buttons["saveEntryButton"]
         XCTAssertTrue(kindPicker.buttons["Service"].isSelected)
         XCTAssertFalse(save.isEnabled)
-        XCTAssertEqual(noteField.value as? String, "Short note (optional)")
+        XCTAssertEqual(noteField.value as? String, "Note")
 
         enableQuickSurfaceTimer(in: app)
         XCTAssertTrue(kindPicker.buttons["Service"].isSelected)
         XCTAssertFalse(save.isEnabled)
-        XCTAssertEqual(noteField.value as? String, "Short note (optional)")
+        XCTAssertEqual(noteField.value as? String, "Note")
 
         let start = app.buttons["startQuickSurfaceTimerButton"]
         XCTAssertTrue(start.waitForExistence(timeout: 5))
@@ -1113,41 +1107,28 @@ final class HourleafUITests: XCTestCase {
     }
 #endif
 
-    func testSettingsDoesNotOfferServiceYearCarry() {
+    func testSimplifiedSettingsShowsMonthlyReminderAndVoiceExamplesWithoutRemovedControls() {
         let app = launchApp()
         app.tabBars.buttons["Settings"].tap()
 
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.textFields["creditLabelField"].exists)
+        let monthlyReminder = app.switches["monthlyReportReminderToggle"]
+        XCTAssertTrue(monthlyReminder.waitForExistence(timeout: 5))
+        XCTAssertEqual(monthlyReminder.value as? String, "1")
         XCTAssertTrue(app.staticTexts["minutePolicyExample"].exists)
-        XCTAssertEqual(
-            app.staticTexts["minutePolicyExample"].label,
-            "Example: 3 hr 20 min in July becomes 3 hr in the report; 20 min is added to August. After August, the remainder resets to zero."
-        )
-        XCTAssertFalse(app.switches["Carry August remainder into September"].exists)
-        XCTAssertFalse(app.staticTexts["App Store name"].exists)
+        XCTAssertFalse(app.textFields["creditLabelField"].exists)
+        XCTAssertFalse(app.staticTexts["Credit wording"].exists)
+        XCTAssertFalse(app.switches["planningVisibilityToggle"].exists)
+        XCTAssertFalse(app.staticTexts["Show weekly guide to 600 hours"].exists)
+        XCTAssertFalse(app.buttons["existingTimeButton"].exists)
+        XCTAssertFalse(app.staticTexts["Time before Hourleaf"].exists)
 
-        let settings = app.collectionViews.firstMatch
-        settings.swipeUp()
-        let existingTime = app.buttons["existingTimeButton"]
-        XCTAssertTrue(existingTime.waitForExistence(timeout: 5))
-        existingTime.tap()
-        XCTAssertTrue(app.navigationBars["Time before Hourleaf"].waitForExistence(timeout: 5))
-        let balancesIntro = app.staticTexts.matching(
-            NSPredicate(
-                format: "label == %@",
-                "This does not create entries for past days. Enter service already counted this year and any minutes carried from an earlier report."
-            )
-        ).firstMatch
-        XCTAssertTrue(balancesIntro.exists)
-
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        settings.swipeUp()
-        settings.swipeUp()
-        XCTAssertFalse(app.staticTexts["storageStatus"].exists)
-        XCTAssertTrue(app.buttons["developerWebsiteLink"].exists)
-        XCTAssertTrue(app.buttons["developerTelegramLink"].exists)
-        XCTAssertTrue(app.buttons["developerGitHubLink"].exists)
+        let voiceIntro = app.staticTexts[
+            "Add service or credit by voice with Siri or from Shortcuts. Hourleaf asks for hours and minutes before saving."
+        ]
+        XCTAssertTrue(scrollUntilVisible(voiceIntro, in: app))
+        XCTAssertTrue(app.staticTexts["Say: “Siri, add service time in Hourleaf.”"].exists)
+        XCTAssertTrue(app.staticTexts["Or: “Siri, add credit time in Hourleaf.”"].exists)
     }
 
     private func launchApp(additionalArguments: [String] = []) -> XCUIApplication {

@@ -16,7 +16,7 @@ Open `Hourleaf.xcodeproj` in Xcode 26 or run:
 ```sh
 xcodebuild -project Hourleaf.xcodeproj \
   -scheme Hourleaf \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
   test
 ```
 
@@ -34,6 +34,12 @@ The production target is not modified:
 ```sh
 ./scripts/install-local-device.sh <PERSONAL_TEAM_ID> <DEVICE_ID>
 ```
+
+When the standard local Hourleaf app is already installed, close it first. The
+installer refuses to continue while Hourleaf is running, copies every readable
+file from its data container to a private recovery directory under Application
+Support, and verifies the exact file inventory, sizes, and SHA-256 manifest
+before it builds or installs the update.
 
 For the isolated Slice 3 shortcut smoke build, append `--slice3-smoke`. It
 uses `com.kikuai.hourleaf.slice3smoke`, separate from both production and the

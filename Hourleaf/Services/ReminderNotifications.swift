@@ -3,6 +3,7 @@ import UserNotifications
 
 enum ReminderNotificationDestination: String, Sendable {
     case quickEntry = "quick-entry"
+    case progress
 
     private static let userInfoKey = ReminderNotificationUserInfoKey.destination
 
@@ -27,6 +28,8 @@ enum ReminderNotificationDestination: String, Sendable {
         switch self {
         case .quickEntry:
             router.route(to: .quickEntry)
+        case .progress:
+            router.route(to: .progress)
         }
     }
 }
@@ -35,6 +38,7 @@ enum ReminderNotificationKind: String, Sendable {
     case weekly
     case followup
     case quietGap
+    case monthlyReport
 }
 
 enum ReminderNotificationAction: Equatable, Sendable {
@@ -63,6 +67,7 @@ enum ReminderNotificationAction: Equatable, Sendable {
 enum ReminderNotificationCategoryID {
     static let primary = "hourleaf.reminder.primary.v1"
     static let followup = "hourleaf.reminder.followup.v1"
+    static let monthlyReport = "hourleaf.reminder.monthly-report.v1"
 }
 
 enum ReminderNotificationActionID {
@@ -242,6 +247,8 @@ enum ReminderNotificationRequestID {
     static let followupWeeklyPrefix = "hourleaf.reminder.followup.weekly."
     static let quietGapPrefix = "hourleaf.reminder.quiet-gap."
     static let quietGapFollowupPrefix = "hourleaf.reminder.followup.quiet-gap."
+    static let monthlyReportPrefix = "hourleaf.reminder.monthly-report."
+    static let monthlyReport = "\(monthlyReportPrefix)v1"
 
     static func weekly(reminderID: UUID) -> String {
         "\(weeklyPrefix)\(reminderID.uuidString.lowercased())"
@@ -267,6 +274,8 @@ extension ReminderNotificationResponseContext {
             return LocalDay(deliveryDate, calendar: calendar)
         case .followup, .quietGap:
             return payload.targetDay
+        case .monthlyReport:
+            return nil
         }
     }
 
@@ -283,6 +292,8 @@ extension ReminderNotificationResponseContext {
             source = .quietGap
         case .weekly, .followup:
             source = .scheduledReminder
+        case .monthlyReport:
+            return nil
         }
 
         return ReminderNothingToRecordEvent(

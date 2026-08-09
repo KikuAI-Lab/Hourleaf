@@ -11,9 +11,6 @@ struct SettingsScreen: View {
     @ObservedObject private var backupStatus: BackupConfidenceStatusModel
     @State private var showAddReminder = false
     @State private var showQuickSurfaceResetConfirmation = false
-    @State private var creditLabelDraft = ""
-    @State private var creditLabelLanguage: ReportLanguage = .preferredForCurrentLocale
-    @FocusState private var creditLabelIsFocused: Bool
 
     init(dataManagementActions: DataManagementActions) {
         self.dataManagementActions = dataManagementActions
@@ -32,22 +29,6 @@ struct SettingsScreen: View {
                         ForEach(ReportLanguage.allCases) { Text($0.localizedName).tag($0) }
                     }
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("settings.credit_label")
-                            .font(.subheadline.weight(.semibold))
-                        TextField("settings.credit_label_placeholder", text: $creditLabelDraft)
-                            .textFieldStyle(.roundedBorder)
-                            .focused($creditLabelIsFocused)
-                            .submitLabel(.done)
-                            .onSubmit { saveCreditLabelDraft() }
-                            .accessibilityLabel(String(localized: "settings.credit_label"))
-                            .accessibilityIdentifier("creditLabelField")
-                        Text("settings.credit_label_help")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 4)
-
                     Picker("settings.minutes_policy", selection: remainderModeBinding) {
                         ForEach(RemainderMode.allCases) { Text($0.localizedName).tag($0) }
                     }
@@ -59,25 +40,48 @@ struct SettingsScreen: View {
 
                 Section {
                     Toggle(
-                        "planning.toggle",
+                        "report_reminder.toggle",
                         isOn: Binding(
-                            get: { model.planningPreferences.isPaceVisible },
-                            set: { _ in
-                                model.queuePlanningVisibilityChange(
-                                    !model.planningPreferences.isPaceVisible
-                                )
+                            get: { model.monthlyReportReminderEnabled },
+                            set: { value in
+                                Task { await model.setMonthlyReportReminderEnabled(value) }
                             }
                         )
                     )
-                    .accessibilityHint(String(localized: "planning.footer"))
-                    .accessibilityIdentifier("planningVisibilityToggle")
-                } header: {
-                    Text("settings.planning")
-                } footer: {
-                    Text("planning.footer")
-                }
+                    .accessibilityIdentifier("monthlyReportReminderToggle")
 
-                Section {
+                    if model.monthlyReportReminderEnabled,
+                       model.notificationAuthorizationStatus != .authorized,
+                       model.notificationAuthorizationStatus != .provisional,
+                       model.notificationAuthorizationStatus != .ephemeral {
+                        if model.notificationAuthorizationStatus == .notDetermined {
+                            Text("report_reminder.permission_needed")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("monthlyReportReminderStatus")
+                        } else {
+                            Text("report_reminder.notifications_off")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("monthlyReportReminderStatus")
+                        }
+
+                        if model.notificationAuthorizationStatus == .notDetermined {
+                            Button("report_reminder.allow_notifications") {
+                                Task { await model.requestMonthlyReportReminderAuthorization() }
+                            }
+                            .accessibilityIdentifier("allowMonthlyReportReminderButton")
+                        } else {
+                            Button("report_reminder.open_settings") {
+                                guard let url = URL(string: UIApplication.openSettingsURLString) else {
+                                    return
+                                }
+                                openURL(url)
+                            }
+                            .accessibilityIdentifier("openMonthlyReminderSettingsButton")
+                        }
+                    }
+
                     ForEach(model.reminders) { reminder in
                         reminderRow(reminder)
                     }
@@ -102,7 +106,8 @@ struct SettingsScreen: View {
                     .accessibilityHint(String(localized: "quiet_gap.footer"))
                     .accessibilityIdentifier("quietGapCheckToggle")
 
-                    if model.notificationAuthorizationStatus.showsInlineGuidance {
+                    if model.notificationAuthorizationStatus.showsInlineGuidance,
+                       !model.monthlyReportReminderEnabled {
                         Text("notifications.off")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -126,6 +131,17 @@ struct SettingsScreen: View {
                 }
 
                 Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("settings.voice_shortcuts.intro")
+                        Text("settings.voice_shortcuts.service_example")
+                            .font(.footnote)
+                        Text("settings.voice_shortcuts.credit_example")
+                            .font(.footnote)
+                        Text("settings.voice_shortcuts.watch_note")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
                     ShortcutsLink()
                         .accessibilityIdentifier("shortcutsLink")
                 } header: {
@@ -219,8 +235,6 @@ struct SettingsScreen: View {
                     }
                     .accessibilityIdentifier("dataManagementButton")
 
-                    NavigationLink("settings.opening_balances") { StartingBalancesView() }
-                        .accessibilityIdentifier("existingTimeButton")
                 } header: {
                     Text("settings.data")
                 } footer: {
@@ -251,12 +265,8 @@ struct SettingsScreen: View {
             }
             .navigationTitle("settings.title")
             .onAppear {
-                synchronizeCreditLabelDraft()
                 backupStatus.requestRefresh()
                 Task { await model.refreshReminderAuthorizationStatus() }
-            }
-            .onChange(of: creditLabelIsFocused) { _, isFocused in
-                if !isFocused { saveCreditLabelDraft() }
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
@@ -321,28 +331,8 @@ struct SettingsScreen: View {
 
     private var reportLanguageBinding: Binding<ReportLanguage> {
         Binding(get: { model.settings.reportLanguage }, set: { value in
-            let previousLanguage = creditLabelLanguage
-            let previousLabel = creditLabelDraft
-            creditLabelLanguage = value
-            creditLabelDraft = model.settings.creditLabel(for: value)
-            model.queueReportLanguageChange(
-                value,
-                savingCreditLabel: previousLabel,
-                for: previousLanguage
-            )
+            Task { await model.updateReportLanguage(value) }
         })
-    }
-
-    private func synchronizeCreditLabelDraft() {
-        creditLabelLanguage = model.settings.reportLanguage
-        creditLabelDraft = model.settings.creditLabel(for: creditLabelLanguage)
-    }
-
-    private func saveCreditLabelDraft() {
-        let language = creditLabelLanguage
-        let label = creditLabelDraft
-        guard model.settings.creditLabel(for: language) != label else { return }
-        model.queueCreditLabelChange(label, for: language)
     }
 
     private var remainderModeBinding: Binding<RemainderMode> {
@@ -381,81 +371,5 @@ private struct AddReminderView: View {
                 }
             }
         }
-    }
-}
-
-private struct StartingBalancesView: View {
-    @EnvironmentObject private var model: AppModel
-    @State private var serviceHours = 0
-    @State private var serviceMinutes = 0
-    @State private var serviceCarry = 0
-    @State private var creditCarry = 0
-    @State private var ledgerStartDate = Date()
-
-    var body: some View {
-        Form {
-            Section {
-                Text("balances.intro")
-                    .foregroundStyle(.secondary)
-            }
-            Section("balances.ledger") {
-                DatePicker(
-                    "balances.ledger_start",
-                    selection: $ledgerStartDate,
-                    in: Date.distantPast...maximumLedgerStartDate,
-                    displayedComponents: .date
-                )
-            }
-            Section {
-                TimeWheelPicker(hours: $serviceHours, minutes: $serviceMinutes, usesDirectHourEntry: true)
-            } header: {
-                Text("balances.year_progress")
-            } footer: {
-                Text("balances.year_progress_help")
-            }
-            Section {
-                Stepper(String(format: String(localized: "balances.service_carry_format"), serviceCarry), value: $serviceCarry, in: 0...59)
-                Stepper(String(format: String(localized: "balances.credit_carry_format"), creditCarry), value: $creditCarry, in: 0...59)
-            } header: {
-                Text("balances.carry")
-            } footer: {
-                Text("balances.carry_help")
-            }
-            Section {
-                Button("common.save") { save() }
-                    .frame(maxWidth: .infinity)
-            } footer: {
-                Text("balances.footer")
-            }
-        }
-        .navigationTitle("settings.opening_balances")
-        .onAppear {
-            serviceHours = model.settings.baselineServiceYearMinutes / 60
-            serviceMinutes = model.settings.baselineServiceYearMinutes % 60
-            serviceCarry = model.settings.openingServiceCarryMinutes
-            creditCarry = model.settings.openingCreditCarryMinutes
-            ledgerStartDate = model.settings.ledgerStartMonth.date(calendar: .hourleaf)
-        }
-    }
-
-    private func save() {
-        var settings = model.settings
-        settings.ledgerStartMonth = MonthKey(ledgerStartDate, calendar: .hourleaf)
-        settings.baselineServiceYearMinutes = serviceHours * 60 + serviceMinutes
-        let selectedLedgerStartMonth = settings.ledgerStartMonth
-        settings.baselineServiceYearStart = ServiceYearCalculator.serviceYearStart(
-            containing: LocalDay(
-                year: selectedLedgerStartMonth.year,
-                month: selectedLedgerStartMonth.month,
-                day: 1
-            )
-        ).monthKey
-        settings.openingServiceCarryMinutes = serviceCarry
-        settings.openingCreditCarryMinutes = creditCarry
-        Task { await model.saveSettings(settings) }
-    }
-
-    private var maximumLedgerStartDate: Date {
-        model.entries.map { $0.day.date(calendar: .hourleaf) }.min() ?? model.currentDate
     }
 }

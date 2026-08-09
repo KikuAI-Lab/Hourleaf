@@ -211,20 +211,6 @@ struct ProgressScreen: View {
             .accessibilityLabel(String(localized: "progress.service_year"))
             .accessibilityValue(DurationText.format(minutes: pace.actualMinutes))
 
-            if model.planningPreferences.isPaceVisible {
-                Text(serviceYearPaceText(pace))
-                    .font(.subheadline.weight(.semibold))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("serviceYearPaceText")
-
-                DisclosureGroup(String(localized: "pace.details_title")) {
-                    Text("pace.details")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .accessibilityIdentifier("serviceYearPaceDetails")
-            }
         }
         .hourleafCard()
         .accessibilityElement(children: .contain)
@@ -250,26 +236,6 @@ struct ProgressScreen: View {
         .font(.subheadline)
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func serviceYearPaceText(_ pace: ServiceYearPace) -> String {
-        switch pace.presentation {
-        case let .weekly(minutes):
-            String(
-                format: String(localized: "pace.weekly_format"),
-                DurationText.format(minutes: minutes)
-            )
-        case let .finalDays(remainingMinutes, _):
-            String(
-                format: String(localized: "pace.final_days_format"),
-                DurationText.format(minutes: remainingMinutes)
-            )
-        case .reached:
-            String(
-                format: String(localized: "pace.reached_format"),
-                DurationText.format(minutes: pace.actualMinutes)
-            )
-        }
     }
 
     private var selectedServiceYearArchiveCard: some View {

@@ -38,9 +38,6 @@ struct QuickEntryView: View {
             ScrollView {
                 VStack(spacing: 18) {
                     if let state = previousReportBannerState { reportBanner(state) }
-                    if let proposal = model.oneTapProposal {
-                        oneTapAction(proposal)
-                    }
                     if shouldShowQuickSurfaceTimer {
                         QuickSurfaceTimerRow(manualDraftIsPristine: manualDraftIsPristine)
                     }
@@ -50,7 +47,6 @@ struct QuickEntryView: View {
                 .padding()
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("quick.title")
             .navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: model.quickEntryResetGeneration) { _, _ in
@@ -68,6 +64,18 @@ struct QuickEntryView: View {
                 date = currentDate
             }
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        // A report is normally submitted for the latest closed
+                        // month. If Hourleaf started this month, the month
+                        // chooser still opens on the earliest valid month.
+                        model.openReport(max(previousMonth, model.settings.ledgerStartMonth))
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .accessibilityLabel(Text("quick.share_report"))
+                    .accessibilityIdentifier("shareReportButton")
+                }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
                     Button("common.done") {
@@ -111,65 +119,6 @@ struct QuickEntryView: View {
         .accessibilityLabel(Text(verbatim: title))
         .accessibilityValue(Text(state.statusKey))
         .accessibilityIdentifier("previousReportBanner")
-    }
-
-    private func oneTapAction(_ proposal: OneTapProposal) -> some View {
-        let localizedDetails = String(
-            format: String(localized: "one_tap.details_format"),
-            proposal.kind.localizedName,
-            DurationText.format(minutes: proposal.minutes)
-        )
-
-        return Button {
-            let expectedProposal = proposal
-            Task {
-                await model.repeatLastEntry(expected: expectedProposal)
-            }
-        } label: {
-            Group {
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 10) {
-                            Label("one_tap.repeat_last", systemImage: "arrow.clockwise")
-                                .font(.headline)
-                            Spacer(minLength: 8)
-                            if model.isRepeatingLastEntry {
-                                ProgressView()
-                            }
-                        }
-                        Text(localizedDetails)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .accessibilityIdentifier("repeatLastEntryDetails")
-                    }
-                } else {
-                    HStack(spacing: 12) {
-                        Image(systemName: "arrow.clockwise")
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("one_tap.repeat_last")
-                                .font(.headline)
-                            Text(localizedDetails)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .accessibilityIdentifier("repeatLastEntryDetails")
-                        }
-                        Spacer(minLength: 8)
-                        if model.isRepeatingLastEntry {
-                            ProgressView()
-                        }
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.bordered)
-        .tint(.green)
-        .disabled(model.isRepeatingLastEntry)
-        .accessibilityIdentifier("repeatLastEntryButton")
-        .accessibilityLabel(Text("one_tap.repeat_last"))
-        .accessibilityValue(Text(localizedDetails))
-        .accessibilityHint(Text("one_tap.explanation"))
     }
 
     private var entryCard: some View {

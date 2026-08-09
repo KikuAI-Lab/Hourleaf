@@ -34,6 +34,17 @@ protocol ReminderUserNotificationCenter: Sendable {
 struct ReminderReconciliationRequest: Equatable, Sendable {
     let reminders: [ReminderSchedule]
     let quietGap: QuietGapSchedulingRequest
+    let monthlyReportReminderEnabled: Bool
+
+    init(
+        reminders: [ReminderSchedule],
+        quietGap: QuietGapSchedulingRequest,
+        monthlyReportReminderEnabled: Bool = false
+    ) {
+        self.reminders = reminders
+        self.quietGap = quietGap
+        self.monthlyReportReminderEnabled = monthlyReportReminderEnabled
+    }
 }
 
 @MainActor
@@ -101,10 +112,14 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
         let status = await center.authorizationStatus()
         let pendingRequests = await center.pendingNotificationRequests()
         try await removePendingWeeklyRequests(from: pendingRequests)
+        removePendingMonthlyReportRequests(from: pendingRequests)
 
         if status.allowsScheduling {
             for reminder in request.reminders where reminder.isEnabled {
                 try await center.add(weeklyRequest(for: reminder))
+            }
+            if request.monthlyReportReminderEnabled {
+                try await center.add(monthlyReportRequest())
             }
         }
 
@@ -172,7 +187,19 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
 
     func handleResponse(_ context: ReminderNotificationResponseContext) async throws {
         switch context.action {
-        case .open, .addTime:
+        case .open:
+            if context.payload.kind == .monthlyReport,
+               context.payload.destination == .progress {
+                let previousMonth = MonthKey(context.responseDate, calendar: calendar)
+                    .advanced(by: -1, calendar: calendar)
+                router?.route(to: .progressReport(previousMonth))
+                return
+            }
+            guard context.payload.destination == .quickEntry else {
+                return
+            }
+            router?.route(to: .quickEntry)
+        case .addTime:
             guard context.payload.destination == .quickEntry else {
                 return
             }
@@ -232,6 +259,12 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
                 actions: [add, nothing],
                 intentIdentifiers: [],
                 options: []
+            ),
+            UNNotificationCategory(
+                identifier: ReminderNotificationCategoryID.monthlyReport,
+                actions: [],
+                intentIdentifiers: [],
+                options: []
             )
         ])
     }
@@ -244,6 +277,16 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
         let identifiers = requests
             .map(\.identifier)
             .filter { $0.hasPrefix(ReminderNotificationRequestID.weeklyPrefix) }
+        guard !identifiers.isEmpty else {
+            return
+        }
+        center.removePendingNotificationRequests(withIdentifiers: identifiers)
+    }
+
+    private func removePendingMonthlyReportRequests(from requests: [UNNotificationRequest]) {
+        let identifiers = requests
+            .map(\.identifier)
+            .filter { $0.hasPrefix(ReminderNotificationRequestID.monthlyReportPrefix) }
         guard !identifiers.isEmpty else {
             return
         }
@@ -290,6 +333,33 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
         )
     }
 
+    private func monthlyReportRequest() -> UNNotificationRequest {
+        let content = notificationContent(
+            body: String(localized: "report_reminder.notification.body"),
+            categoryIdentifier: ReminderNotificationCategoryID.monthlyReport,
+            payload: ReminderNotificationPayload(
+                kind: .monthlyReport,
+                destination: .progress
+            ),
+            title: String(localized: "report_reminder.notification.title")
+        )
+        let trigger = UNCalendarNotificationTrigger(
+            dateMatching: DateComponents(
+                calendar: calendar,
+                timeZone: calendar.timeZone,
+                day: 1,
+                hour: 9,
+                minute: 0
+            ),
+            repeats: true
+        )
+        return UNNotificationRequest(
+            identifier: ReminderNotificationRequestID.monthlyReport,
+            content: content,
+            trigger: trigger
+        )
+    }
+
     private func quietGapRequest(for candidate: QuietGapReminderCandidate) -> UNNotificationRequest {
         let content = notificationContent(
             body: localizedString(
@@ -322,7 +392,7 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
         }
 
         switch context.payload.kind {
-        case .followup:
+        case .followup, .monthlyReport:
             return nil
         case .weekly, .quietGap:
             break
@@ -402,10 +472,11 @@ final class ReminderScheduler: NSObject, ReminderScheduling {
     private func notificationContent(
         body: String,
         categoryIdentifier: String,
-        payload: ReminderNotificationPayload
+        payload: ReminderNotificationPayload,
+        title: String? = nil
     ) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
-        content.title = String(localized: "reminder.notification.title")
+        content.title = title ?? String(localized: "reminder.notification.title")
         content.body = body
         content.sound = .default
         content.categoryIdentifier = categoryIdentifier

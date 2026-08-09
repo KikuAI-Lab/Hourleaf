@@ -21,7 +21,8 @@ final class ReminderSchedulerTests: XCTestCase {
         XCTAssertEqual(center.requestAuthorizationCallCount, 0)
         XCTAssertEqual(Set(center.categories.map(\.identifier)), [
             ReminderNotificationCategoryID.primary,
-            ReminderNotificationCategoryID.followup
+            ReminderNotificationCategoryID.followup,
+            ReminderNotificationCategoryID.monthlyReport
         ])
 
         let primary = try XCTUnwrap(center.categories.first(where: {
@@ -41,6 +42,126 @@ final class ReminderSchedulerTests: XCTestCase {
             ReminderNotificationActionID.add,
             ReminderNotificationActionID.nothing
         ])
+
+        let monthly = try XCTUnwrap(center.categories.first(where: {
+            $0.identifier == ReminderNotificationCategoryID.monthlyReport
+        }))
+        XCTAssertTrue(monthly.actions.isEmpty)
+    }
+
+    func testReconcileSchedulesExactlyOneMonthlyReportAtLocalFirstDayNine() async throws {
+        let center = FakeReminderNotificationCenter()
+        let calendar = makeReminderTestCalendar(timeZoneID: "Europe/Uzhgorod")
+        let staleIdentifier = "\(ReminderNotificationRequestID.monthlyReportPrefix)legacy"
+        center.requestsByIdentifier = [
+            staleIdentifier: makeReminderPayloadRequest(
+                identifier: staleIdentifier,
+                payload: ReminderNotificationPayload(
+                    kind: .monthlyReport,
+                    destination: .progress
+                )
+            )
+        ]
+        let scheduler = ReminderScheduler(
+            center: center,
+            now: { .distantPast },
+            calendar: calendar
+        )
+
+        try await scheduler.reconcile(
+            ReminderReconciliationRequest(
+                reminders: [],
+                quietGap: QuietGapSchedulingRequest(
+                    isEnabled: false,
+                    ledgerStartMonth: MonthKey(year: 2026, month: 1),
+                    entries: [],
+                    acknowledgements: []
+                ),
+                monthlyReportReminderEnabled: true
+            )
+        )
+
+        XCTAssertEqual(center.removedIdentifierBatches.flatMap { $0 }, [staleIdentifier])
+        let monthlyRequests = center.requestsByIdentifier.filter {
+            $0.key.hasPrefix(ReminderNotificationRequestID.monthlyReportPrefix)
+        }
+        XCTAssertEqual(monthlyRequests.count, 1)
+        let request = try XCTUnwrap(monthlyRequests[ReminderNotificationRequestID.monthlyReport])
+        XCTAssertEqual(request.content.categoryIdentifier, ReminderNotificationCategoryID.monthlyReport)
+        XCTAssertEqual(
+            ReminderNotificationPayload(userInfo: request.content.userInfo),
+            ReminderNotificationPayload(kind: .monthlyReport, destination: .progress)
+        )
+        let trigger = try XCTUnwrap(request.trigger as? UNCalendarNotificationTrigger)
+        XCTAssertEqual(trigger.dateComponents.day, 1)
+        XCTAssertEqual(trigger.dateComponents.hour, 9)
+        XCTAssertEqual(trigger.dateComponents.minute, 0)
+        XCTAssertEqual(trigger.dateComponents.timeZone?.identifier, "Europe/Uzhgorod")
+    }
+
+    func testReconcileDisablingMonthlyReportRemovesItsNamespaceWithoutScheduling() async throws {
+        let center = FakeReminderNotificationCenter()
+        let existingIdentifier = ReminderNotificationRequestID.monthlyReport
+        center.requestsByIdentifier[existingIdentifier] = makeReminderPayloadRequest(
+            identifier: existingIdentifier,
+            payload: ReminderNotificationPayload(kind: .monthlyReport, destination: .progress)
+        )
+        let scheduler = ReminderScheduler(
+            center: center,
+            now: { .distantPast },
+            calendar: makeReminderTestCalendar()
+        )
+
+        try await scheduler.reconcile(
+            ReminderReconciliationRequest(
+                reminders: [],
+                quietGap: QuietGapSchedulingRequest(
+                    isEnabled: false,
+                    ledgerStartMonth: MonthKey(year: 2026, month: 1),
+                    entries: [],
+                    acknowledgements: []
+                ),
+                monthlyReportReminderEnabled: false
+            )
+        )
+
+        XCTAssertNil(center.requestsByIdentifier[existingIdentifier])
+        XCTAssertEqual(
+            center.removedIdentifierBatches.flatMap { $0 },
+            [existingIdentifier]
+        )
+    }
+
+    func testMonthlyReportTapRoutesPreviousMonthAtResponseTime() async throws {
+        let calendar = makeReminderTestCalendar(timeZoneID: "Europe/Uzhgorod")
+        let center = FakeReminderNotificationCenter()
+        let scheduler = ReminderScheduler(center: center, now: { .distantPast }, calendar: calendar)
+        let router = AppRouter()
+        scheduler.configure(router: router)
+        let responseDate = makeReminderTestDate(
+            year: 2026,
+            month: 10,
+            day: 1,
+            hour: 9,
+            minute: 1,
+            calendar: calendar
+        )
+
+        try await scheduler.handleResponse(
+            ReminderNotificationResponseContext(
+                action: .open,
+                payload: ReminderNotificationPayload(
+                    kind: .monthlyReport,
+                    destination: .progress
+                ),
+                requestIdentifier: ReminderNotificationRequestID.monthlyReport,
+                deliveryDate: responseDate,
+                responseDate: responseDate
+            )
+        )
+
+        XCTAssertEqual(router.pendingRoute, .progressReport(MonthKey(year: 2026, month: 9)))
+        XCTAssertNil(router.pendingReminderEvent)
     }
 
     func testRescheduleOnlyReplacesWeeklyNamespace() async throws {
