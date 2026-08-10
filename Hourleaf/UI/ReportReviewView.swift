@@ -138,7 +138,7 @@ struct ReportReviewView: View {
                 ForEach(draft.entries) { entry in
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: entry.kind.systemImage)
-                            .foregroundStyle(entry.kind == .service ? .green : .orange)
+                            .foregroundStyle(entry.kind == .service ? Color.accentColor : Color.orange)
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(entry.kind.localizedName)
@@ -183,7 +183,7 @@ struct ReportReviewView: View {
             .frame(maxWidth: .infinity, minHeight: 44)
         }
         .buttonStyle(.borderedProminent)
-        .tint(.green)
+        .tint(Color.accentColor)
         .disabled(model.reviewingReportMonths.contains(draft.month))
         .padding(.horizontal)
         .padding(.vertical, 10)

@@ -191,7 +191,7 @@ struct ServiceYearArchiveView: View {
                 .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.green)
+            .tint(Color.accentColor)
             .disabled(isBusy)
             .padding(.horizontal)
             .padding(.vertical, 10)

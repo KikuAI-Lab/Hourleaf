@@ -103,7 +103,7 @@ struct RootView: View {
                 .tag(AppModel.Tab.settings)
         }
         .accessibilityIdentifier("appReady")
-        .tint(Color(red: 0.16, green: 0.46, blue: 0.27))
+        .tint(Color.accentColor)
         .onReceive(
             NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange)
                 .receive(on: DispatchQueue.main)

@@ -95,10 +95,10 @@ struct RecentlyDeletedScreen: View {
 
     private func entryIcon(_ record: LedgerEntryRecord) -> some View {
         Image(systemName: record.entry.kind.systemImage)
-            .foregroundStyle(record.entry.kind == .service ? .green : .orange)
+            .foregroundStyle(record.entry.kind == .service ? Color.accentColor : Color.orange)
             .frame(width: 30, height: 30)
             .background(
-                (record.entry.kind == .service ? Color.green : Color.orange).opacity(0.12),
+                (record.entry.kind == .service ? Color.accentColor : Color.orange).opacity(0.12),
                 in: Circle()
             )
     }

@@ -208,7 +208,7 @@ struct HistoryScreen: View {
                     .font(.body.weight(isSelected || hasEntries ? .semibold : .regular))
                     .foregroundStyle(isSelected ? Color.white : Color.primary)
                 Circle()
-                    .fill(hasEntries ? (isSelected ? Color.white : Color.green) : Color.clear)
+                    .fill(hasEntries ? (isSelected ? Color.white : Color.accentColor) : Color.clear)
                     .frame(width: 6, height: 6)
                     .accessibilityHidden(true)
             }
@@ -253,9 +253,9 @@ struct HistoryScreen: View {
         let entry = record.entry
         return HStack(spacing: 12) {
             Image(systemName: entry.kind.systemImage)
-                .foregroundStyle(entry.kind == .service ? .green : .orange)
+                .foregroundStyle(entry.kind == .service ? Color.accentColor : Color.orange)
                 .frame(width: 30, height: 30)
-                .background((entry.kind == .service ? Color.green : Color.orange).opacity(0.12), in: Circle())
+                .background((entry.kind == .service ? Color.accentColor : Color.orange).opacity(0.12), in: Circle())
             VStack(alignment: .leading, spacing: 3) {
                 Text(entry.kind.localizedName).font(.headline)
                 Text(AppDateText.day(entry.day))

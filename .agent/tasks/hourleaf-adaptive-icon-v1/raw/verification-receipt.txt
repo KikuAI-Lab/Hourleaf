@@ -1,0 +1,39 @@
+Hourleaf adaptive icon v1 verification receipt
+Date: 2026-08-10
+
+1. Clean generic iOS build
+Command shape:
+  xcodebuild -project Hourleaf.xcodeproj -scheme Hourleaf -configuration Debug \
+    -sdk iphoneos -destination generic/platform=iOS \
+    -derivedDataPath <validated-mktemp>/DerivedData \
+    CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+Result:
+  BUILD SUCCEEDED
+  actool inputs contained Hourleaf/AppIcon.icon and Hourleaf/Assets.xcassets.
+  No AppIcon.appiconset input remained.
+
+2. Release guard
+Command:
+  ./scripts/verify-release-readiness.sh
+Result:
+  Release readiness guard passed.
+
+3. Physical iPhone update
+Command:
+  ./scripts/install-local-device.sh <team> <paired-device> --without-app-group
+Result:
+  Verified SHA-256 manifest before build/install (20 regular files).
+  BUILD SUCCEEDED
+  Hourleaf update completed for com.kikuai.hourleaf.local.
+
+4. Owner visual acceptance
+Nick inspected the installed icon on the iPhone and reported: "иконка классная".
+
+5. Static readback
+Accent sRGB components:
+  red   0.290196
+  green 0.427451
+  blue  0.654902
+  alpha 1.000
+Result:
+  Exact #4A6DA7 mapping; git diff --check passed.

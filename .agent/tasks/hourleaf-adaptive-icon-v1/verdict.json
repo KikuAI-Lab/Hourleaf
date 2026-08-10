@@ -1,0 +1,16 @@
+{
+  "task": "hourleaf-adaptive-icon-v1",
+  "verdict": "PASS",
+  "verified_at": "2026-08-10",
+  "scope": "Current working tree after implementation, evidence capture, and final acceptance-wording clarification",
+  "checks": [
+    { "name": "fresh generic iOS build", "result": "PASS", "detail": "BUILD SUCCEEDED; actool compiled AppIcon.icon with no legacy appiconset input" },
+    { "name": "release readiness guard", "result": "PASS" },
+    { "name": "static icon and accent invariants", "result": "PASS" },
+    { "name": "git diff whitespace check", "result": "PASS" },
+    { "name": "physical install recovery gate", "result": "PASS", "detail": "20 regular files verified by SHA-256 before update" },
+    { "name": "owner visual acceptance", "result": "PASS", "detail": "Nick accepted the installed icon on the iPhone" }
+  ],
+  "failed_acceptance_criteria": [],
+  "problems_file_required": false
+}
