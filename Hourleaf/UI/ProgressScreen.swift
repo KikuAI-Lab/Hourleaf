@@ -139,7 +139,7 @@ struct ProgressScreen: View {
                         monthMetric(
                             title: String(localized: "entry.kind.service"),
                             value: DurationText.format(minutes: draft.report.rawServiceMinutes),
-                            color: .green
+                            color: Color.accentColor
                         )
                         monthMetric(
                             title: String(localized: "entry.kind.credit"),
@@ -152,7 +152,7 @@ struct ProgressScreen: View {
                         monthMetric(
                             title: String(localized: "entry.kind.service"),
                             value: DurationText.format(minutes: draft.report.rawServiceMinutes),
-                            color: .green
+                            color: Color.accentColor
                         )
                         Divider().frame(height: 44)
                         monthMetric(
@@ -207,7 +207,7 @@ struct ProgressScreen: View {
                 value: min(Double(pace.actualMinutes), Double(pace.targetMinutes)),
                 total: Double(pace.targetMinutes)
             )
-            .tint(.green)
+            .tint(Color.accentColor)
             .accessibilityLabel(String(localized: "progress.service_year"))
             .accessibilityValue(DurationText.format(minutes: pace.actualMinutes))
 
@@ -255,7 +255,7 @@ struct ProgressScreen: View {
                 value: min(Double(totalMinutes), Double(yearDraft.targetMinutes)),
                 total: Double(yearDraft.targetMinutes)
             )
-            .tint(.green)
+            .tint(Color.accentColor)
             Text(String(format: String(localized: "progress.minutes_detail_format"), totalMinutes % 60))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -378,7 +378,7 @@ struct ProgressScreen: View {
                 .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.green)
+            .tint(Color.accentColor)
             .accessibilityIdentifier("reportReviewButton")
 
         case .reviewed:
@@ -405,7 +405,7 @@ struct ProgressScreen: View {
                 .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.green)
+            .tint(Color.accentColor)
             .disabled(model.preparingReportMonths.contains(selectedMonth))
             .accessibilityIdentifier("prepareReportButton")
 
@@ -460,7 +460,7 @@ struct ProgressScreen: View {
                 .frame(maxWidth: .infinity, minHeight: 44)
         }
         .buttonStyle(.borderedProminent)
-        .tint(.green)
+        .tint(Color.accentColor)
         .accessibilityIdentifier("sharePreparedReportButton")
     }
 

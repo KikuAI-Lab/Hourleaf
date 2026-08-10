@@ -1,0 +1,13 @@
+{
+  "task": "hourleaf-adaptive-icon-v1",
+  "observed_at": "2026-08-10",
+  "acceptance": {
+    "AC1": { "status": "PASS", "proof": "Monochrome leaf and clock-hand SVG source inspection" },
+    "AC2": { "status": "PASS", "proof": "Physical iPhone owner visual acceptance" },
+    "AC3": { "status": "PASS", "proof": "Single AppIcon.icon source; legacy appiconset deleted" },
+    "AC4": { "status": "PASS", "proof": "Clean generic iOS BUILD SUCCEEDED" },
+    "AC5": { "status": "PASS", "proof": "20-file SHA-256 recovery copy verified before successful device update" },
+    "AC6": { "status": "PASS", "proof": "Exact #4A6DA7 asset readback and accent-color source scan" },
+    "AC7": { "status": "PASS", "proof": "actool compiled the layered Icon Composer document" }
+  }
+}

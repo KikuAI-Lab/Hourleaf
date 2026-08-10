@@ -117,7 +117,7 @@ struct QuickSurfaceTimerRow: View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
                 .font(.title3)
-                .foregroundStyle(.green)
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 28)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
@@ -131,7 +131,7 @@ struct QuickSurfaceTimerRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             Button(actionTitle, action: action)
                 .buttonStyle(.bordered)
-                .tint(.green)
+                .tint(Color.accentColor)
                 .disabled(model.isQuickSurfaceActionInFlight)
                 .accessibilityIdentifier(actionIdentifier)
         }

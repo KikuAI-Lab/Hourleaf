@@ -99,7 +99,7 @@ struct QuickEntryView: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: state.symbolName)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.accentColor)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(verbatim: title)
@@ -113,7 +113,7 @@ struct QuickEntryView: View {
             }
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .padding()
-            .background(.green.opacity(0.09), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(Color.accentColor.opacity(0.09), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(verbatim: title))
@@ -157,7 +157,7 @@ struct QuickEntryView: View {
                 .padding(.vertical, 13)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.green)
+            .tint(Color.accentColor)
             .disabled(isSaving || (hours == 0 && minutes == 0))
             .accessibilityIdentifier("saveEntryButton")
         }

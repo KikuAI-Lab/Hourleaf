@@ -61,7 +61,7 @@ struct MutationBannerView: View {
 
     private var icon: some View {
         Image(systemName: candidate.operation == .delete ? "trash" : "checkmark.circle.fill")
-            .foregroundStyle(candidate.operation == .delete ? .orange : .green)
+            .foregroundStyle(candidate.operation == .delete ? Color.orange : Color.accentColor)
             .accessibilityHidden(true)
     }
 
@@ -75,7 +75,7 @@ struct MutationBannerView: View {
     private var undoButton: some View {
         Button("undo.action", action: undo)
             .buttonStyle(.borderedProminent)
-            .tint(.green)
+            .tint(Color.accentColor)
             .accessibilityIdentifier("undoMutationButton")
     }
 
