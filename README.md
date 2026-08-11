@@ -1,13 +1,28 @@
 # Hourleaf
 
-Hourleaf is a private, local-first iPhone ledger for recording ministry and
-credit time, following service-year progress, and preparing monthly reports.
+Hourleaf is a private, local-first ministry time ledger for iPhone and Apple
+Watch. It records service and credit time, follows service-year progress, and
+prepares monthly reports without an account or remote backend.
 
 - App Store name: **Hourleaf: Ministry Hours**
-- Platform: iOS 17+
+- Platforms: iOS 17+ and watchOS 10+
 - Languages: English, Russian, Ukrainian
 - Storage: local Core Data on this iPhone
 - Privacy: no accounts, ads, tracking, or third-party analytics
+- Support: <https://kikuai.dev/hourleaf/support/>
+- Privacy policy: <https://kikuai.dev/hourleaf/privacy/>
+
+## Features
+
+- Fast service and credit entry on iPhone
+- Direct hours-and-minutes entry with the Digital Crown on Apple Watch
+- List and calendar history with editing and reversible deletion
+- Monthly report preparation and system sharing
+- Service-year progress toward the 600-hour goal
+- Local reminders, portable backups, restore, and CSV import/export
+
+Hourleaf is independent and is not affiliated with or endorsed by any
+religious organization.
 
 ## Development
 
@@ -23,6 +38,11 @@ xcodebuild -project Hourleaf.xcodeproj \
 Every current build is local-only. Hourleaf does not sync records or require an
 account; portable backups leave the app only when the user chooses to share
 them. Private iCloud sync is a separate future opt-in feature.
+
+The maintained App Store metadata, privacy answers, review notes, and release
+checklist live in [`AppStore/`](AppStore/README.md). Version 1.0 is being
+prepared for review; this repository does not claim that the App Store listing
+is live before Apple accepts it.
 
 ## Personal Team device testing
 

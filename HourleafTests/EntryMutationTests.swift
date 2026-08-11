@@ -710,7 +710,7 @@ final class EntryMutationTests: XCTestCase {
         XCTAssertNil(undoCandidate)
     }
 
-    func testAppModelShowsUndoForAConfirmedQuickEntry() async throws {
+    func testAppModelShowsThreeSecondConfirmationForAQuickEntry() async throws {
         let repository = try await makeRepository()
         let model = AppModel(repository: repository, reminderScheduler: NoopReminderScheduler())
         await model.loadInitialSnapshot()
@@ -719,7 +719,32 @@ final class EntryMutationTests: XCTestCase {
 
         XCTAssertTrue(added)
         XCTAssertNotNil(model.undoCandidate)
-        XCTAssertNotNil(model.visibleUndoCandidate)
+        XCTAssertNotNil(model.visibleMutationConfirmation)
+
+        try await Task.sleep(for: .seconds(3.2))
+
+        XCTAssertNil(model.visibleMutationConfirmation)
+        XCTAssertNotNil(model.undoCandidate)
+    }
+
+    func testInitialLoadDoesNotReplayAnEarlierMutationConfirmation() async throws {
+        let repository = try await makeRepository()
+        let firstModel = AppModel(repository: repository, reminderScheduler: NoopReminderScheduler())
+        await firstModel.loadInitialSnapshot()
+        let added = await firstModel.addEntry(
+            kind: .service,
+            date: Date(),
+            hours: 0,
+            minutes: 15,
+            note: nil
+        )
+        XCTAssertTrue(added)
+
+        let relaunchedModel = AppModel(repository: repository, reminderScheduler: NoopReminderScheduler())
+        await relaunchedModel.loadInitialSnapshot()
+
+        XCTAssertNotNil(relaunchedModel.undoCandidate)
+        XCTAssertNil(relaunchedModel.visibleMutationConfirmation)
     }
 
     func testRefreshAfterRestoreReplacesSnapshotAndClearsUndoState() async throws {
@@ -737,7 +762,7 @@ final class EntryMutationTests: XCTestCase {
         XCTAssertTrue(added)
         let staleRecord = try XCTUnwrap(model.entryRecords.first)
         XCTAssertNotNil(model.undoCandidate)
-        XCTAssertNotNil(model.visibleUndoCandidate)
+        XCTAssertNotNil(model.visibleMutationConfirmation)
 
         _ = try await repository.apply(updateCommand(
             entryID: staleRecord.id,
@@ -752,7 +777,7 @@ final class EntryMutationTests: XCTestCase {
         XCTAssertEqual(model.entries.first?.minutes, 30)
         XCTAssertEqual(model.entryRecords.first?.revision, staleRecord.revision + 1)
         XCTAssertNil(model.undoCandidate)
-        XCTAssertNil(model.visibleUndoCandidate)
+        XCTAssertNil(model.visibleMutationConfirmation)
         XCTAssertEqual(model.startupState, .ready)
     }
 

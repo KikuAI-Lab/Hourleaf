@@ -1,0 +1,20 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Record credit time in ${applicationName}" : {
+      "localizations" : {
+        "en" : { "stringSet" : { "state" : "translated", "values" : ["Record credit time in ${applicationName}", "${applicationName}, record credit time"] } },
+        "ru" : { "stringSet" : { "state" : "translated", "values" : ["Запиши кредит в ${applicationName}", "${applicationName}, запиши кредит"] } },
+        "uk" : { "stringSet" : { "state" : "translated", "values" : ["Запиши кредит у ${applicationName}", "${applicationName}, запиши кредит"] } }
+      }
+    },
+    "Record service time in ${applicationName}" : {
+      "localizations" : {
+        "en" : { "stringSet" : { "state" : "translated", "values" : ["Record service time in ${applicationName}", "${applicationName}, record service time"] } },
+        "ru" : { "stringSet" : { "state" : "translated", "values" : ["Запиши служение в ${applicationName}", "${applicationName}, запиши служение"] } },
+        "uk" : { "stringSet" : { "state" : "translated", "values" : ["Запиши служіння у ${applicationName}", "${applicationName}, запиши служіння"] } }
+      }
+    }
+  },
+  "version" : "1.1"
+}

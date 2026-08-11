@@ -25,6 +25,20 @@ grep -Fq -- '--recurse' "$installer" \
     || fail "installer does not request recursive app-data inventory"
 grep -Fq -- 'HOURLEAF_QUICK_ENTRY_URL_SCHEME="$local_quick_entry_url_scheme"' "$installer" \
     || fail "installer does not override the quick-entry URL scheme for local builds"
+grep -Fq -- 'HOURLEAF_WATCH_BUNDLE_IDENTIFIER="$local_watch_bundle_id"' "$installer" \
+    || fail "installer does not override the Watch bundle identifier for local builds"
+grep -Fq -- 'production_watch_bundle_id="com.kikuai.hourleaf.watchkitapp"' "$installer" \
+    || fail "installer production Watch bundle identifier drifted"
+grep -Fq -- 'standard_local_watch_bundle_id="com.kikuai.hourleaf.local.watchkitapp"' "$installer" \
+    || fail "installer standard local Watch bundle identifier drifted"
+grep -Fq -- 'slice3_smoke_watch_bundle_id="com.kikuai.hourleaf.slice3smoke.watchkitapp"' "$installer" \
+    || fail "installer smoke Watch bundle identifier drifted"
+grep -Fq -- 'each Watch identifier must belong to its companion iPhone app' "$installer" \
+    || fail "installer does not reject a Watch app linked to the wrong companion"
+grep -Fq -- 'build did not embed the Hourleaf Watch app' "$installer" \
+    || fail "installer does not require the embedded Hourleaf Watch app"
+grep -Fq -- 'embedded Watch app is linked to the wrong iPhone app' "$installer" \
+    || fail "installer does not verify the built Watch companion identifier"
 grep -Fq -- 'production_quick_entry_url_scheme="hourleaf"' "$installer" \
     || fail "installer production quick-entry URL scheme default drifted"
 grep -Fq -- 'standard_local_quick_entry_url_scheme="hourleaf-local"' "$installer" \

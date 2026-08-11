@@ -25,14 +25,17 @@ device_id="$2"
 repo_root="${0:A:h:h}"
 production_bundle_id="com.kikuai.hourleaf"
 production_extension_bundle_id="com.kikuai.hourleaf.quick-surfaces"
+production_watch_bundle_id="com.kikuai.hourleaf.watchkitapp"
 production_app_group_id="group.com.kikuai.hourleaf"
 production_quick_entry_url_scheme="hourleaf"
 standard_local_bundle_id="com.kikuai.hourleaf.local"
 standard_local_extension_bundle_id="com.kikuai.hourleaf.local.quick-surfaces"
+standard_local_watch_bundle_id="com.kikuai.hourleaf.local.watchkitapp"
 standard_local_app_group_id="group.com.kikuai.hourleaf.local"
 standard_local_quick_entry_url_scheme="hourleaf-local"
 slice3_smoke_bundle_id="com.kikuai.hourleaf.slice3smoke"
 slice3_smoke_extension_bundle_id="com.kikuai.hourleaf.slice3smoke.quick-surfaces"
+slice3_smoke_watch_bundle_id="com.kikuai.hourleaf.slice3smoke.watchkitapp"
 slice3_smoke_app_group_id="group.com.kikuai.hourleaf.slice3smoke"
 slice3_smoke_quick_entry_url_scheme="hourleaf-slice3smoke"
 
@@ -45,6 +48,16 @@ if [[ "$production_extension_bundle_id" == "$standard_local_extension_bundle_id"
     || "$production_extension_bundle_id" == "$slice3_smoke_extension_bundle_id" \
     || "$standard_local_extension_bundle_id" == "$slice3_smoke_extension_bundle_id" ]]; then
     fail "disposable smoke extension identifier must differ from production and standard local builds"
+fi
+if [[ "$production_watch_bundle_id" == "$standard_local_watch_bundle_id" \
+    || "$production_watch_bundle_id" == "$slice3_smoke_watch_bundle_id" \
+    || "$standard_local_watch_bundle_id" == "$slice3_smoke_watch_bundle_id" ]]; then
+    fail "disposable smoke Watch identifier must differ from production and standard local builds"
+fi
+if [[ "$production_watch_bundle_id" != "$production_bundle_id.watchkitapp" \
+    || "$standard_local_watch_bundle_id" != "$standard_local_bundle_id.watchkitapp" \
+    || "$slice3_smoke_watch_bundle_id" != "$slice3_smoke_bundle_id.watchkitapp" ]]; then
+    fail "each Watch identifier must belong to its companion iPhone app"
 fi
 if [[ "$production_app_group_id" == "$standard_local_app_group_id" \
     || "$production_app_group_id" == "$slice3_smoke_app_group_id" \
@@ -69,6 +82,7 @@ is_smoke=0
 without_app_group=0
 local_bundle_id="$standard_local_bundle_id"
 local_extension_bundle_id="$standard_local_extension_bundle_id"
+local_watch_bundle_id="$standard_local_watch_bundle_id"
 local_app_group_id="$standard_local_app_group_id"
 local_quick_entry_url_scheme="$standard_local_quick_entry_url_scheme"
 typeset -a local_build_settings=()
@@ -76,6 +90,7 @@ if (( $# == 3 )) && [[ "$3" == "--slice3-smoke" ]]; then
     is_smoke=1
     local_bundle_id="$slice3_smoke_bundle_id"
     local_extension_bundle_id="$slice3_smoke_extension_bundle_id"
+    local_watch_bundle_id="$slice3_smoke_watch_bundle_id"
     local_app_group_id="$slice3_smoke_app_group_id"
     local_quick_entry_url_scheme="$slice3_smoke_quick_entry_url_scheme"
     local_build_settings=("INFOPLIST_KEY_CFBundleDisplayName=Hourleaf Shortcut Smoke")
@@ -673,6 +688,7 @@ build_and_install() {
         DEVELOPMENT_TEAM="$personal_team_id" \
         HOURLEAF_APP_BUNDLE_IDENTIFIER="$local_bundle_id" \
         HOURLEAF_QUICK_SURFACES_BUNDLE_IDENTIFIER="$local_extension_bundle_id" \
+        HOURLEAF_WATCH_BUNDLE_IDENTIFIER="$local_watch_bundle_id" \
         HOURLEAF_APP_GROUP_IDENTIFIER="$local_app_group_id" \
         HOURLEAF_QUICK_ENTRY_URL_SCHEME="$local_quick_entry_url_scheme" \
         SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) DEBUG HOURLEAF_LOCAL_DEVICE' \
@@ -681,6 +697,16 @@ build_and_install() {
 
     app_path="$derived_data/Build/Products/Debug-iphoneos/Hourleaf.app"
     [[ -d "$app_path" ]] || fail "build did not produce the Hourleaf app"
+    watch_app_path="$app_path/Watch/HourleafWatch.app"
+    watch_info_file="$watch_app_path/Info.plist"
+    [[ -d "$watch_app_path" && -f "$watch_info_file" ]] \
+        || fail "build did not embed the Hourleaf Watch app"
+    built_watch_bundle_id="$(plutil -extract CFBundleIdentifier raw -o - "$watch_info_file" 2>/dev/null || true)"
+    built_companion_bundle_id="$(plutil -extract WKCompanionAppBundleIdentifier raw -o - "$watch_info_file" 2>/dev/null || true)"
+    [[ "$built_watch_bundle_id" == "$local_watch_bundle_id" ]] \
+        || fail "embedded Watch bundle identifier does not match the selected local build"
+    [[ "$built_companion_bundle_id" == "$local_bundle_id" ]] \
+        || fail "embedded Watch app is linked to the wrong iPhone app"
     xcrun devicectl device install app --device "$device_id" "$app_path" \
         >"$device_command_log" 2>&1
     xcrun devicectl device process launch --device "$device_id" "$local_bundle_id" \

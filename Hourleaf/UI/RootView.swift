@@ -68,14 +68,11 @@ struct RootView: View {
     private var readyContent: some View {
         GeometryReader { geometry in
             tabs
-                .overlay(alignment: .bottom) {
-                    if let candidate = model.visibleUndoCandidate {
-                        MutationBannerView(
-                            candidate: candidate,
-                            undo: { Task { await model.undoLatestMutation() } },
-                            dismiss: model.dismissUndoBanner
-                        )
-                        .padding(.horizontal)
+                .overlay(alignment: .bottomLeading) {
+                    if let candidate = model.visibleMutationConfirmation {
+                        MutationToastView(candidate: candidate)
+                        .frame(maxWidth: min(300, geometry.size.width - 32), alignment: .leading)
+                        .padding(.leading, 16)
                         .padding(.bottom, tabBarClearance(in: geometry))
                     }
                 }

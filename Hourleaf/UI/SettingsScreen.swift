@@ -142,6 +142,9 @@ struct SettingsScreen: View {
                             .foregroundStyle(.secondary)
                     }
 
+                    SiriTipView(intent: RecordTimeIntent(kind: .service))
+                        .accessibilityIdentifier("serviceSiriTip")
+
                     ShortcutsLink()
                         .accessibilityIdentifier("shortcutsLink")
                 } header: {

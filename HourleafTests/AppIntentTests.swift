@@ -39,6 +39,22 @@ final class AppIntentTests: XCTestCase {
         XCTAssertEqual(undo.expiresAt.timeIntervalSince(undo.occurredAt), 10 * 60, accuracy: 0.001)
     }
 
+    func testCreditShortcutIntentCannotFallBackToServiceAfterSync() async throws {
+        let repository = try await makeRepository()
+        let manager = makeDependencyManager(repository: repository)
+
+        try await RecordCreditTimeIntent(
+            duration: Measurement(value: 25, unit: UnitDuration.minutes),
+            dependencyManager: manager
+        ).persist(using: repository)
+
+        let snapshot = try await repository.ledgerSnapshot()
+        XCTAssertEqual(snapshot.activeEntries.count, 1)
+        XCTAssertEqual(snapshot.activeEntries.first?.kind, .credit)
+        XCTAssertEqual(snapshot.activeEntries.first?.minutes, 25)
+        XCTAssertEqual(snapshot.entryRevisions.first?.source, EntryMutationSource.shortcut.rawValue)
+    }
+
     func testPromotedRecordTilesLeaveDurationUnresolvedUntilShortcutsCollectsIt() throws {
         guard #available(iOS 18.2, *) else {
             throw XCTSkip("IntentParameter value state is unavailable before iOS 18.2.")
@@ -49,14 +65,25 @@ final class AppIntentTests: XCTestCase {
         )
         let manager = makeDependencyManager(repository: repository)
         let serviceTile = RecordTimeIntent(kind: .service, dependencyManager: manager)
-        let creditTile = RecordTimeIntent(kind: .credit, dependencyManager: manager)
+        let creditTile = RecordCreditTimeIntent(dependencyManager: manager)
 
         XCTAssertEqual(serviceTile.kind, .service)
-        XCTAssertEqual(creditTile.kind, .credit)
-        assertUnset(serviceTile.$hours)
-        assertUnset(serviceTile.$minutes)
-        assertUnset(creditTile.$hours)
-        assertUnset(creditTile.$minutes)
+        assertUnset(serviceTile.$duration)
+        assertUnset(creditTile.$duration)
+    }
+
+    func testRecordIntentAcceptsOneSpokenDurationParameter() async throws {
+        let repository = try await makeRepository()
+        let manager = makeDependencyManager(repository: repository)
+
+        try await RecordTimeIntent(
+            kind: .service,
+            duration: Measurement(value: 1.5, unit: UnitDuration.hours),
+            dependencyManager: manager
+        ).persist(using: repository)
+
+        let snapshot = try await repository.ledgerSnapshot()
+        XCTAssertEqual(snapshot.activeEntries.map(\.minutes), [90])
     }
 
     func testRecordIntentKeepsValidationInTheCommandPath() async throws {
@@ -194,7 +221,9 @@ final class AppIntentTests: XCTestCase {
 
     func testIntentExecutionPoliciesStaySeparated() {
         XCTAssertFalse(RecordTimeIntent.openAppWhenRun)
-        XCTAssertEqual(RecordTimeIntent.authenticationPolicy, .requiresLocalDeviceAuthentication)
+        XCTAssertEqual(RecordTimeIntent.authenticationPolicy, .requiresAuthentication)
+        XCTAssertFalse(RecordCreditTimeIntent.openAppWhenRun)
+        XCTAssertEqual(RecordCreditTimeIntent.authenticationPolicy, .requiresAuthentication)
         XCTAssertTrue(OpenQuickEntryIntent.openAppWhenRun)
         XCTAssertEqual(OpenQuickEntryIntent.authenticationPolicy, .alwaysAllowed)
     }
@@ -213,7 +242,7 @@ final class AppIntentTests: XCTestCase {
         XCTAssertEqual(router.pendingRoute, .quickEntry)
     }
 
-    func testForegroundRefreshBringsAnIntentWriteIntoTheLiveModelAndUndo() async throws {
+    func testForegroundRefreshBringsAnIntentWriteIntoTheLiveModelWithoutReplayingAToast() async throws {
         let repository = try await makeRepository()
         let router = AppRouter()
         let manager = makeDependencyManager(repository: repository, router: router)
@@ -238,7 +267,7 @@ final class AppIntentTests: XCTestCase {
             75
         )
         XCTAssertEqual(model.undoCandidate?.entryID, model.entries.first?.id)
-        XCTAssertEqual(model.visibleUndoCandidate?.entryID, model.entries.first?.id)
+        XCTAssertNil(model.visibleMutationConfirmation)
     }
 
     func testActiveLedgerSignalRefreshCoalescesWithForegroundRefresh() async throws {
@@ -508,7 +537,7 @@ final class AppIntentTests: XCTestCase {
     }
 
     @available(iOS 18.2, *)
-    private func assertUnset(_ parameter: IntentParameter<Int>) {
+    private func assertUnset(_ parameter: IntentParameter<Measurement<UnitDuration>>) {
         if case .unset = parameter.valueState { return }
         XCTFail("Promoted Add tiles must prompt for a duration before writing.")
     }

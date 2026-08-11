@@ -114,27 +114,24 @@ struct RecordTimeIntent: AppIntent {
 
     static var openAppWhenRun: Bool { false }
     static var authenticationPolicy: IntentAuthenticationPolicy {
-        .requiresLocalDeviceAuthentication
+        // Ordinary authenticated execution is sufficient for the iPhone
+        // Shortcuts and Siri surfaces. Apple Watch requires a watchOS app of
+        // its own; a paired iPhone intent cannot execute on the Watch.
+        .requiresAuthentication
     }
 
     @Parameter(title: "intent.record.kind", default: .service)
     var kind: ShortcutEntryKind
 
-    /// The promoted shortcuts deliberately leave both duration fields unset.
-    /// Shortcuts therefore asks for them before `perform()` can write anything.
+    /// A single duration parameter lets Siri understand an answer such as
+    /// “one hour twenty minutes” without presenting separate number pickers.
     @Parameter(
-        title: "intent.record.hours",
-        inclusiveRange: (0, 99),
-        requestValueDialog: "intent.record.hours_prompt"
+        title: "intent.record.duration",
+        defaultUnit: .minutes,
+        supportsNegativeNumbers: false,
+        requestValueDialog: "intent.record.duration_prompt"
     )
-    var hours: Int
-
-    @Parameter(
-        title: "intent.record.minutes",
-        inclusiveRange: (0, 59),
-        requestValueDialog: "intent.record.minutes_prompt"
-    )
-    var minutes: Int
+    var duration: Measurement<UnitDuration>
 
     @Parameter(title: "intent.record.date", kind: .date)
     var date: Date?
@@ -153,15 +150,18 @@ struct RecordTimeIntent: AppIntent {
         kind: ShortcutEntryKind,
         hours: Int? = nil,
         minutes: Int? = nil,
+        duration: Measurement<UnitDuration>? = nil,
         date: Date? = nil,
         dependencyManager: AppDependencyManager = .shared
     ) {
         self.kind = kind
-        if let hours {
-            self.hours = hours
-        }
-        if let minutes {
-            self.minutes = minutes
+        if let duration {
+            self.duration = duration
+        } else if hours != nil || minutes != nil {
+            self.duration = Measurement(
+                value: Double((hours ?? 0) * 60 + (minutes ?? 0)),
+                unit: .minutes
+            )
         }
         self.date = date
         _repository = AppDependency(manager: dependencyManager)
@@ -172,8 +172,7 @@ struct RecordTimeIntent: AppIntent {
     static var parameterSummary: some ParameterSummary {
         Summary("intent.record.summary") {
             \.$kind
-            \.$hours
-            \.$minutes
+            \.$duration
             \.$date
         }
     }
@@ -200,11 +199,22 @@ struct RecordTimeIntent: AppIntent {
         let entryID = UUID()
 
         do {
+            let totalMinutes: Int
+            do {
+                totalMinutes = try WatchTimeEntryDurationV1.totalMinutes(duration: duration)
+            } catch WatchTimeEntryContractError.emptyDuration {
+                throw EntryValidationError.emptyDuration
+            } catch WatchTimeEntryContractError.durationTooLarge {
+                throw EntryValidationError.durationTooLarge
+            } catch {
+                throw EntryValidationError.invalidMinutes
+            }
+
             _ = try await AddTimeEntryCommand(repository: repository).execute(
                 kind: kind.entryKind,
                 date: date ?? now,
-                hours: hours,
-                minutes: minutes,
+                hours: totalMinutes / 60,
+                minutes: totalMinutes % 60,
                 note: nil,
                 mutationID: mutationID,
                 entryID: entryID,
@@ -222,5 +232,93 @@ struct RecordTimeIntent: AppIntent {
         } catch {
             throw ShortcutIntentError.saveFailed
         }
+    }
+}
+
+/// A fixed-kind action for user shortcuts named “Запиши кредит”.
+///
+/// A custom shortcut stores the action itself, not the preconfigured value
+/// passed by `AppShortcut`. Keeping credit as a distinct intent prevents that
+/// value from silently falling back to service after sync to Apple Watch.
+struct RecordCreditTimeIntent: AppIntent {
+    static var title: LocalizedStringResource {
+        "intent.shortcut.add_credit"
+    }
+
+    static var description: IntentDescription {
+        IntentDescription("intent.record.description")
+    }
+
+    static var openAppWhenRun: Bool { false }
+    static var authenticationPolicy: IntentAuthenticationPolicy {
+        .requiresAuthentication
+    }
+
+    @Parameter(
+        title: "intent.record.duration",
+        defaultUnit: .minutes,
+        supportsNegativeNumbers: false,
+        requestValueDialog: "intent.record.duration_prompt"
+    )
+    var duration: Measurement<UnitDuration>
+
+    @Parameter(title: "intent.record.date", kind: .date)
+    var date: Date?
+
+    @AppDependency private var repository: CoreDataLedgerRepository
+    @AppDependency private var router: AppRouter
+    @AppDependency private var quickSurfaceRefresher: QuickSurfaceIntentProjectionRefresher
+
+    init() {
+        _repository = AppDependency()
+        _router = AppDependency()
+        _quickSurfaceRefresher = AppDependency()
+    }
+
+    init(
+        duration: Measurement<UnitDuration>? = nil,
+        date: Date? = nil,
+        dependencyManager: AppDependencyManager = .shared
+    ) {
+        if let duration {
+            self.duration = duration
+        }
+        self.date = date
+        _repository = AppDependency(manager: dependencyManager)
+        _router = AppDependency(manager: dependencyManager)
+        _quickSurfaceRefresher = AppDependency(manager: dependencyManager)
+    }
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("intent.record.summary") {
+            \.$duration
+            \.$date
+        }
+    }
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        try await persist(
+            using: repository,
+            notifying: router,
+            refreshing: quickSurfaceRefresher
+        )
+        return .result(dialog: IntentDialog("intent.record.success"))
+    }
+
+    func persist(
+        using repository: CoreDataLedgerRepository,
+        notifying router: AppRouter? = nil,
+        refreshing quickSurfaceRefresher: QuickSurfaceIntentProjectionRefresher? = nil
+    ) async throws {
+        let intent = RecordTimeIntent(
+            kind: .credit,
+            duration: duration,
+            date: date
+        )
+        try await intent.persist(
+            using: repository,
+            notifying: router,
+            refreshing: quickSurfaceRefresher
+        )
     }
 }

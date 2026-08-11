@@ -941,7 +941,7 @@ final class PersistenceAndAppModelTests: XCTestCase {
         )
     }
 
-    func testOneTapSuccessRefreshesEntriesAndShowsMatchingUndo() async throws {
+    func testOneTapSuccessRefreshesEntriesAndShowsMatchingConfirmation() async throws {
         let repository = makeRepository()
         let source = TimeEntry(
             kind: .service,
@@ -972,7 +972,7 @@ final class PersistenceAndAppModelTests: XCTestCase {
         )
         XCTAssertNil(repeated.entry.note)
         XCTAssertEqual(model.undoCandidate?.entryID, repeated.id)
-        XCTAssertEqual(model.visibleUndoCandidate?.entryID, repeated.id)
+        XCTAssertEqual(model.visibleMutationConfirmation?.entryID, repeated.id)
         XCTAssertEqual(model.quickEntryResetGeneration, draftGeneration)
         XCTAssertFalse(model.isRepeatingLastEntry)
     }
@@ -1004,7 +1004,7 @@ final class PersistenceAndAppModelTests: XCTestCase {
         XCTAssertEqual(model.entryRecords.first?.entry.note, "Keep source")
     }
 
-    func testSupersedingMutationPreventsMisleadingOneTapUndoBanner() async throws {
+    func testSupersedingMutationReplacesTheEarlierConfirmation() async throws {
         let repository = makeRepository()
         let source = TimeEntry(
             kind: .service,
@@ -1019,7 +1019,7 @@ final class PersistenceAndAppModelTests: XCTestCase {
         let proposal = try XCTUnwrap(model.oneTapProposal)
         let repeatedSuccessfully = await model.repeatLastEntry(expected: proposal)
         XCTAssertTrue(repeatedSuccessfully)
-        let repeatedID = try XCTUnwrap(model.visibleUndoCandidate?.entryID)
+        let repeatedID = try XCTUnwrap(model.visibleMutationConfirmation?.entryID)
 
         let addedSupersedingEntry = await model.addEntry(
             kind: .credit,
@@ -1030,11 +1030,11 @@ final class PersistenceAndAppModelTests: XCTestCase {
         )
         XCTAssertTrue(addedSupersedingEntry)
 
-        let visibleUndo = try XCTUnwrap(model.visibleUndoCandidate)
-        XCTAssertNotEqual(visibleUndo.entryID, repeatedID)
-        XCTAssertEqual(visibleUndo.entry.entry.kind, .credit)
-        XCTAssertEqual(visibleUndo.entry.entry.minutes, 5)
-        XCTAssertEqual(visibleUndo.entry.source, EntryMutationSource.appQuickEntry.rawValue)
+        let visibleConfirmation = try XCTUnwrap(model.visibleMutationConfirmation)
+        XCTAssertNotEqual(visibleConfirmation.entryID, repeatedID)
+        XCTAssertEqual(visibleConfirmation.entry.entry.kind, .credit)
+        XCTAssertEqual(visibleConfirmation.entry.entry.minutes, 5)
+        XCTAssertEqual(visibleConfirmation.entry.source, EntryMutationSource.appQuickEntry.rawValue)
     }
 
     func testOneTapFailureLeavesManualDraftAndLedgerUnchanged() async throws {

@@ -35,7 +35,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var startupDiagnostic: String?
     @Published private(set) var lastErrorDiagnostic: String?
     @Published private(set) var undoCandidate: EntryUndoCandidate?
-    @Published private(set) var visibleUndoCandidate: EntryUndoCandidate?
+    @Published private(set) var visibleMutationConfirmation: EntryUndoCandidate?
     @Published private(set) var notificationAuthorizationStatus: ReminderAuthorizationStatus = .notDetermined
     @Published private(set) var monthlyReportReminderEnabled: Bool
     @Published private(set) var quickEntryResetGeneration: UInt64 = 0
@@ -57,13 +57,13 @@ final class AppModel: ObservableObject {
     private var planningSaveTask: Task<Void, Never>?
     private var restoringEntryIDs = Set<UUID>()
     private var isUndoing = false
-    private var undoBannerTask: Task<Void, Never>?
+    private var mutationConfirmationTask: Task<Void, Never>?
     private var storeRefreshRequested = false
-    private var storeRefreshShouldShowUndo = false
     private var isStoreRefreshInFlight = false
     private var isWholeStoreRestoreInProgress = false
-    /// Only user-visible undo state changes invalidate an in-flight presentation.
-    /// A passive store reload must not prevent a just-confirmed mutation from showing Undo.
+    /// Only mutation-state changes invalidate an in-flight confirmation.
+    /// A passive store reload must not prevent a just-confirmed mutation from
+    /// showing its short-lived toast.
     private var undoStateGeneration = 0
 
     init(
@@ -107,7 +107,7 @@ final class AppModel: ObservableObject {
         do {
             try await loadReconciledSnapshot(selectDefaultReportMonth: true)
             await recoverQuickSurfaceFinalizationIfNeeded()
-            await refreshUndoCandidate(showBanner: true)
+            await refreshUndoCandidate()
             initialSnapshotLoaded = true
             if markReady { startupState = .ready }
         } catch {
@@ -122,7 +122,7 @@ final class AppModel: ObservableObject {
     }
 
     func reload() async {
-        await refreshFromStore(showUndoBanner: false)
+        await refreshFromStore()
     }
 
     /// Drains the only queued model-owned writer before restore acquires its
@@ -139,9 +139,9 @@ final class AppModel: ObservableObject {
         while isStoreRefreshInFlight {
             await Task.yield()
         }
-        undoBannerTask?.cancel()
-        undoBannerTask = nil
-        visibleUndoCandidate = nil
+        mutationConfirmationTask?.cancel()
+        mutationConfirmationTask = nil
+        visibleMutationConfirmation = nil
         undoCandidate = nil
         undoStateGeneration &+= 1
     }
@@ -235,16 +235,15 @@ final class AppModel: ObservableObject {
         planningSaveGeneration &+= 1
         planningSaveTask = nil
         storeRefreshRequested = false
-        storeRefreshShouldShowUndo = false
         reviewingReportMonths.removeAll()
         preparingReportMonths.removeAll()
         markingSentSnapshotIDs.removeAll()
         closingServiceYearStarts.removeAll()
         restoringEntryIDs.removeAll()
         isUndoing = false
-        undoBannerTask?.cancel()
-        undoBannerTask = nil
-        visibleUndoCandidate = nil
+        mutationConfirmationTask?.cancel()
+        mutationConfirmationTask = nil
+        visibleMutationConfirmation = nil
         undoCandidate = nil
         undoStateGeneration &+= 1
     }
@@ -254,7 +253,7 @@ final class AppModel: ObservableObject {
     /// suspended and therefore could not deliver its retained router signal.
     func refreshAfterForegrounding() async {
         guard startupState == .ready else { return }
-        await refreshFromStore(showUndoBanner: true)
+        await refreshFromStore()
     }
 
     /// Applies an already-signalled shortcut write while the scene remains
@@ -262,7 +261,7 @@ final class AppModel: ObservableObject {
     /// into overlapping repository snapshots.
     func refreshAfterExternalLedgerChange() async {
         guard startupState == .ready else { return }
-        await refreshFromStore(showUndoBanner: true)
+        await refreshFromStore()
     }
 
     func prepareQuickEntry() {
@@ -295,10 +294,10 @@ final class AppModel: ObservableObject {
                 expected: proposal,
                 at: tappedAt
             )
-            await refreshAfterEntryMutation(receipt, showUndoBanner: true)
+            await refreshAfterEntryMutation(receipt, showMutationConfirmation: true)
             return true
         } catch let error as OneTapEntryError {
-            await refreshFromStore(showUndoBanner: true)
+            await refreshFromStore()
             present(error)
             return false
         } catch {
@@ -307,21 +306,18 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func refreshFromStore(showUndoBanner: Bool) async {
+    private func refreshFromStore() async {
         storeRefreshRequested = true
-        storeRefreshShouldShowUndo = storeRefreshShouldShowUndo || showUndoBanner
         guard !isStoreRefreshInFlight else { return }
 
         isStoreRefreshInFlight = true
         defer { isStoreRefreshInFlight = false }
         while storeRefreshRequested {
             storeRefreshRequested = false
-            let shouldShowUndoBanner = storeRefreshShouldShowUndo
-            storeRefreshShouldShowUndo = false
             do {
                 try await loadReconciledSnapshot(selectDefaultReportMonth: false)
                 await recoverQuickSurfaceFinalizationIfNeeded()
-                await refreshUndoCandidate(showBanner: shouldShowUndoBanner)
+                await refreshUndoCandidate()
                 try await reconcileLoadedReminderState()
             } catch {
                 present(error)
@@ -645,9 +641,9 @@ final class AppModel: ObservableObject {
         switch result {
         case let .idle(receipt):
             if let receipt {
-                await refreshAfterEntryMutation(receipt, showUndoBanner: true)
+                await refreshAfterEntryMutation(receipt, showMutationConfirmation: true)
             } else {
-                await refreshFromStore(showUndoBanner: false)
+                await refreshFromStore()
             }
             return true
 
@@ -787,7 +783,7 @@ final class AppModel: ObservableObject {
                     note: note,
                     occurredAt: now()
                 )
-            await refreshAfterEntryMutation(receipt, showUndoBanner: true)
+            await refreshAfterEntryMutation(receipt, showMutationConfirmation: true)
             return true
         } catch {
             present(error)
@@ -835,7 +831,7 @@ final class AppModel: ObservableObject {
                     source: .appHistory
                 )
             )
-            await refreshAfterEntryMutation(receipt, showUndoBanner: true)
+            await refreshAfterEntryMutation(receipt, showMutationConfirmation: true)
             return true
         } catch {
             present(error)
@@ -855,7 +851,7 @@ final class AppModel: ObservableObject {
                     source: .appHistory
                 )
             )
-            await refreshAfterEntryMutation(receipt, showUndoBanner: true)
+            await refreshAfterEntryMutation(receipt, showMutationConfirmation: true)
             return true
         } catch {
             present(error)
@@ -877,7 +873,7 @@ final class AppModel: ObservableObject {
                     source: .restore
                 )
             )
-            await refreshAfterEntryMutation(receipt, showUndoBanner: true)
+            await refreshAfterEntryMutation(receipt, showMutationConfirmation: true)
             return true
         } catch {
             present(error)
@@ -894,8 +890,8 @@ final class AppModel: ObservableObject {
         isUndoing = true
         defer { isUndoing = false }
         undoStateGeneration += 1
-        visibleUndoCandidate = nil
-        undoBannerTask?.cancel()
+        visibleMutationConfirmation = nil
+        mutationConfirmationTask?.cancel()
         do {
             let receipt = try await repository.apply(
                 EntryMutationCommand(
@@ -907,28 +903,24 @@ final class AppModel: ObservableObject {
                     source: .undo
                 )
             )
-            await refreshAfterEntryMutation(receipt, showUndoBanner: false)
+            await refreshAfterEntryMutation(receipt, showMutationConfirmation: false)
         } catch {
-            visibleUndoCandidate = nil
-            undoBannerTask?.cancel()
+            visibleMutationConfirmation = nil
+            mutationConfirmationTask?.cancel()
             present(error)
-            await refreshUndoCandidate(showBanner: false)
+            await refreshUndoCandidate()
         }
     }
 
-    func resumeUndoAvailability() async {
-        await refreshUndoCandidate(showBanner: true)
-    }
-
-    func dismissUndoBanner() {
+    func dismissMutationConfirmation() {
         undoStateGeneration += 1
-        visibleUndoCandidate = nil
-        undoBannerTask?.cancel()
+        visibleMutationConfirmation = nil
+        mutationConfirmationTask?.cancel()
     }
 
     private func refreshAfterEntryMutation(
         _ receipt: EntryMutationReceipt,
-        showUndoBanner shouldShowUndoBanner: Bool
+        showMutationConfirmation shouldShowMutationConfirmation: Bool
     ) async {
         undoStateGeneration += 1
         let generation = undoStateGeneration
@@ -939,43 +931,44 @@ final class AppModel: ObservableObject {
             undoCandidate = candidate
             try await reconcileLoadedReminderState()
             guard
-                shouldShowUndoBanner,
+                shouldShowMutationConfirmation,
                 let candidate,
                 candidate.mutationID == receipt.mutationID
             else {
-                if candidate == nil { visibleUndoCandidate = nil }
+                if candidate == nil { visibleMutationConfirmation = nil }
                 return
             }
-            showUndoBanner(for: candidate)
+            showMutationConfirmation(for: candidate)
         } catch {
             presentMutationRefreshFailure(error)
         }
     }
 
-    private func refreshUndoCandidate(showBanner: Bool) async {
+    private func refreshUndoCandidate() async {
         let generation = undoStateGeneration
         do {
             let candidate = try await repository.latestUndoCandidate(asOf: now())
             guard generation == undoStateGeneration else { return }
             undoCandidate = candidate
-            if let candidate, showBanner {
-                showUndoBanner(for: candidate)
-            } else if candidate == nil {
-                visibleUndoCandidate = nil
-                undoBannerTask?.cancel()
+            if candidate == nil {
+                visibleMutationConfirmation = nil
+                mutationConfirmationTask?.cancel()
             }
         } catch {
             present(error)
         }
     }
 
-    private func showUndoBanner(for candidate: EntryUndoCandidate) {
-        undoBannerTask?.cancel()
-        visibleUndoCandidate = candidate
-        undoBannerTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(10))
-            guard !Task.isCancelled, self?.visibleUndoCandidate?.mutationID == candidate.mutationID else { return }
-            self?.visibleUndoCandidate = nil
+    private func showMutationConfirmation(for candidate: EntryUndoCandidate) {
+        mutationConfirmationTask?.cancel()
+        visibleMutationConfirmation = candidate
+        mutationConfirmationTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard
+                !Task.isCancelled,
+                self?.visibleMutationConfirmation?.mutationID == candidate.mutationID
+            else { return }
+            self?.visibleMutationConfirmation = nil
         }
     }
 

@@ -49,6 +49,12 @@ copy_fixture() {
         "$fixture_root/Hourleaf" \
         "$fixture_root/HourleafQuickSurfaces" \
         "$fixture_root/HourleafShared" \
+        "$fixture_root/HourleafWatch" \
+        "$fixture_root/HourleafWatchShared" \
+        "$fixture_root/AppStore/metadata/en-US" \
+        "$fixture_root/AppStore/metadata/ru" \
+        "$fixture_root/AppStore/metadata/uk" \
+        "$fixture_root/AppStore/screenshots" \
         "$fixture_root/scripts" \
         "$fixture_root/Hourleaf/AppIntents" \
         "$fixture_root/Hourleaf/Persistence/HourleafModel.xcdatamodeld/HourleafModelV1.xcdatamodel" \
@@ -67,16 +73,39 @@ copy_fixture() {
         "$fixture_root/HourleafQuickSurfaces/HourleafQuickSurfaces.entitlements"
     cp "$repo_root/HourleafQuickSurfaces/Info.plist" \
         "$fixture_root/HourleafQuickSurfaces/Info.plist"
+    cp "$repo_root/HourleafQuickSurfaces/PrivacyInfo.xcprivacy" \
+        "$fixture_root/HourleafQuickSurfaces/PrivacyInfo.xcprivacy"
     cp "$repo_root/HourleafQuickSurfaces/HourleafQuickSurfacesEntry.swift" \
         "$fixture_root/HourleafQuickSurfaces/HourleafQuickSurfacesEntry.swift"
+    cp "$repo_root/AppStore/ExportOptions-AppStore.plist" \
+        "$fixture_root/AppStore/ExportOptions-AppStore.plist"
     cp "$repo_root/HourleafShared/QuickSurfaceState.swift" \
         "$fixture_root/HourleafShared/QuickSurfaceState.swift"
+    cp "$repo_root/HourleafWatch"/*.swift \
+        "$fixture_root/HourleafWatch/"
+    cp "$repo_root/HourleafWatch/PrivacyInfo.xcprivacy" \
+        "$fixture_root/HourleafWatch/PrivacyInfo.xcprivacy"
+    cp "$repo_root/HourleafWatchShared/WatchTimeEntryContract.swift" \
+        "$fixture_root/HourleafWatchShared/WatchTimeEntryContract.swift"
     cp "$repo_root/scripts/install-local-device.sh" \
         "$fixture_root/scripts/install-local-device.sh"
     cp "$repo_root/Hourleaf/AppIntents/HourleafShortcuts.swift" \
         "$fixture_root/Hourleaf/AppIntents/HourleafShortcuts.swift"
     cp "$repo_root/Hourleaf/UI/DataManagement/DataManagementView.swift" \
         "$fixture_root/Hourleaf/UI/DataManagement/DataManagementView.swift"
+    cp "$repo_root/AppStore/README.md" \
+        "$repo_root/AppStore/privacy-details.md" \
+        "$repo_root/AppStore/review-notes.md" \
+        "$repo_root/AppStore/release-checklist.md" \
+        "$repo_root/AppStore/age-rating.md" \
+        "$repo_root/AppStore/accessibility.md" \
+        "$fixture_root/AppStore/"
+    for locale in en-US ru uk; do
+        cp "$repo_root/AppStore/metadata/$locale"/*.txt \
+            "$fixture_root/AppStore/metadata/$locale/"
+    done
+    cp -R "$repo_root/AppStore/screenshots/." \
+        "$fixture_root/AppStore/screenshots/"
     cp "$repo_root/Hourleaf/Persistence/HourleafModel.xcdatamodeld/HourleafModelV1.xcdatamodel/contents" \
         "$fixture_root/Hourleaf/Persistence/HourleafModel.xcdatamodeld/HourleafModelV1.xcdatamodel/contents"
     cp "$repo_root/Hourleaf/Persistence/HourleafModel.xcdatamodeld/HourleafModelV2.xcdatamodel/contents" \
@@ -146,6 +175,10 @@ print 'let backupReference = HourleafBackupV1.self' >> "$fixture_root/HourleafQu
 assert_failure_contains "forbidden extension source dependency"
 
 reset_fixture
+print 'import CoreData' >> "$fixture_root/HourleafWatchShared/WatchTimeEntryContract.swift"
+assert_failure_contains "forbidden Watch source dependency"
+
+reset_fixture
 replace_in_file \
     "$fixture_root/HourleafQuickSurfaces/Info.plist" \
     's#<string>\$(EXECUTABLE_NAME)</string>#<string></string>#'
@@ -203,6 +236,18 @@ assert_failure_contains "privacy manifest enables tracking"
 
 reset_fixture
 replace_in_file \
+    "$fixture_root/HourleafQuickSurfaces/PrivacyInfo.xcprivacy" \
+    's#<string>35F9.1</string>#<string>invalid</string>#'
+assert_failure_contains "extension privacy manifest has an unexpected NSPrivacyAccessedAPITypes.1.NSPrivacyAccessedAPITypeReasons.0"
+
+reset_fixture
+replace_in_file \
+    "$fixture_root/Hourleaf.xcodeproj/project.pbxproj" \
+    's/MARKETING_VERSION = 1.0.0;/MARKETING_VERSION = 0.9.0;/g'
+assert_failure_contains "all shipping targets must use marketing version 1.0.0"
+
+reset_fixture
+replace_in_file \
     "$fixture_root/Hourleaf/Hourleaf.entitlements" \
     's/\$(HOURLEAF_APP_GROUP_IDENTIFIER)/group.invalid.hourleaf/'
 assert_failure_contains "App Group entitlement is not parameterized"
@@ -219,10 +264,27 @@ print 'AppShortcut(intent: OpenQuickEntryIntent())' \
 assert_failure_contains "expected exactly three AppShortcut declarations"
 
 reset_fixture
+print 'AppShortcut(intent: WatchRecordServiceTimeIntent())' \
+    >> "$fixture_root/HourleafWatch/WatchRecordTimeIntent.swift"
+assert_failure_contains "expected exactly two Watch AppShortcut declarations"
+
+reset_fixture
 replace_in_file \
     "$fixture_root/scripts/install-local-device.sh" \
     's/slice3_smoke_bundle_id="com.kikuai.hourleaf.slice3smoke"/slice3_smoke_bundle_id="com.kikuai.hourleaf"/'
 assert_failure_contains "bundle identifiers must be distinct"
+
+reset_fixture
+replace_in_file \
+    "$fixture_root/scripts/install-local-device.sh" \
+    's/slice3_smoke_watch_bundle_id="com.kikuai.hourleaf.slice3smoke.watchkitapp"/slice3_smoke_watch_bundle_id="com.kikuai.hourleaf.watchkitapp"/'
+assert_failure_contains "Watch identifiers must be distinct"
+
+reset_fixture
+replace_in_file \
+    "$fixture_root/scripts/install-local-device.sh" \
+    's/standard_local_watch_bundle_id="com.kikuai.hourleaf.local.watchkitapp"/standard_local_watch_bundle_id="com.kikuai.hourleaf.other.watchkitapp"/'
+assert_failure_contains "each Watch identifier must belong to its companion iPhone app"
 
 reset_fixture
 replace_in_file \
@@ -241,5 +303,14 @@ replace_in_file \
     "$fixture_root/Hourleaf/UI/DataManagement/DataManagementView.swift" \
     '/^[[:space:]]*#if[[:space:]]+HOURLEAF_LOCAL_DEVICE[[:space:]]*$/d; /^[[:space:]]*#endif[[:space:]]*$/d'
 assert_failure_contains "local migration guidance is not fully compile-time guarded"
+
+reset_fixture
+print 'This subtitle is deliberately longer than thirty characters' \
+    > "$fixture_root/AppStore/metadata/en-US/subtitle.txt"
+assert_failure_contains "en-US subtitle exceeds the 30-character App Store limit"
+
+reset_fixture
+rm "$fixture_root/AppStore/screenshots/uk/watch-46mm/01-direct-entry.png"
+assert_failure_contains "App Store screenshot is missing"
 
 print "Release readiness guard self-test passed."

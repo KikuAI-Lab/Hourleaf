@@ -424,26 +424,29 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["No entries yet"].waitForExistence(timeout: 5))
     }
 
-    func testUndoBannerRevertsTheLatestQuickEntry() {
+    func testSavedToastDisappearsAndHistoryKeepsTheEntry() {
         let app = launchApp()
         addEntry(in: app, hours: "1", minutes: "15")
 
-        let banner = app.descendants(matching: .any)["mutationBanner"]
-        XCTAssertTrue(banner.waitForExistence(timeout: 5))
+        let toast = app.descendants(matching: .any)["mutationToast"]
+        XCTAssertTrue(toast.waitForExistence(timeout: 5))
         XCTAssertLessThanOrEqual(
-            banner.frame.maxY,
+            toast.frame.maxY,
             app.tabBars.firstMatch.frame.minY,
-            "The Undo banner must remain above the tab bar."
+            "The saved toast must remain above the tab bar."
         )
-        let undo = app.buttons["undoMutationButton"]
-        XCTAssertTrue(undo.waitForExistence(timeout: 2))
-        undo.tap()
+        XCTAssertLessThan(toast.frame.midX, app.frame.midX)
+        XCTAssertTrue(app.staticTexts["Saved"].exists)
+        XCTAssertFalse(app.buttons["undoMutationButton"].exists)
+        XCTAssertFalse(app.buttons["dismissUndoBannerButton"].exists)
+        XCTAssertTrue(toast.waitForNonExistence(timeout: 5))
 
         app.tabBars.buttons["History"].tap()
-        XCTAssertTrue(app.staticTexts["No entries yet"].waitForExistence(timeout: 5))
+        XCTAssertTrue(firstHistoryEntry(in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["1 hr 15 min"].exists)
     }
 
-    func testUndoBannerRemainsUsableAtAccessibilityTextSize() {
+    func testSavedToastRemainsReadableAtAccessibilityTextSize() {
         let app = launchApp(
             additionalArguments: [
                 "-UIPreferredContentSizeCategoryName",
@@ -452,15 +455,16 @@ final class HourleafUITests: XCTestCase {
         )
         addEntry(in: app, hours: "1", minutes: "15")
 
-        let banner = app.descendants(matching: .any)["mutationBanner"]
-        XCTAssertTrue(banner.waitForExistence(timeout: 5))
+        let toast = app.descendants(matching: .any)["mutationToast"]
+        XCTAssertTrue(toast.waitForExistence(timeout: 5))
         XCTAssertLessThanOrEqual(
-            banner.frame.maxY,
+            toast.frame.maxY,
             app.tabBars.firstMatch.frame.minY,
-            "The expanded Undo banner must remain above the tab bar."
+            "The expanded saved toast must remain above the tab bar."
         )
-        XCTAssertTrue(app.buttons["undoMutationButton"].isHittable)
-        XCTAssertTrue(app.buttons["dismissUndoBannerButton"].isHittable)
+        XCTAssertTrue(app.staticTexts["Saved"].exists)
+        XCTAssertFalse(app.buttons["undoMutationButton"].exists)
+        XCTAssertFalse(app.buttons["dismissUndoBannerButton"].exists)
     }
 
     func testQuickEntryHasNoVisibleTitleOrRepeatAndShareOpensReportMonthChooser() {
@@ -580,7 +584,7 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.buttons["saveEntryButton"].isEnabled)
     }
 
-    func testQuickSurfaceReviewSaveCreatesOneHistoryEntryAndUndo() {
+    func testQuickSurfaceReviewSaveCreatesOneHistoryEntryAndShowsSavedToast() {
         let app = launchQuickSurfaceApp()
         enableQuickSurfaceTimer(in: app)
         startAndStopQuickSurfaceTimer(in: app)
@@ -591,9 +595,10 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(save.isEnabled)
         save.tap()
 
-        let banner = app.descendants(matching: .any)["mutationBanner"]
-        XCTAssertTrue(banner.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["undoMutationButton"].waitForExistence(timeout: 5))
+        let toast = app.descendants(matching: .any)["mutationToast"]
+        XCTAssertTrue(toast.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Saved"].exists)
+        XCTAssertFalse(app.buttons["undoMutationButton"].exists)
 
         app.tabBars.buttons["History"].tap()
         let entries = app.buttons.matching(
@@ -792,6 +797,14 @@ final class HourleafUITests: XCTestCase {
     func testSettingsOffersShortcutsLink() {
         let app = launchApp()
         app.tabBars.buttons["Settings"].tap()
+
+        let siriTip = app.staticTexts.matching(identifier: "serviceSiriTip").firstMatch
+        XCTAssertTrue(scrollUntilVisible(siriTip, in: app))
+        XCTAssertTrue(
+            app.staticTexts[
+                "Add two shortcuts named “Record service” and “Record credit.” Then you do not need to say the app name."
+            ].exists
+        )
 
         let shortcutsLink = app.descendants(matching: .any)["shortcutsLink"]
         XCTAssertTrue(scrollUntilVisible(shortcutsLink, in: app))
@@ -1124,11 +1137,15 @@ final class HourleafUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Time before Hourleaf"].exists)
 
         let voiceIntro = app.staticTexts[
-            "Add service or credit by voice with Siri or from Shortcuts. Hourleaf asks for hours and minutes before saving."
+            "Add two shortcuts named “Record service” and “Record credit.” Then you do not need to say the app name."
         ]
         XCTAssertTrue(scrollUntilVisible(voiceIntro, in: app))
-        XCTAssertTrue(app.staticTexts["Say: “Siri, add service time in Hourleaf.”"].exists)
-        XCTAssertTrue(app.staticTexts["Or: “Siri, add credit time in Hourleaf.”"].exists)
+        XCTAssertTrue(app.staticTexts[
+            "Tell Siri: “Record service,” then say the duration."
+        ].exists)
+        XCTAssertTrue(app.staticTexts[
+            "For credit, say: “Record credit,” then say the duration."
+        ].exists)
     }
 
     private func launchApp(additionalArguments: [String] = []) -> XCUIApplication {

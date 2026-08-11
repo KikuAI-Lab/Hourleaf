@@ -7,17 +7,17 @@ struct HourleafShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: RecordTimeIntent(kind: .service),
             phrases: [
-                "Add service time in \(.applicationName)",
-                "Record service time in \(.applicationName)"
+                "Record service time in \(.applicationName)",
+                "\(.applicationName), record service time"
             ],
             shortTitle: "intent.shortcut.add_service",
             systemImageName: "plus.circle"
         )
         AppShortcut(
-            intent: RecordTimeIntent(kind: .credit),
+            intent: RecordCreditTimeIntent(),
             phrases: [
-                "Add credit time in \(.applicationName)",
-                "Record credit time in \(.applicationName)"
+                "Record credit time in \(.applicationName)",
+                "\(.applicationName), record credit time"
             ],
             shortTitle: "intent.shortcut.add_credit",
             systemImageName: "plus.circle.fill"

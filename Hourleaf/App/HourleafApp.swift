@@ -261,6 +261,20 @@ final class HourleafAppLauncher: ObservableObject {
                 systemReloader: quickSurfaceSystemReloader
             )
         )
+        if !usesTestStore {
+            let watchReceiver = WatchTimeEntryReceiver(
+                repository: runtime.repository,
+                router: router,
+                quickSurfaceRefresher: QuickSurfaceIntentProjectionRefresher(
+                    repository: runtime.repository,
+                    quickSurfaceHost: quickSurfaceHost,
+                    systemReloader: quickSurfaceSystemReloader
+                )
+            )
+            HourleafPhoneWatchConnectivity.shared.configure { data in
+                await watchReceiver.receive(data)
+            }
+        }
         HourleafShortcuts.updateAppShortcutParameters()
 
         return HourleafAppSession(
@@ -517,9 +531,9 @@ final class HourleafAppLauncher: ObservableObject {
                     )
                 ))
             }
-            // Seed commands exercise the real mutation path, but their Undo
-            // banner is not part of the fixture being tested on first launch.
-            model.dismissUndoBanner()
+            // Seed commands exercise the real mutation path, but their saved
+            // toast is not part of the fixture being tested on first launch.
+            model.dismissMutationConfirmation()
             model.finishInitialLoad()
         }
 

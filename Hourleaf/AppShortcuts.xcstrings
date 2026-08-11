@@ -1,14 +1,14 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "Add credit time in ${applicationName}" : {
+    "Record credit time in ${applicationName}" : {
       "localizations" : {
         "en" : {
           "stringSet" : {
             "state" : "translated",
             "values" : [
-              "Add credit time in ${applicationName}",
-              "Record credit time in ${applicationName}"
+              "Record credit time in ${applicationName}",
+              "${applicationName}, record credit time"
             ]
           }
         },
@@ -16,8 +16,8 @@
           "stringSet" : {
             "state" : "translated",
             "values" : [
-              "Добавить кредит в ${applicationName}",
-              "Записать кредит в ${applicationName}"
+              "Запиши кредит в ${applicationName}",
+              "${applicationName}, запиши кредит"
             ]
           }
         },
@@ -25,21 +25,21 @@
           "stringSet" : {
             "state" : "translated",
             "values" : [
-              "Додати кредит у ${applicationName}",
-              "Записати кредит у ${applicationName}"
+              "Запиши кредит у ${applicationName}",
+              "${applicationName}, запиши кредит"
             ]
           }
         }
       }
     },
-    "Add service time in ${applicationName}" : {
+    "Record service time in ${applicationName}" : {
       "localizations" : {
         "en" : {
           "stringSet" : {
             "state" : "translated",
             "values" : [
-              "Add service time in ${applicationName}",
-              "Record service time in ${applicationName}"
+              "Record service time in ${applicationName}",
+              "${applicationName}, record service time"
             ]
           }
         },
@@ -47,8 +47,8 @@
           "stringSet" : {
             "state" : "translated",
             "values" : [
-              "Добавить время служения в ${applicationName}",
-              "Записать время служения в ${applicationName}"
+              "Запиши служение в ${applicationName}",
+              "${applicationName}, запиши служение"
             ]
           }
         },
@@ -56,8 +56,8 @@
           "stringSet" : {
             "state" : "translated",
             "values" : [
-              "Додати час служіння в ${applicationName}",
-              "Записати час служіння в ${applicationName}"
+              "Запиши служіння у ${applicationName}",
+              "${applicationName}, запиши служіння"
             ]
           }
         }

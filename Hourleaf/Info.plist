@@ -24,6 +24,8 @@
 	<string>$(HOURLEAF_APP_GROUP_IDENTIFIER)</string>
 	<key>HourleafQuickEntryURLScheme</key>
 	<string>$(HOURLEAF_QUICK_ENTRY_URL_SCHEME)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
