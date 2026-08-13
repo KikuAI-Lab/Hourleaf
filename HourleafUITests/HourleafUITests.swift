@@ -819,7 +819,20 @@ final class HourleafUITests: XCTestCase {
         dataManagement.tap()
 
         XCTAssertTrue(app.buttons["createBackupButton"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["chooseRestoreBackupButton"].waitForExistence(timeout: 5))
+        let chooseRestore = app.buttons["chooseRestoreBackupButton"]
+        XCTAssertTrue(chooseRestore.waitForExistence(timeout: 5))
+        chooseRestore.tap()
+
+        let restorePickerClose = app.buttons["Close"]
+        let restorePickerCancel = app.buttons["Cancel"]
+        if restorePickerClose.waitForExistence(timeout: 5) {
+            restorePickerClose.tap()
+        } else {
+            XCTAssertTrue(restorePickerCancel.waitForExistence(timeout: 5))
+            restorePickerCancel.tap()
+        }
+        XCTAssertTrue(chooseRestore.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.alerts["Error"].exists)
 
         let importIntro = app.staticTexts["Choose an Hourleaf CSV. It adds entries only; it does not change settings or report history."]
         XCTAssertTrue(scrollUntilVisible(importIntro, in: app))

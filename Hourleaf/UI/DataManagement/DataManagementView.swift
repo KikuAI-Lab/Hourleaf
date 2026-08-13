@@ -79,8 +79,8 @@ struct DataManagementView: View {
     @State private var csvImportState = DataManagementCSVImportState()
     @State private var includeNotes = false
     @State private var sharePayload: FileSharePayload?
-    @State private var isRestoreImporterPresented = false
-    @State private var isCSVImporterPresented = false
+    @State private var fileImportKind: FileImportKind?
+    @State private var isFileImporterPresented = false
     @State private var errorMessage: String?
 
     init(actions: DataManagementActions) {
@@ -100,16 +100,10 @@ struct DataManagementView: View {
         }
         .navigationTitle("data_management.title")
         .fileImporter(
-            isPresented: $isRestoreImporterPresented,
-            allowedContentTypes: [.hourleafBackup],
+            isPresented: $isFileImporterPresented,
+            allowedContentTypes: fileImportKind?.allowedContentTypes ?? [.data],
             allowsMultipleSelection: false,
-            onCompletion: handleRestoreImport
-        )
-        .fileImporter(
-            isPresented: $isCSVImporterPresented,
-            allowedContentTypes: [.commaSeparatedText],
-            allowsMultipleSelection: false,
-            onCompletion: handleCSVImport
+            onCompletion: handleFileImport
         )
         .sheet(item: $sharePayload) { payload in
             FileActivityView(payload: payload) { _ in
@@ -196,7 +190,7 @@ struct DataManagementView: View {
     private var restoreSection: some View {
         Section("data_management.restore") {
             Button {
-                isRestoreImporterPresented = true
+                presentFileImporter(for: .restore)
             } label: {
                 Label("data_management.restore.choose", systemImage: "doc.badge.plus")
             }
@@ -277,7 +271,7 @@ struct DataManagementView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Button {
-                isCSVImporterPresented = true
+                presentFileImporter(for: .csv)
             } label: {
                 Label("data_management.csv_import.choose", systemImage: "doc.badge.plus")
             }
@@ -416,6 +410,23 @@ struct DataManagementView: View {
         let includesNotes = includeNotes
         start(.csvExport) {
             sharePayload = try await actions.exportCSV(includesNotes)
+        }
+    }
+
+    private func presentFileImporter(for kind: FileImportKind) {
+        guard !isBusy else { return }
+        fileImportKind = kind
+        isFileImporterPresented = true
+    }
+
+    private func handleFileImport(_ result: Result<[URL], Error>) {
+        guard let kind = fileImportKind else { return }
+        fileImportKind = nil
+        switch kind {
+        case .restore:
+            handleRestoreImport(result)
+        case .csv:
+            handleCSVImport(result)
         }
     }
 
@@ -660,8 +671,14 @@ private enum BusyOperation: Equatable {
     }
 }
 
-private extension UTType {
-    static var hourleafBackup: UTType {
-        UTType(filenameExtension: "hourleafbackup") ?? .data
+private enum FileImportKind {
+    case restore
+    case csv
+
+    var allowedContentTypes: [UTType] {
+        switch self {
+        case .restore: [.hourleafBackup]
+        case .csv: [.commaSeparatedText]
+        }
     }
 }

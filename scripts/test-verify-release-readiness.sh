@@ -193,6 +193,18 @@ assert_failure_contains "Hourleaf Info.plist HourleafAppGroupIdentifier is not t
 reset_fixture
 replace_in_file \
     "$fixture_root/Hourleaf/Info.plist" \
+    's#<string>com.kikuai.hourleaf.backup</string>#<string>com.invalid.hourleaf.backup</string>#'
+assert_failure_contains "Hourleaf Info.plist UTExportedTypeDeclarations.0.UTTypeIdentifier is not the required build setting"
+
+reset_fixture
+replace_in_file \
+    "$fixture_root/Hourleaf/Info.plist" \
+    's#<string>hourleafbackup</string>#<string>invalidbackup</string>#'
+assert_failure_contains "Hourleaf Info.plist backup filename extension drifted"
+
+reset_fixture
+replace_in_file \
+    "$fixture_root/Hourleaf/Info.plist" \
     's#<string>\$(HOURLEAF_QUICK_ENTRY_URL_SCHEME)</string>#<string>hourleaf</string>#g'
 assert_failure_contains "Hourleaf Info.plist HourleafQuickEntryURLScheme is not the required build setting"
 

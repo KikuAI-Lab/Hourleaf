@@ -51,5 +51,27 @@
 		<key>UILaunchScreen</key>
 		<dict/>
 	</dict>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.json</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Hourleaf Backup</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.kikuai.hourleaf.backup</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>hourleafbackup</string>
+				</array>
+				<key>public.mime-type</key>
+				<string>application/vnd.kikuai.hourleaf.backup+json</string>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>

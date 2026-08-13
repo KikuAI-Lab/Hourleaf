@@ -125,6 +125,24 @@ assert_app_info_value CFBundleURLTypes.0.CFBundleURLSchemes.0 '$(HOURLEAF_QUICK_
 assert_app_info_value ITSAppUsesNonExemptEncryption false
 assert_app_info_value LSApplicationCategoryType 'public.app-category.productivity'
 assert_app_info_value UIApplicationSupportsIndirectInputEvents 'true'
+assert_app_info_value UTExportedTypeDeclarations.0.UTTypeIdentifier 'com.kikuai.hourleaf.backup'
+assert_app_info_value UTExportedTypeDeclarations.0.UTTypeConformsTo.0 'public.json'
+assert_app_info_value UTExportedTypeDeclarations.0.UTTypeDescription 'Hourleaf Backup'
+
+backup_extension="$(
+    /usr/libexec/PlistBuddy \
+        -c 'Print :UTExportedTypeDeclarations:0:UTTypeTagSpecification:public.filename-extension:0' \
+        "$app_info_file" 2>/dev/null
+)" || fail "Hourleaf Info.plist is missing the backup filename extension"
+[[ "$backup_extension" == "hourleafbackup" ]] \
+    || fail "Hourleaf Info.plist backup filename extension drifted"
+backup_mime_type="$(
+    /usr/libexec/PlistBuddy \
+        -c 'Print :UTExportedTypeDeclarations:0:UTTypeTagSpecification:public.mime-type' \
+        "$app_info_file" 2>/dev/null
+)" || fail "Hourleaf Info.plist is missing the backup MIME type"
+[[ "$backup_mime_type" == "application/vnd.kikuai.hourleaf.backup+json" ]] \
+    || fail "Hourleaf Info.plist backup MIME type drifted"
 
 if ! plutil -extract UIApplicationSceneManifest json -o - "$app_info_file" >/dev/null 2>&1; then
     fail "Hourleaf Info.plist is missing UIApplicationSceneManifest"
