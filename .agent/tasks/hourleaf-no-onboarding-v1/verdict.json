@@ -1,0 +1,13 @@
+{
+  "task": "hourleaf-no-onboarding-v1",
+  "verdict": "PASS",
+  "acceptanceCriteria": {
+    "AC1": "PASS",
+    "AC2": "PASS",
+    "AC3": "PASS",
+    "AC4": "PASS",
+    "AC5": "PASS"
+  },
+  "summary": "Fresh installs open Quick Entry directly; legacy data and backup compatibility are preserved.",
+  "next": "Publish the change and upload build 2 under GitHub Issue #3."
+}

@@ -82,7 +82,7 @@ final class HourleafAppLauncher: ObservableObject {
 
         self.arguments = arguments
         isUITesting = uiTesting
-        usesTestStore = uiTesting || arguments.contains("-onboardingUITest")
+        usesTestStore = uiTesting || arguments.contains("-freshInstallUITest")
         self.clock = clock
 
         if usesTestStore {

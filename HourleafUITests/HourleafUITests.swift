@@ -902,22 +902,21 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(scrollUntilVisible(app.staticTexts["shortcutsFooter"], in: app))
     }
 
-    func testOnboardingExplainsOpeningBalances() {
+    func testFreshInstallOpensQuickEntryWithoutOnboarding() {
         let app = XCUIApplication()
-        app.launchArguments = ["-onboardingUITest", "-AppleLanguages", "(en)"]
+        app.launchArguments = ["-freshInstallUITest", "-AppleLanguages", "(en)"]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Add time you already have, if any. Then record new time as you go."].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["finishOnboardingButton"].exists)
-        XCTAssertTrue(app.staticTexts["Already served this service year?"].exists)
-
-        XCTAssertTrue(app.textFields["baselineHoursField"].exists)
+        XCTAssertTrue(app.buttons["saveEntryButton"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["shareReportButton"].exists)
+        XCTAssertFalse(app.buttons["finishOnboardingButton"].exists)
+        XCTAssertFalse(app.staticTexts["Already served this service year?"].exists)
     }
 
-    func testOnboardingInputsAndFinalActionRemainReachableAtAccessibilityXXXL() {
+    func testFreshInstallQuickEntryRemainsReachableAtAccessibilityXXXL() {
         let app = XCUIApplication()
         app.launchArguments = [
-            "-onboardingUITest",
+            "-freshInstallUITest",
             "-AppleLanguages",
             "(en)",
             "-UIPreferredContentSizeCategoryName",
@@ -925,21 +924,10 @@ final class HourleafUITests: XCTestCase {
         ]
         app.launch()
 
-        let baselineHours = app.textFields["baselineHoursField"]
-        XCTAssertTrue(baselineHours.waitForExistence(timeout: 5))
-        XCTAssertTrue(scrollUntilHittable(baselineHours, in: app))
-
-        let minutesWheel = app.pickerWheels.element(boundBy: 0)
-        XCTAssertTrue(minutesWheel.waitForExistence(timeout: 5))
-        XCTAssertTrue(scrollUntilHittable(minutesWheel, in: app))
-
-        let finish = app.buttons["finishOnboardingButton"]
-        XCTAssertTrue(scrollUntilHittable(finish, in: app))
-        XCTAssertTrue(finish.isEnabled)
-        finish.tap()
-
-        XCTAssertFalse(app.navigationBars["Add time"].exists)
-        XCTAssertTrue(app.buttons["saveEntryButton"].waitForExistence(timeout: 5))
+        let save = app.buttons["saveEntryButton"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollUntilHittable(save, in: app))
+        XCTAssertFalse(app.buttons["finishOnboardingButton"].exists)
     }
 
     func testDataManagementActionsRemainReachableAtAccessibilityXXXL() {

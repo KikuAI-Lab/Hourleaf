@@ -118,18 +118,6 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSLocale.currentLocaleDidChangeNotification)) { _ in
             Task { await model.rescheduleReminders() }
         }
-        .fullScreenCover(isPresented: onboardingBinding) {
-            OnboardingView()
-                .environmentObject(model)
-                .interactiveDismissDisabled()
-        }
-    }
-
-    private var onboardingBinding: Binding<Bool> {
-        Binding(
-            get: { !model.settings.onboardingComplete },
-            set: { _ in }
-        )
     }
 
     private var errorBinding: Binding<Bool> {

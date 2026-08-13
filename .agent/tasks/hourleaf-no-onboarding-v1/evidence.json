@@ -1,0 +1,19 @@
+{
+  "task": "hourleaf-no-onboarding-v1",
+  "verifiedAt": "2026-08-13",
+  "acceptance": {
+    "freshInstallQuickEntryUI": { "status": "PASS", "passed": 2, "failed": 0 },
+    "backupAndMigrationCompatibility": { "status": "PASS", "passed": 17, "failed": 0 },
+    "fullUnitSuite": { "status": "PASS", "passed": 486, "failed": 0 },
+    "releaseReadinessGuard": { "status": "PASS" },
+    "releaseReadinessSelfTest": { "status": "PASS" },
+    "unsignedGenericReleaseBuild": { "status": "PASS" },
+    "localizationParity": { "status": "PASS", "keysPerLocale": 367 },
+    "diffCheck": { "status": "PASS" }
+  },
+  "build": {
+    "marketingVersion": "1.0.0",
+    "currentProjectVersion": 2
+  },
+  "externalReleaseActions": "PENDING"
+}
