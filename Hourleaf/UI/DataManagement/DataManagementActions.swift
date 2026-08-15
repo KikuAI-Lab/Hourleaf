@@ -116,8 +116,8 @@ struct DataManagementRestoreState: Equatable {
     }
 }
 
-/// The leaf UI depends only on user-intent actions, so app wiring can own the
-/// model, security-scoped file access, and restore coordinator separately.
+/// The leaf UI claims a file importer's temporary security scope synchronously,
+/// then depends only on these actions for model and restore coordination.
 @MainActor
 struct DataManagementActions {
     let restoreAvailability: DataManagementRestoreAvailability

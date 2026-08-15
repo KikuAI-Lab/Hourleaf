@@ -66,8 +66,9 @@ actor HourleafRestoreCoordinator {
         self.faultInjector = faultInjector
     }
 
-    /// Stage and validate one file. A private-cloud live store is rejected
-    /// before scope access, coordination, or any app-owned staging file exists.
+    /// Stage and validate one file while the caller holds any picker-granted
+    /// security scope. A private-cloud live store is rejected before file
+    /// coordination or any app-owned staging file exists.
     func prepare(from sourceURL: URL) async throws -> RestorePreview {
         switch liveStoreMode() {
         case .localOnlySQLite:
@@ -474,16 +475,6 @@ actor HourleafRestoreCoordinator {
         from sourceURL: URL,
         to destinationURL: URL
     ) throws -> Data {
-        let accessedSecurityScope = sourceURL.startAccessingSecurityScopedResource()
-        defer {
-            if accessedSecurityScope { sourceURL.stopAccessingSecurityScopedResource() }
-        }
-
-        let sourceValues = try sourceURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-        guard sourceValues.isRegularFile == true, sourceValues.isSymbolicLink != true else {
-            throw HourleafRestoreError.invalidFileSelection
-        }
-
         let coordinator = NSFileCoordinator(filePresenter: nil)
         var coordinationError: NSError?
         var result: Result<Data, Error>?

@@ -436,8 +436,18 @@ struct DataManagementView: View {
         switch result {
         case let .success(urls):
             guard let url = urls.first else { return }
+            // The importer grants temporary access. Claim it before this
+            // synchronous completion path returns and the async preview starts.
+            guard url.startAccessingSecurityScopedResource() else {
+                showSanitizedError(for: .csvImportPreview)
+                return
+            }
             busyOperation = .csvImportPreview
             Task { @MainActor in
+                defer {
+                    url.stopAccessingSecurityScopedResource()
+                    busyOperation = nil
+                }
                 await discardCurrentCSVImportPreviewForNewChoice()
                 do {
                     let preview = try await actions.previewCSVImport(url)
@@ -449,7 +459,6 @@ struct DataManagementView: View {
                 } catch {
                     showSanitizedError(for: .csvImportPreview)
                 }
-                busyOperation = nil
             }
         case let .failure(error):
             guard !isCancellation(error) else { return }
@@ -502,8 +511,17 @@ struct DataManagementView: View {
                 showSanitizedError(for: .restorePreview)
                 return
             }
+            // Keep the security scope alive across the async restore preview.
+            guard url.startAccessingSecurityScopedResource() else {
+                showSanitizedError(for: .restorePreview)
+                return
+            }
             busyOperation = .restorePreview
             Task { @MainActor in
+                defer {
+                    url.stopAccessingSecurityScopedResource()
+                    busyOperation = nil
+                }
                 await discardCurrentRestorePreview()
                 do {
                     let preview = try await actions.previewRestore(url)
@@ -517,7 +535,6 @@ struct DataManagementView: View {
                 } catch {
                     showRestoreInterlockErrorIfSafe(error, fallback: .restorePreview)
                 }
-                busyOperation = nil
             }
         case let .failure(error):
             guard (error as NSError).code != CocoaError.Code.userCancelled.rawValue else { return }
