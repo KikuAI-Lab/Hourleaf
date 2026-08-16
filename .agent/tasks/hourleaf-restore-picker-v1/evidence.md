@@ -238,7 +238,9 @@ The Personal Team app and all durable recovery copies remain preserved.
   privacy manifests, and the host dSYM.
 - App Store Connect upload: PASS with `Upload succeeded` and no reported upload
   warning or error lines.
+- Apple processing/TestFlight availability: PASS; the build 10 availability
+  confirmation names both iOS and watchOS.
 
-Remaining gate: TestFlight processing/installation and one uninterrupted
-physical restore plus post-relaunch ledger comparison. No production-store
-replacement has occurred in the failed build 8 or build 9 confirmations.
+Remaining gate: TestFlight installation and one uninterrupted physical restore
+plus post-relaunch ledger comparison. No production-store replacement has
+occurred in the failed build 8 or build 9 confirmations.
