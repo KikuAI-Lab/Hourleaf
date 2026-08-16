@@ -215,6 +215,7 @@ struct ReportStateRecord: Identifiable, Equatable, Sendable {
     let currentSnapshotID: UUID?
     let reviewedCalculationFingerprint: String?
     let reviewedPresentationFingerprint: String?
+    let bibleStudyCount: Int
     let updatedAt: Date
     let changedAt: Date?
 }
@@ -291,6 +292,10 @@ struct LedgerSnapshot: Equatable, Sendable {
     var receipts: [ReportReceipt] {
         reportSnapshots.map(\.receipt)
     }
+
+    func bibleStudyCount(for month: MonthKey) -> Int {
+        reportStates.first(where: { $0.month == month })?.bibleStudyCount ?? 0
+    }
 }
 
 enum ReportLanguage: String, CaseIterable, Identifiable, Sendable {
@@ -308,6 +313,27 @@ enum ReportLanguage: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum MonthlyBibleStudyCount {
+    static let allowedRange = 0...999
+}
+
+enum MonthlyBibleStudyCountError: LocalizedError, Equatable, Sendable {
+    case outOfRange
+    case beforeLedgerStart
+    case futureMonth
+
+    var errorDescription: String? {
+        switch self {
+        case .outOfRange:
+            "The monthly Bible-study count must be between 0 and 999."
+        case .beforeLedgerStart:
+            "This period is before Hourleaf started tracking your time."
+        case .futureMonth:
+            "A Bible-study count cannot be saved for a future month."
+        }
+    }
+}
+
 struct MonthlyReport: Identifiable, Equatable, Sendable {
     var id: String { month.key }
     let month: MonthKey
@@ -319,6 +345,46 @@ struct MonthlyReport: Identifiable, Equatable, Sendable {
     let creditHours: Int
     let serviceCarryOut: Int
     let creditCarryOut: Int
+    let bibleStudyCount: Int
+
+    init(
+        month: MonthKey,
+        rawServiceMinutes: Int,
+        rawCreditMinutes: Int,
+        serviceCarryIn: Int,
+        creditCarryIn: Int,
+        serviceHours: Int,
+        creditHours: Int,
+        serviceCarryOut: Int,
+        creditCarryOut: Int,
+        bibleStudyCount: Int = 0
+    ) {
+        self.month = month
+        self.rawServiceMinutes = rawServiceMinutes
+        self.rawCreditMinutes = rawCreditMinutes
+        self.serviceCarryIn = serviceCarryIn
+        self.creditCarryIn = creditCarryIn
+        self.serviceHours = serviceHours
+        self.creditHours = creditHours
+        self.serviceCarryOut = serviceCarryOut
+        self.creditCarryOut = creditCarryOut
+        self.bibleStudyCount = bibleStudyCount
+    }
+
+    func includingBibleStudyCount(_ count: Int) -> MonthlyReport {
+        MonthlyReport(
+            month: month,
+            rawServiceMinutes: rawServiceMinutes,
+            rawCreditMinutes: rawCreditMinutes,
+            serviceCarryIn: serviceCarryIn,
+            creditCarryIn: creditCarryIn,
+            serviceHours: serviceHours,
+            creditHours: creditHours,
+            serviceCarryOut: serviceCarryOut,
+            creditCarryOut: creditCarryOut,
+            bibleStudyCount: count
+        )
+    }
 }
 
 struct ReportReceipt: Identifiable, Equatable, Sendable {

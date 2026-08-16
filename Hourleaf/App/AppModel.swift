@@ -28,6 +28,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var preparingReportMonths: Set<MonthKey> = []
     @Published private(set) var markingSentSnapshotIDs: Set<UUID> = []
     @Published private(set) var closingServiceYearStarts: Set<MonthKey> = []
+    @Published private(set) var updatingBibleStudyMonths: Set<MonthKey> = []
     @Published var settings = AppSettings()
     @Published var selectedTab: Tab = .add
     @Published var errorMessage: String?
@@ -239,6 +240,7 @@ final class AppModel: ObservableObject {
         preparingReportMonths.removeAll()
         markingSentSnapshotIDs.removeAll()
         closingServiceYearStarts.removeAll()
+        updatingBibleStudyMonths.removeAll()
         restoringEntryIDs.removeAll()
         isUndoing = false
         mutationConfirmationTask?.cancel()
@@ -996,6 +998,27 @@ final class AppModel: ObservableObject {
         return draft
     }
 
+    func bibleStudyCount(for month: MonthKey) -> Int {
+        latestLedgerSnapshot?.bibleStudyCount(for: month) ?? 0
+    }
+
+    func updateBibleStudyCount(_ count: Int, for month: MonthKey) async -> Bool {
+        guard updatingBibleStudyMonths.insert(month).inserted else { return false }
+        defer { updatingBibleStudyMonths.remove(month) }
+        do {
+            let snapshot = try await repository.setBibleStudyCount(
+                count,
+                for: month,
+                at: now()
+            )
+            await applyAuthoritativeSnapshot(snapshot)
+            return true
+        } catch {
+            present(error)
+            return false
+        }
+    }
+
     func openReport(_ month: MonthKey) {
         selectedReportMonth = month
         selectedTab = .progress
@@ -1145,7 +1168,7 @@ final class AppModel: ObservableObject {
     }
 
     func report(for month: MonthKey) -> MonthlyReport {
-        reports(through: month).last(where: { $0.month == month })
+        let report = reports(through: month).last(where: { $0.month == month })
             ?? MonthlyReport(
                 month: month,
                 rawServiceMinutes: 0,
@@ -1157,6 +1180,7 @@ final class AppModel: ObservableObject {
                 serviceCarryOut: 0,
                 creditCarryOut: 0
             )
+        return report.includingBibleStudyCount(bibleStudyCount(for: month))
     }
 
     func serviceYearProgress(containing day: LocalDay? = nil) -> Int {

@@ -93,6 +93,7 @@ final class ReportStateEntity: NSManagedObject {
     @NSManaged var currentSnapshotID: UUID?
     @NSManaged var reviewedCalculationFingerprint: String?
     @NSManaged var reviewedPresentationFingerprint: String?
+    @NSManaged var bibleStudyCount: Int16
     @NSManaged var updatedAt: Date?
     @NSManaged var changedAt: Date?
 }

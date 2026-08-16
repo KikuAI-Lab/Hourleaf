@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="26600" systemVersion="26A" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithCloudKit="NO">
+    <entity name="DayAcknowledgementEntity" representedClassName="DayAcknowledgementEntity" syncable="YES">
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="localDay" optional="YES" attributeType="String"/>
+        <attribute name="source" optional="YES" attributeType="String"/>
+        <attribute name="status" optional="YES" attributeType="String"/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <fetchIndex name="byLocalDay">
+            <fetchIndexElement property="localDay" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byStatus">
+            <fetchIndexElement property="status" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="EntryEntity" representedClassName="EntryEntity" syncable="YES">
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="deletedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="kind" optional="YES" attributeType="String"/>
+        <attribute name="lastMutationID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="localDay" optional="YES" attributeType="String"/>
+        <attribute name="minutes" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="note" optional="YES" attributeType="String"/>
+        <attribute name="revision" attributeType="Integer 64" defaultValueString="1" usesScalarValueType="YES"/>
+        <attribute name="source" optional="YES" attributeType="String"/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <fetchIndex name="byID">
+            <fetchIndexElement property="id" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byLocalDay">
+            <fetchIndexElement property="localDay" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byDeletedAt">
+            <fetchIndexElement property="deletedAt" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byKind">
+            <fetchIndexElement property="kind" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byUpdatedAt">
+            <fetchIndexElement property="updatedAt" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byLastMutationID">
+            <fetchIndexElement property="lastMutationID" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="EntryRevisionEntity" representedClassName="EntryRevisionEntity" syncable="YES">
+        <attribute name="entryCreatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="entryDeletedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="entryID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="entryUpdatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="kind" optional="YES" attributeType="String"/>
+        <attribute name="localDay" optional="YES" attributeType="String"/>
+        <attribute name="minutes" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="mutationID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="note" optional="YES" attributeType="String"/>
+        <attribute name="occurredAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="operation" optional="YES" attributeType="String"/>
+        <attribute name="parentMutationID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="revertedMutationID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="revision" attributeType="Integer 64" defaultValueString="1" usesScalarValueType="YES"/>
+        <attribute name="source" optional="YES" attributeType="String"/>
+        <fetchIndex name="byEntryID">
+            <fetchIndexElement property="entryID" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byMutationID">
+            <fetchIndexElement property="mutationID" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byParentMutationID">
+            <fetchIndexElement property="parentMutationID" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byOccurredAt">
+            <fetchIndexElement property="occurredAt" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="PolicyRevisionEntity" representedClassName="PolicyRevisionEntity" syncable="YES">
+        <attribute name="carryAcrossServiceYear" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="effectiveMonth" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="mode" optional="YES" attributeType="String"/>
+        <fetchIndex name="byEffectiveMonth">
+            <fetchIndexElement property="effectiveMonth" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="PresetEntity" representedClassName="PresetEntity" syncable="YES">
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="deletedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="kind" optional="YES" attributeType="String"/>
+        <attribute name="minutes" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="position" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+    </entity>
+    <entity name="ReminderEntity" representedClassName="ReminderEntity" syncable="YES">
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="hour" attributeType="Integer 16" defaultValueString="9" usesScalarValueType="YES"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="isEnabled" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="minute" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="weekday" attributeType="Integer 16" defaultValueString="2" usesScalarValueType="YES"/>
+    </entity>
+    <entity name="ReportReceiptEntity" representedClassName="ReportReceiptEntity" syncable="YES">
+        <attribute name="calculationFingerprint" optional="YES" attributeType="String"/>
+        <attribute name="confirmedSentAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="createdBySource" optional="YES" attributeType="String"/>
+        <attribute name="creditCarryIn" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="creditCarryOut" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="creditHours" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="creditLabel" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="legacyCalculationUnavailable" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="monthKey" optional="YES" attributeType="String"/>
+        <attribute name="presentationFingerprint" optional="YES" attributeType="String"/>
+        <attribute name="preparedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="rawCreditMinutes" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="rawServiceMinutes" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="reportLanguage" optional="YES" attributeType="String"/>
+        <attribute name="reportText" optional="YES" attributeType="String"/>
+        <attribute name="reportingMode" optional="YES" attributeType="String"/>
+        <attribute name="schemaVersion" attributeType="Integer 16" defaultValueString="1" usesScalarValueType="YES"/>
+        <attribute name="serviceCarryIn" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="serviceCarryOut" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="serviceHours" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="supersedesID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="templateID" optional="YES" attributeType="String"/>
+        <attribute name="version" attributeType="Integer 32" defaultValueString="1" usesScalarValueType="YES"/>
+        <fetchIndex name="byMonthKey">
+            <fetchIndexElement property="monthKey" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byPreparedAt">
+            <fetchIndexElement property="preparedAt" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="bySupersedesID">
+            <fetchIndexElement property="supersedesID" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="ReportStateEntity" representedClassName="ReportStateEntity" syncable="YES">
+        <attribute name="bibleStudyCount" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="changedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="currentSnapshotID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="lastStableState" optional="YES" attributeType="String"/>
+        <attribute name="monthKey" optional="YES" attributeType="String"/>
+        <attribute name="reviewedCalculationFingerprint" optional="YES" attributeType="String"/>
+        <attribute name="reviewedPresentationFingerprint" optional="YES" attributeType="String"/>
+        <attribute name="state" optional="YES" attributeType="String"/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <fetchIndex name="byMonthKey">
+            <fetchIndexElement property="monthKey" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byUpdatedAt">
+            <fetchIndexElement property="updatedAt" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="ServiceYearArchiveEntity" representedClassName="ServiceYearArchiveEntity" syncable="YES">
+        <attribute name="actualServiceMinutes" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="baselineServiceMinutes" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="calculationFingerprint" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="endMonthKey" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="startMonthKey" optional="YES" attributeType="String"/>
+        <attribute name="supersedesID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="targetMinutes" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="version" attributeType="Integer 32" defaultValueString="1" usesScalarValueType="YES"/>
+        <fetchIndex name="byStartMonthKey">
+            <fetchIndexElement property="startMonthKey" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byVersion">
+            <fetchIndexElement property="version" type="Binary" order="ascending"/>
+        </fetchIndex>
+        <fetchIndex name="byCreatedAt">
+            <fetchIndexElement property="createdAt" type="Binary" order="ascending"/>
+        </fetchIndex>
+    </entity>
+    <entity name="SettingsEntity" representedClassName="SettingsEntity" syncable="YES">
+        <attribute name="baselineServiceYearMinutes" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="baselineServiceYearStart" optional="YES" attributeType="String"/>
+        <attribute name="creditLabelEnglish" optional="YES" attributeType="String"/>
+        <attribute name="creditLabelRussian" optional="YES" attributeType="String"/>
+        <attribute name="creditLabelUkrainian" optional="YES" attributeType="String"/>
+        <attribute name="dataRevision" attributeType="Integer 16" defaultValueString="1" usesScalarValueType="YES"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="lastPurgeAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="ledgerStartMonth" optional="YES" attributeType="String"/>
+        <attribute name="onboardingComplete" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="openingCreditCarryMinutes" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="openingServiceCarryMinutes" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="planningVisible" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="quietGapCheckEnabled" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="quietGapDays" attributeType="Integer 16" defaultValueString="7" usesScalarValueType="YES"/>
+        <attribute name="reportLanguage" optional="YES" attributeType="String"/>
+        <attribute name="syncMode" optional="YES" attributeType="String"/>
+        <attribute name="timerVisible" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="widgetPrivacyMode" optional="YES" attributeType="String"/>
+    </entity>
+    <elements>
+        <element name="EntryEntity" positionX="-63" positionY="-18" width="128" height="236"/>
+        <element name="EntryRevisionEntity" positionX="117" positionY="-18" width="128" height="384"/>
+        <element name="PolicyRevisionEntity" positionX="297" positionY="-18" width="128" height="136"/>
+        <element name="ReminderEntity" positionX="477" positionY="-18" width="128" height="134"/>
+        <element name="ReportReceiptEntity" positionX="657" positionY="-18" width="128" height="420"/>
+        <element name="ReportStateEntity" positionX="837" positionY="-18" width="128" height="236"/>
+        <element name="SettingsEntity" positionX="1017" positionY="-18" width="128" height="332"/>
+        <element name="PresetEntity" positionX="1197" positionY="-18" width="128" height="149"/>
+        <element name="DayAcknowledgementEntity" positionX="1377" positionY="-18" width="128" height="149"/>
+        <element name="ServiceYearArchiveEntity" positionX="1557" positionY="-18" width="128" height="204"/>
+    </elements>
+</model>

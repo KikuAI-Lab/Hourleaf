@@ -84,6 +84,31 @@ final class HourleafBackupPersistenceTests: XCTestCase {
         )
     }
 
+    func testBibleStudyCountSurvivesPortableBackupAndRawRestore() async throws {
+        var expected = RawBackupFixture.records
+        let month = try XCTUnwrap(expected.states.first?.monthKey)
+        expected.bibleStudyCounts = [HourleafBibleStudyCountV2(count: 3, monthKey: month)]
+
+        let sourcePersistence = PersistenceController(inMemory: true, cloudSyncEnabled: false)
+        try RawBackupFixture.seed(expected, into: sourcePersistence.container.viewContext)
+        let sourceRepository = CoreDataLedgerRepository(persistence: sourcePersistence)
+        let exported = try await sourceRepository.portableBackupRecords()
+        XCTAssertEqual(exported.bibleStudyCounts, expected.bibleStudyCounts)
+
+        let backup = try HourleafBackupCodec.encode(
+            content: HourleafBackupContentV1(exportedAt: 123, records: exported)
+        )
+        let decoded = try HourleafBackupCodec.decodeAndVerify(backup.data).content.records
+        let restoredPersistence = PersistenceController(inMemory: true, cloudSyncEnabled: false)
+        try RawBackupFixture.seed(decoded, into: restoredPersistence.container.viewContext)
+        let restoredRepository = CoreDataLedgerRepository(persistence: restoredPersistence)
+        let restoredSnapshot = try await restoredRepository.ledgerSnapshot()
+
+        XCTAssertEqual(restoredSnapshot.bibleStudyCount(for: MonthKey(key: month)!), 3)
+        let restoredRecords = try await restoredRepository.portableBackupRecords()
+        XCTAssertEqual(restoredRecords.bibleStudyCounts, expected.bibleStudyCounts)
+    }
+
     func testOneTapCreateRoundTripsFrozenBackupV1() async throws {
         let persistence = PersistenceController(inMemory: true, cloudSyncEnabled: false)
         var expected = RawBackupFixture.records
@@ -974,8 +999,14 @@ private enum RawBackupFixture {
         setting.updatedAt = date(records.settings.updatedAt)
         setting.widgetPrivacyMode = records.settings.widgetPrivacyMode
 
+        let bibleStudyCountsByMonth = Dictionary(
+            uniqueKeysWithValues: records.bibleStudyCounts.compactMap { value in
+                value.monthKey.map { ($0, value.count) }
+            }
+        )
         for value in records.states {
             let object: ReportStateEntity = context.insert(ReportStateEntity.self)
+            object.bibleStudyCount = value.monthKey.flatMap { bibleStudyCountsByMonth[$0] } ?? 0
             object.changedAt = date(value.changedAt)
             object.currentSnapshotID = uuid(value.currentSnapshotID)
             object.id = uuid(value.id)

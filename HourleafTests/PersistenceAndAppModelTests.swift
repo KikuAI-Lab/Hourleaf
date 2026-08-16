@@ -132,6 +132,94 @@ final class PersistenceAndAppModelTests: XCTestCase {
         XCTAssertNotNil(deletedEntry.deletedAt)
     }
 
+    func testBibleStudyCountIsMonthSpecificAndChangesPreparedReportWithoutChangingHours() async throws {
+        let now = fixedDate(year: 2026, month: 8, day: 16)
+        let july = MonthKey(year: 2026, month: 7)
+        let repository = makeRepository(clock: { now })
+        try await configureLedgerStart(repository, month: july)
+        _ = try await AddTimeEntryCommand(repository: repository).execute(
+            kind: .service,
+            date: fixedDate(year: 2026, month: 7, day: 12),
+            hours: 1,
+            minutes: 15,
+            note: nil,
+            occurredAt: now
+        )
+
+        let ready = try await repository.reconcileReportLifecycle(asOf: now)
+        let originalDraft = try XCTUnwrap(ReportReadiness.draft(for: july, in: ready))
+        let reviewed = try await repository.reviewReport(ReviewReportRequest(
+            month: july,
+            expectedCalculationFingerprint: originalDraft.calculationFingerprint,
+            expectedPresentationFingerprint: originalDraft.presentationFingerprint,
+            reviewedAt: now
+        ))
+        let reviewedDraft = try XCTUnwrap(ReportReadiness.draft(for: july, in: reviewed))
+        let prepared = try await repository.prepareReport(PrepareReportRequest(
+            month: july,
+            expectedCalculationFingerprint: reviewedDraft.calculationFingerprint,
+            expectedPresentationFingerprint: reviewedDraft.presentationFingerprint,
+            snapshotID: UUID(),
+            preparedAt: now
+        ))
+        XCTAssertEqual(prepared.ledger.reportStates.first(where: { $0.month == july })?.state, .prepared)
+
+        let changed = try await repository.setBibleStudyCount(1, for: july, at: now)
+        let changedState = try XCTUnwrap(changed.reportStates.first(where: { $0.month == july }))
+        let changedDraft = try XCTUnwrap(ReportReadiness.draft(for: july, in: changed))
+        XCTAssertEqual(changedState.bibleStudyCount, 1)
+        XCTAssertEqual(changedState.state, .changed)
+        XCTAssertEqual(changed.reportSnapshots.count, 1)
+        XCTAssertEqual(changedDraft.report.rawServiceMinutes, originalDraft.report.rawServiceMinutes)
+        XCTAssertEqual(changedDraft.report.serviceHours, originalDraft.report.serviceHours)
+        XCTAssertEqual(changedDraft.report.bibleStudyCount, 1)
+        XCTAssertTrue(changedDraft.text.contains("Bible studies: 1"))
+        XCTAssertNotEqual(changedDraft.calculationFingerprint, originalDraft.calculationFingerprint)
+
+        let replay = try await repository.setBibleStudyCount(1, for: july, at: now.addingTimeInterval(60))
+        XCTAssertEqual(replay, changed)
+
+        let restored = try await repository.setBibleStudyCount(0, for: july, at: now.addingTimeInterval(120))
+        XCTAssertEqual(restored.reportStates.first(where: { $0.month == july })?.state, .prepared)
+        XCTAssertEqual(restored.bibleStudyCount(for: july), 0)
+
+        let august = MonthKey(year: 2026, month: 8)
+        let separateMonth = try await repository.setBibleStudyCount(2, for: august, at: now)
+        XCTAssertEqual(separateMonth.bibleStudyCount(for: july), 0)
+        XCTAssertEqual(separateMonth.bibleStudyCount(for: august), 2)
+    }
+
+    func testBibleStudyCountRejectsInvalidAndFutureValues() async throws {
+        let now = fixedDate(year: 2026, month: 8, day: 16)
+        let repository = makeRepository(clock: { now })
+        try await configureLedgerStart(repository, month: MonthKey(year: 2026, month: 7))
+
+        do {
+            _ = try await repository.setBibleStudyCount(-1, for: MonthKey(year: 2026, month: 8), at: now)
+            XCTFail("Expected an out-of-range error.")
+        } catch {
+            XCTAssertEqual(error as? MonthlyBibleStudyCountError, .outOfRange)
+        }
+        do {
+            _ = try await repository.setBibleStudyCount(1_000, for: MonthKey(year: 2026, month: 8), at: now)
+            XCTFail("Expected an out-of-range error.")
+        } catch {
+            XCTAssertEqual(error as? MonthlyBibleStudyCountError, .outOfRange)
+        }
+        do {
+            _ = try await repository.setBibleStudyCount(1, for: MonthKey(year: 2026, month: 9), at: now)
+            XCTFail("Expected a future-month error.")
+        } catch {
+            XCTAssertEqual(error as? MonthlyBibleStudyCountError, .futureMonth)
+        }
+        do {
+            _ = try await repository.setBibleStudyCount(1, for: MonthKey(year: 2026, month: 6), at: now)
+            XCTFail("Expected a before-ledger-start error.")
+        } catch {
+            XCTAssertEqual(error as? MonthlyBibleStudyCountError, .beforeLedgerStart)
+        }
+    }
+
     func testPastEditMarksConfirmedReceiptChanged() async throws {
         let now = fixedDate(year: 2026, month: 8, day: 3)
         let month = MonthKey(year: 2026, month: 7)
@@ -1193,6 +1281,71 @@ final class PersistenceAndAppModelTests: XCTestCase {
         XCTAssertEqual(rerun.reportStates.map(\.id), snapshot.reportStates.map(\.id))
         XCTAssertEqual(rerun.reportSnapshots.map(\.id), snapshot.reportSnapshots.map(\.id))
         XCTAssertEqual(rerun.settingsMetadata.dataRevision, 2)
+    }
+
+    func testV2OnDiskStoreMigratesBibleStudyCountToZeroAndPersistsUpdates() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HourleafV2StudyMigration-\(UUID().uuidString)", isDirectory: true)
+        let storeURL = directory.appendingPathComponent("Hourleaf.sqlite")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var activePersistence: PersistenceController?
+        defer {
+            if let activePersistence {
+                try? closePersistentStores(in: activePersistence)
+            }
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let legacyContainer = NSPersistentContainer(
+            name: "HourleafModel",
+            managedObjectModel: try bundledModel(version: "HourleafModelV2.mom")
+        )
+        let legacyDescription = NSPersistentStoreDescription(url: storeURL)
+        legacyDescription.type = NSSQLiteStoreType
+        legacyDescription.shouldAddStoreAsynchronously = false
+        legacyContainer.persistentStoreDescriptions = [legacyDescription]
+        var legacyLoadError: Error?
+        legacyContainer.loadPersistentStores { _, error in legacyLoadError = error }
+        if let legacyLoadError { throw legacyLoadError }
+
+        let month = MonthKey(year: 2026, month: 8)
+        let legacyContext = legacyContainer.viewContext
+        let settings = legacyContext.insert(SettingsEntity.self)
+        populate(
+            settings,
+            id: UUID(),
+            settings: AppSettings(ledgerStartMonth: MonthKey(year: 2026, month: 7)),
+            updatedAt: fixedDate(year: 2026, month: 8, day: 1)
+        )
+        settings.dataRevision = 2
+        let state = legacyContext.insert(ReportStateEntity.self)
+        state.id = UUID()
+        state.monthKey = month.key
+        state.state = ReportLifecycleState.draft.rawValue
+        state.updatedAt = fixedDate(year: 2026, month: 8, day: 1)
+        try legacyContext.save()
+        for store in legacyContainer.persistentStoreCoordinator.persistentStores {
+            try legacyContainer.persistentStoreCoordinator.remove(store)
+        }
+
+        let now = fixedDate(year: 2026, month: 8, day: 16)
+        let migrated = PersistenceController(inMemory: false, cloudSyncEnabled: false, storeURL: storeURL)
+        activePersistence = migrated
+        XCTAssertNil(migrated.startupError)
+        let repository = CoreDataLedgerRepository(persistence: migrated, clock: { now })
+        let migratedSnapshot = try await repository.ledgerSnapshot()
+        XCTAssertEqual(migratedSnapshot.bibleStudyCount(for: month), 0)
+        let updatedSnapshot = try await repository.setBibleStudyCount(2, for: month, at: now)
+        XCTAssertEqual(updatedSnapshot.bibleStudyCount(for: month), 2)
+
+        try closePersistentStores(in: migrated)
+        activePersistence = nil
+        let reopened = PersistenceController(inMemory: false, cloudSyncEnabled: false, storeURL: storeURL)
+        activePersistence = reopened
+        XCTAssertNil(reopened.startupError)
+        let reopenedRepository = CoreDataLedgerRepository(persistence: reopened, clock: { now })
+        let reopenedSnapshot = try await reopenedRepository.ledgerSnapshot()
+        XCTAssertEqual(reopenedSnapshot.bibleStudyCount(for: month), 2)
     }
 
     func testNormalizationRejectsMalformedEntryBeforeAdvancingDataRevision() async throws {
@@ -2347,14 +2500,18 @@ final class PersistenceAndAppModelTests: XCTestCase {
     }
 
     private func v1Model() throws -> NSManagedObjectModel {
+        try bundledModel(version: "HourleafModelV1.mom")
+    }
+
+    private func bundledModel(version: String) throws -> NSManagedObjectModel {
         let testBundle = Bundle(for: PersistenceAndAppModelTests.self)
         let bundles = [Bundle.main, testBundle]
         for bundle in bundles {
             guard let packageURL = bundle.url(forResource: "HourleafModel", withExtension: "momd") else { continue }
-            let modelURL = packageURL.appendingPathComponent("HourleafModelV1.mom")
+            let modelURL = packageURL.appendingPathComponent(version)
             if let model = NSManagedObjectModel(contentsOf: modelURL) { return model }
         }
-        throw LedgerRepositoryError.persistenceUnavailable("The bundled Hourleaf V1 model is unavailable to migration tests.")
+        throw LedgerRepositoryError.persistenceUnavailable("The bundled \(version) model is unavailable to migration tests.")
     }
 
     private func closePersistentStores(in persistence: PersistenceController) throws {

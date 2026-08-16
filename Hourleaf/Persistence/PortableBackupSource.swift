@@ -16,10 +16,12 @@ extension HourleafBackupRecordsV1 {
                 "Hourleaf settings must contain exactly one record before backup."
             )
         }
+        let states = try backupFetch(ReportStateEntity.self, in: context)
 
         return Self(
             acknowledgements: try backupFetch(DayAcknowledgementEntity.self, in: context).map(HourleafDayAcknowledgementV1.init),
             archives: try backupFetch(ServiceYearArchiveEntity.self, in: context).map(HourleafServiceYearArchiveV1.init),
+            bibleStudyCounts: states.compactMap(HourleafBibleStudyCountV2.init),
             entries: try backupFetch(EntryEntity.self, in: context).map(HourleafEntryV1.init),
             policies: try backupFetch(PolicyRevisionEntity.self, in: context).map(HourleafPolicyRevisionV1.init),
             presets: try backupFetch(PresetEntity.self, in: context).map(HourleafPresetV1.init),
@@ -27,7 +29,7 @@ extension HourleafBackupRecordsV1 {
             reminders: try backupFetch(ReminderEntity.self, in: context).map(HourleafReminderV1.init),
             revisions: try backupFetch(EntryRevisionEntity.self, in: context).map(HourleafEntryRevisionV1.init),
             settings: HourleafSettingsV1(setting),
-            states: try backupFetch(ReportStateEntity.self, in: context).map(HourleafReportStateV1.init)
+            states: states.map(HourleafReportStateV1.init)
         )
     }
 }
@@ -186,6 +188,13 @@ private extension HourleafReportStateV1 {
             state: object.state,
             updatedAt: backupDate(object.updatedAt)
         )
+    }
+}
+
+private extension HourleafBibleStudyCountV2 {
+    init?(_ object: ReportStateEntity) {
+        guard object.bibleStudyCount > 0 else { return nil }
+        self.init(count: object.bibleStudyCount, monthKey: object.monthKey)
     }
 }
 

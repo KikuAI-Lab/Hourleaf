@@ -193,22 +193,31 @@ struct QuickEntryView: View {
     }
 
     private var monthSummary: some View {
-        let report = model.report(for: MonthKey(date, calendar: .hourleaf))
-        return Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 12) {
-                    summaryMetric("quick.month_service", minutes: report.rawServiceMinutes)
-                    summaryMetric("quick.month_credit", minutes: report.rawCreditMinutes)
-                }
-            } else {
-                HStack {
-                    summaryMetric("quick.month_service", minutes: report.rawServiceMinutes)
-                    Spacer()
-                    summaryMetric("quick.month_credit", minutes: report.rawCreditMinutes, trailing: true)
+        let month = MonthKey(date, calendar: .hourleaf)
+        let report = model.report(for: month)
+        return VStack(spacing: 14) {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: 12) {
+                        summaryMetric("quick.month_service", minutes: report.rawServiceMinutes)
+                        summaryMetric("quick.month_credit", minutes: report.rawCreditMinutes)
+                    }
+                } else {
+                    HStack {
+                        summaryMetric("quick.month_service", minutes: report.rawServiceMinutes)
+                        Spacer()
+                        summaryMetric("quick.month_credit", minutes: report.rawCreditMinutes, trailing: true)
+                    }
                 }
             }
+            Divider()
+            bibleStudyCounter(for: month)
         }
-        .padding(.horizontal, 4)
+        .padding()
+        .background(
+            Color(.secondarySystemGroupedBackground),
+            in: RoundedRectangle(cornerRadius: 22, style: .continuous)
+        )
     }
 
     private func summaryMetric(_ key: LocalizedStringKey, minutes: Int, trailing: Bool = false) -> some View {
@@ -217,6 +226,74 @@ struct QuickEntryView: View {
             Text(DurationText.format(minutes: minutes)).font(.headline)
         }
         .frame(maxWidth: .infinity, alignment: trailing ? .trailing : .leading)
+    }
+
+    @ViewBuilder
+    private func bibleStudyCounter(for month: MonthKey) -> some View {
+        let count = model.bibleStudyCount(for: month)
+        let isUpdating = model.updatingBibleStudyMonths.contains(month)
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 10) {
+                bibleStudyLabel
+                bibleStudyButtons(count: count, month: month, isUpdating: isUpdating)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(spacing: 12) {
+                bibleStudyLabel
+                Spacer(minLength: 8)
+                bibleStudyButtons(count: count, month: month, isUpdating: isUpdating)
+            }
+        }
+    }
+
+    private var bibleStudyLabel: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("quick.bible_studies")
+                .font(.headline)
+            Text("quick.bible_studies_hint")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func bibleStudyButtons(
+        count: Int,
+        month: MonthKey,
+        isUpdating: Bool
+    ) -> some View {
+        HStack(spacing: 6) {
+            Button {
+                Task { _ = await model.updateBibleStudyCount(count - 1, for: month) }
+            } label: {
+                Image(systemName: "minus")
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.bordered)
+            .disabled(isUpdating || count <= MonthlyBibleStudyCount.allowedRange.lowerBound)
+            .accessibilityLabel(Text("quick.bible_studies.decrease"))
+            .accessibilityIdentifier("decreaseBibleStudyCountButton")
+
+            Text(count, format: .number)
+                .font(.headline.monospacedDigit())
+                .frame(minWidth: 28)
+                .contentTransition(.numericText())
+                .accessibilityLabel(Text("quick.bible_studies"))
+                .accessibilityValue(Text(verbatim: String(count)))
+                .accessibilityIdentifier("bibleStudyCount")
+
+            Button {
+                Task { _ = await model.updateBibleStudyCount(count + 1, for: month) }
+            } label: {
+                Image(systemName: "plus")
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.bordered)
+            .disabled(isUpdating || count >= MonthlyBibleStudyCount.allowedRange.upperBound)
+            .accessibilityLabel(Text("quick.bible_studies.increase"))
+            .accessibilityIdentifier("increaseBibleStudyCountButton")
+        }
     }
 
     private func save() {

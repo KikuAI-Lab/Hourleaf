@@ -3,7 +3,9 @@ import Foundation
 /// The stable identifiers for the first portable Hourleaf backup format.
 enum HourleafBackupV1 {
     static let format = "com.kikuai.hourleaf.backup"
-    static let version = 1
+    static let legacyVersion = 1
+    static let version = 2
+    static let supportedVersions = legacyVersion...version
     static let checksumAlgorithm = "sha256"
 }
 
@@ -30,6 +32,28 @@ struct HourleafBackupOptional<Value: Codable & Equatable & Sendable>: Codable, E
         } else {
             try container.encodeNil()
         }
+    }
+}
+
+/// Version 2 adds one additive collection. The specialized keyed decoder is
+/// deliberately limited to this wrapper so version 1 can omit that collection
+/// without weakening the strict required-key behavior of all existing fields.
+@propertyWrapper
+struct HourleafBackupDefaultEmptyArray<Element: Codable & Equatable & Sendable>: Codable, Equatable, Sendable {
+    var wrappedValue: [Element]
+
+    init(wrappedValue: [Element]) {
+        self.wrappedValue = wrappedValue
+    }
+}
+
+extension KeyedDecodingContainer {
+    func decode<Element>(
+        _ type: HourleafBackupDefaultEmptyArray<Element>.Type,
+        forKey key: Key
+    ) throws -> HourleafBackupDefaultEmptyArray<Element> {
+        try decodeIfPresent(type, forKey: key)
+            ?? HourleafBackupDefaultEmptyArray(wrappedValue: [])
     }
 }
 
@@ -72,6 +96,7 @@ struct HourleafBackupChecksumV1: Codable, Equatable, Sendable {
 struct HourleafBackupRecordsV1: Codable, Equatable, Sendable {
     var acknowledgements: [HourleafDayAcknowledgementV1]
     var archives: [HourleafServiceYearArchiveV1]
+    @HourleafBackupDefaultEmptyArray var bibleStudyCounts: [HourleafBibleStudyCountV2] = []
     var entries: [HourleafEntryV1]
     var policies: [HourleafPolicyRevisionV1]
     var presets: [HourleafPresetV1]
@@ -113,6 +138,11 @@ struct HourleafBackupRecordCountsV1: Equatable, Sendable {
 }
 
 // MARK: - Raw entity DTOs
+
+struct HourleafBibleStudyCountV2: Codable, Equatable, Sendable {
+    var count: Int16
+    @HourleafBackupOptional var monthKey: String?
+}
 
 struct HourleafDayAcknowledgementV1: Codable, Equatable, Sendable {
     @HourleafBackupOptional var createdAt: Double?

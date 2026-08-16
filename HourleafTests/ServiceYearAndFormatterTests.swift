@@ -76,4 +76,38 @@ final class ServiceYearAndFormatterTests: XCTestCase {
             "Липень 2026\nГодини: 52\nБетель: 7"
         )
     }
+
+    func testReportFormatterIncludesDistinctBibleStudiesInAllLanguages() {
+        let report = MonthlyReport(
+            month: MonthKey(year: 2026, month: 8),
+            rawServiceMinutes: 3_120,
+            rawCreditMinutes: 420,
+            serviceCarryIn: 0,
+            creditCarryIn: 0,
+            serviceHours: 52,
+            creditHours: 7,
+            serviceCarryOut: 0,
+            creditCarryOut: 0,
+            bibleStudyCount: 1
+        )
+        var settings = AppSettings()
+
+        settings.reportLanguage = .russian
+        XCTAssertEqual(
+            ReportFormatter.format(report, settings: settings),
+            "Август 2026\nЧасы: 52\nКредит часов: 7\nИзучения Библии: 1"
+        )
+
+        settings.reportLanguage = .ukrainian
+        XCTAssertEqual(
+            ReportFormatter.format(report, settings: settings),
+            "Серпень 2026\nГодини: 52\nКредит годин: 7\nВивчення Біблії: 1"
+        )
+
+        settings.reportLanguage = .english
+        XCTAssertEqual(
+            ReportFormatter.format(report, settings: settings),
+            "August 2026\nHours: 52\nCredit hours: 7\nBible studies: 1"
+        )
+    }
 }

@@ -10,6 +10,9 @@ enum ReportFormatter {
         if report.creditHours > 0 {
             lines.append("\(settings.creditLabel(for: language)): \(report.creditHours)")
         }
+        if report.bibleStudyCount > 0 {
+            lines.append("\(bibleStudiesLabel(language)): \(report.bibleStudyCount)")
+        }
         return lines.joined(separator: "\n")
     }
 
@@ -29,6 +32,14 @@ enum ReportFormatter {
         case .english: "Hours"
         case .russian: "Часы"
         case .ukrainian: "Години"
+        }
+    }
+
+    private static func bibleStudiesLabel(_ language: ReportLanguage) -> String {
+        switch language {
+        case .english: "Bible studies"
+        case .russian: "Изучения Библии"
+        case .ukrainian: "Вивчення Біблії"
         }
     }
 

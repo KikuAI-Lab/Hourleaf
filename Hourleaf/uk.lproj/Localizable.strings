@@ -13,6 +13,10 @@
 "quick.month_service" = "Служіння цього місяця";
 "quick.month_credit" = "Кредит цього місяця";
 "quick.share_report" = "Поділитися звітом";
+"quick.bible_studies" = "Вивчення Біблії";
+"quick.bible_studies_hint" = "Різні вивчення за місяць";
+"quick.bible_studies.decrease" = "Зменшити кількість вивчень";
+"quick.bible_studies.increase" = "Збільшити кількість вивчень";
 "one_tap.repeat_last" = "Повторити останній запис";
 "one_tap.details_format" = "%1$@ · %2$@";
 "one_tap.explanation" = "Додасть цей час на сьогодні. Нотатки не копіюються.";
@@ -125,6 +129,7 @@
 "report.entries_count_format" = "Записів: %d";
 "report.breakdown.service_format" = "Служіння за записами: %@";
 "report.breakdown.credit_format" = "Кредит за записами: %@";
+"report.breakdown.bible_studies_format" = "Вивчення Біблії: %d";
 "report.breakdown.rule_format" = "Правило звіту: %@";
 "report.breakdown.result_format" = "У звіті: %d год";
 "report.breakdown.carry_format" = "Залишок далі: %d хв";

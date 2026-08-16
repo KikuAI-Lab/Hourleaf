@@ -58,6 +58,7 @@ protocol LedgerRepository: Sendable {
     func saveReminder(_ reminder: ReminderSchedule) async throws
     func deleteReminder(id: UUID) async throws
     func fetchReceipts() async throws -> [ReportReceipt]
+    func setBibleStudyCount(_ count: Int, for month: MonthKey, at timestamp: Date) async throws -> LedgerSnapshot
     func reconcileReportLifecycle(asOf now: Date) async throws -> LedgerSnapshot
     func reviewReport(_ request: ReviewReportRequest) async throws -> LedgerSnapshot
     func prepareReport(_ request: PrepareReportRequest) async throws -> PreparedReportResult
@@ -130,6 +131,16 @@ extension LedgerRepository {
     ) async throws -> DayAcknowledgementRecord {
         throw LedgerRepositoryError.invalidManagedObject(
             "This repository does not support day acknowledgements."
+        )
+    }
+
+    func setBibleStudyCount(
+        _ count: Int,
+        for month: MonthKey,
+        at timestamp: Date
+    ) async throws -> LedgerSnapshot {
+        throw LedgerRepositoryError.invalidManagedObject(
+            "This repository does not support monthly Bible-study counts."
         )
     }
 }
@@ -676,6 +687,53 @@ actor CoreDataLedgerRepository: LedgerRepository, PortableBackupSource {
     func fetchReceipts() async throws -> [ReportReceipt] {
         try requireAvailable()
         return try await ledgerSnapshot().receipts
+    }
+
+    func setBibleStudyCount(
+        _ count: Int,
+        for month: MonthKey,
+        at timestamp: Date
+    ) async throws -> LedgerSnapshot {
+        try requireAvailable()
+        try ensureNormalized()
+        guard MonthlyBibleStudyCount.allowedRange.contains(count) else {
+            throw MonthlyBibleStudyCountError.outOfRange
+        }
+
+        return try performMutation { context in
+            let before = try Self.snapshot(in: context)
+            guard month >= before.settings.ledgerStartMonth else {
+                throw MonthlyBibleStudyCountError.beforeLedgerStart
+            }
+            guard month <= ReportReadiness.currentMonth(asOf: timestamp) else {
+                throw MonthlyBibleStudyCountError.futureMonth
+            }
+
+            let existing = try Self.reportState(in: context, monthKey: month.key)
+            if existing == nil, count == 0 { return before }
+            if Int(existing?.bibleStudyCount ?? 0) == count { return before }
+
+            let state = existing ?? Self.insertState(month: month, in: context, at: timestamp)
+            if state.state == nil {
+                state.state = ReportReadiness.isClosedMonth(month, asOf: timestamp)
+                    ? ReportLifecycleState.ready.rawValue
+                    : ReportLifecycleState.draft.rawValue
+            }
+            state.bibleStudyCount = Int16(count)
+            state.updatedAt = Self.clampedTimestamp(
+                requested: timestamp,
+                existing: [state.updatedAt].compactMap { $0 }
+            )
+
+            try Self.reconcileReportLifecycleAfterChange(
+                in: context,
+                before: before,
+                asOf: timestamp
+            )
+            try Self.saveIfNeeded(context)
+            context.refreshAllObjects()
+            return try Self.snapshot(in: context)
+        }
     }
 
     #if DEBUG
@@ -2948,7 +3006,8 @@ private extension CoreDataLedgerRepository {
             let id = object.id,
             let month = object.monthKey.flatMap(MonthKey.init(key:)),
             let state = object.state.flatMap(ReportLifecycleState.init(rawValue:)),
-            let updatedAt = object.updatedAt
+            let updatedAt = object.updatedAt,
+            MonthlyBibleStudyCount.allowedRange.contains(Int(object.bibleStudyCount))
         else { return nil }
         let lastStableState: ReportLifecycleState?
         if let rawLastStableState = object.lastStableState {
@@ -2965,6 +3024,7 @@ private extension CoreDataLedgerRepository {
             currentSnapshotID: object.currentSnapshotID,
             reviewedCalculationFingerprint: object.reviewedCalculationFingerprint,
             reviewedPresentationFingerprint: object.reviewedPresentationFingerprint,
+            bibleStudyCount: Int(object.bibleStudyCount),
             updatedAt: updatedAt,
             changedAt: object.changedAt
         )

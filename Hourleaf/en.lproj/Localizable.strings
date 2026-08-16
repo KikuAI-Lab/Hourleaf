@@ -13,6 +13,10 @@
 "quick.month_service" = "Service this month";
 "quick.month_credit" = "Credit this month";
 "quick.share_report" = "Share report";
+"quick.bible_studies" = "Bible studies";
+"quick.bible_studies_hint" = "Different studies this month";
+"quick.bible_studies.decrease" = "Decrease Bible studies";
+"quick.bible_studies.increase" = "Increase Bible studies";
 "one_tap.repeat_last" = "Repeat last entry";
 "one_tap.details_format" = "%1$@ · %2$@";
 "one_tap.explanation" = "Adds it for today. Notes are not copied.";
@@ -125,6 +129,7 @@
 "report.entries_count_format" = "Entries: %d";
 "report.breakdown.service_format" = "Service in entries: %@";
 "report.breakdown.credit_format" = "Credit in entries: %@";
+"report.breakdown.bible_studies_format" = "Bible studies: %d";
 "report.breakdown.rule_format" = "Reporting rule: %@";
 "report.breakdown.result_format" = "In the report: %d hr";
 "report.breakdown.carry_format" = "Remainder forward: %d min";

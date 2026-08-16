@@ -13,6 +13,10 @@
 "quick.month_service" = "Служение в этом месяце";
 "quick.month_credit" = "Кредит в этом месяце";
 "quick.share_report" = "Поделиться отчётом";
+"quick.bible_studies" = "Изучения Библии";
+"quick.bible_studies_hint" = "Разные изучения за месяц";
+"quick.bible_studies.decrease" = "Уменьшить число изучений";
+"quick.bible_studies.increase" = "Увеличить число изучений";
 "one_tap.repeat_last" = "Повторить последнюю запись";
 "one_tap.details_format" = "%1$@ · %2$@";
 "one_tap.explanation" = "Добавит это время на сегодня. Заметки не копируются.";
@@ -125,6 +129,7 @@
 "report.entries_count_format" = "Записей: %d";
 "report.breakdown.service_format" = "Служение по записям: %@";
 "report.breakdown.credit_format" = "Кредит по записям: %@";
+"report.breakdown.bible_studies_format" = "Изучения Библии: %d";
 "report.breakdown.rule_format" = "Правило отчёта: %@";
 "report.breakdown.result_format" = "В отчёте: %d ч";
 "report.breakdown.carry_format" = "Остаток дальше: %d мин";

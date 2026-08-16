@@ -7,8 +7,8 @@ final class HourleafBackupCodecTests: XCTestCase {
     func testGoldenCanonicalBytesAndChecksumForFixedRecords() throws {
         let backup = try HourleafBackupCodec.encode(content: makeContent())
 
-        XCTAssertEqual(backup.byteCount, 3_387)
-        XCTAssertEqual(backup.checksum.value, "23be45de3687f2200b02f3c87dc42722ab67d10ece3e9d74e3c591631cc66533")
+        XCTAssertEqual(backup.byteCount, 3_426)
+        XCTAssertEqual(backup.checksum.value, "ac775b74b60c458673a505ee9753a9764b32be90d982581ecf1c8699fcb7d77b")
         XCTAssertEqual(try HourleafBackupCodec.decodeAndVerify(backup.data), backup)
     }
 
@@ -54,8 +54,48 @@ final class HourleafBackupCodecTests: XCTestCase {
     func testStrictDecoderRejectsWrongFormatVersionAndAlgorithm() throws {
         let text = try XCTUnwrap(String(data: HourleafBackupCodec.encode(content: makeContent()).data, encoding: .utf8))
         assertDecodeFails(Data(text.replacingOccurrences(of: HourleafBackupV1.format, with: "com.kikuai.hourleaf.backuX").utf8))
-        assertDecodeFails(Data(text.replacingOccurrences(of: "\"version\":1", with: "\"version\":2").utf8))
+        assertDecodeFails(Data(text.replacingOccurrences(of: "\"version\":2", with: "\"version\":3").utf8))
         assertDecodeFails(Data(text.replacingOccurrences(of: "\"algorithm\":\"sha256\"", with: "\"algorithm\":\"SHA256\"").utf8))
+    }
+
+    func testLegacyVersionOneOmitsAndDefaultsBibleStudyCounts() throws {
+        var legacy = makeContent()
+        legacy.version = HourleafBackupV1.legacyVersion
+        legacy.records.bibleStudyCounts = []
+
+        let encoded = try HourleafBackupCodec.encode(content: legacy)
+        let text = try XCTUnwrap(String(data: encoded.data, encoding: .utf8))
+        XCTAssertFalse(text.contains("bibleStudyCounts"))
+        XCTAssertEqual(try HourleafBackupCodec.decodeAndVerify(encoded.data), encoded)
+        XCTAssertTrue(encoded.content.records.bibleStudyCounts.isEmpty)
+    }
+
+    func testVersionTwoBibleStudyCountsRoundTripAndValidateGraph() throws {
+        var records = makeRecords()
+        let month = try XCTUnwrap(records.states.first?.monthKey)
+        records.bibleStudyCounts = [HourleafBibleStudyCountV2(count: 2, monthKey: month)]
+
+        let encoded = try HourleafBackupCodec.encode(content: content(records: records))
+        XCTAssertEqual(
+            try HourleafBackupCodec.decodeAndVerify(encoded.data).content.records.bibleStudyCounts,
+            records.bibleStudyCounts
+        )
+
+        var duplicate = records
+        duplicate.bibleStudyCounts.append(HourleafBibleStudyCountV2(count: 1, monthKey: month))
+        assertEncodeFails(content(records: duplicate))
+
+        var zero = records
+        zero.bibleStudyCounts[0].count = 0
+        assertEncodeFails(content(records: zero))
+
+        var tooLarge = records
+        tooLarge.bibleStudyCounts[0].count = 1_000
+        assertEncodeFails(content(records: tooLarge))
+
+        var missingState = records
+        missingState.bibleStudyCounts[0].monthKey = "2026-12"
+        assertEncodeFails(content(records: missingState))
     }
 
     func testStrictDecoderRejectsCanonicalSemanticContentWithStaleChecksum() throws {
@@ -668,7 +708,7 @@ private enum HourleafBackupSchemaV1 {
         "PresetEntity": ["createdAt", "deletedAt", "id", "kind", "minutes", "position", "updatedAt"],
         "ReminderEntity": ["createdAt", "hour", "id", "isEnabled", "minute", "updatedAt", "weekday"],
         "ReportReceiptEntity": ["calculationFingerprint", "confirmedSentAt", "createdBySource", "creditCarryIn", "creditCarryOut", "creditHours", "creditLabel", "id", "legacyCalculationUnavailable", "monthKey", "presentationFingerprint", "preparedAt", "rawCreditMinutes", "rawServiceMinutes", "reportLanguage", "reportText", "reportingMode", "schemaVersion", "serviceCarryIn", "serviceCarryOut", "serviceHours", "supersedesID", "templateID", "version"],
-        "ReportStateEntity": ["changedAt", "currentSnapshotID", "id", "lastStableState", "monthKey", "reviewedCalculationFingerprint", "reviewedPresentationFingerprint", "state", "updatedAt"],
+        "ReportStateEntity": ["bibleStudyCount", "changedAt", "currentSnapshotID", "id", "lastStableState", "monthKey", "reviewedCalculationFingerprint", "reviewedPresentationFingerprint", "state", "updatedAt"],
         "ServiceYearArchiveEntity": ["actualServiceMinutes", "baselineServiceMinutes", "calculationFingerprint", "createdAt", "endMonthKey", "id", "startMonthKey", "supersedesID", "targetMinutes", "version"],
         "SettingsEntity": ["baselineServiceYearMinutes", "baselineServiceYearStart", "creditLabelEnglish", "creditLabelRussian", "creditLabelUkrainian", "dataRevision", "id", "lastPurgeAt", "ledgerStartMonth", "onboardingComplete", "openingCreditCarryMinutes", "openingServiceCarryMinutes", "planningVisible", "quietGapCheckEnabled", "quietGapDays", "reportLanguage", "syncMode", "timerVisible", "updatedAt", "widgetPrivacyMode"]
     ]

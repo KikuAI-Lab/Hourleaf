@@ -46,6 +46,9 @@ enum ReportFingerprint {
         fields.append(contentsOf: relevantEntries.map {
             "entry=\($0.id.uuidString.lowercased())|\($0.kind.rawValue)|\($0.day.key)|\($0.minutes)"
         })
+        if report.bibleStudyCount > 0 {
+            fields.append("bibleStudies=\(report.bibleStudyCount)")
+        }
 
         let relevantPolicies = policies
             .filter { $0.effectiveMonth <= report.month }
@@ -86,6 +89,9 @@ enum ReportFingerprint {
         fields.append(contentsOf: relevantEntries.map {
             "entry=\($0.id.uuidString.lowercased())|\($0.kind.rawValue)|\($0.day.key)|\($0.minutes)"
         })
+        if report.bibleStudyCount > 0 {
+            fields.append("bibleStudies=\(report.bibleStudyCount)")
+        }
 
         return "v2:\(digest(fields.joined(separator: "\n")))"
     }

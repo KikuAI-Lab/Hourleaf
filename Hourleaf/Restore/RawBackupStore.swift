@@ -225,8 +225,14 @@ enum RawBackupStore {
             checkpoint: checkpoint
         )
 
+        let bibleStudyCountsByMonth = Dictionary(
+            uniqueKeysWithValues: records.bibleStudyCounts.compactMap { value in
+                value.monthKey.map { ($0, value.count) }
+            }
+        )
         for value in records.states {
             let object = context.insert(ReportStateEntity.self)
+            object.bibleStudyCount = value.monthKey.flatMap { bibleStudyCountsByMonth[$0] } ?? 0
             object.changedAt = date(value.changedAt)
             object.currentSnapshotID = try uuid(value.currentSnapshotID)
             object.id = try uuid(value.id)

@@ -115,7 +115,7 @@ enum ReportReadiness {
         guard month >= snapshot.settings.ledgerStartMonth else { return nil }
 
         let activeEntries = snapshot.activeEntries
-        guard let report = ReportCalculator.timeline(
+        guard let calculatedReport = ReportCalculator.timeline(
             entries: activeEntries,
             from: snapshot.settings.ledgerStartMonth,
             through: month,
@@ -123,6 +123,9 @@ enum ReportReadiness {
             openingCreditCarry: snapshot.settings.openingCreditCarryMinutes,
             policies: snapshot.policies
         ).last else { return nil }
+        let report = calculatedReport.includingBibleStudyCount(
+            snapshot.bibleStudyCount(for: month)
+        )
 
         let entries = activeEntries
             .filter { $0.day.monthKey == month }
@@ -277,6 +280,7 @@ enum ReportReadiness {
             && snapshot.receipt.creditHours == report.creditHours
             && snapshot.receipt.serviceCarryOut == report.serviceCarryOut
             && snapshot.receipt.creditCarryOut == report.creditCarryOut
+            && snapshot.receipt.text == text
             && snapshot.reportingMode == reportingMode
             && snapshot.reportLanguage == reportLanguage
             && snapshot.creditLabel == creditLabel
@@ -285,7 +289,6 @@ enum ReportReadiness {
             && snapshot.presentationFingerprint == presentationFingerprint
             && snapshot.createdBySource == reportSnapshotSource
             && !snapshot.legacyCalculationUnavailable
-            && snapshot.receipt.text == text
     }
 
     static func snapshotMatchesV1Fields(

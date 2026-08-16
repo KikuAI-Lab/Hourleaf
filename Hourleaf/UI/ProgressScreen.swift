@@ -333,6 +333,12 @@ struct ProgressScreen: View {
                 format: String(localized: "report.breakdown.credit_format"),
                 DurationText.format(minutes: draft.report.rawCreditMinutes)
             ))
+            if draft.report.bibleStudyCount > 0 {
+                Text(String(
+                    format: String(localized: "report.breakdown.bible_studies_format"),
+                    draft.report.bibleStudyCount
+                ))
+            }
             Text(String(
                 format: String(localized: "report.breakdown.rule_format"),
                 draft.reportingMode.localizedName

@@ -499,6 +499,38 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.buttons["nextReportMonthButton"].exists)
     }
 
+    func testQuickEntryBibleStudyCounterUpdatesCurrentMonthReport() {
+        let app = launchApp(
+            additionalArguments: [
+                "-pastDateUITest",
+                "-hourleafTestNow",
+                "2026-10-02T12:00:00Z"
+            ]
+        )
+
+        let count = app.staticTexts["bibleStudyCount"]
+        let increase = app.buttons["increaseBibleStudyCountButton"]
+        XCTAssertTrue(scrollUntilHittable(increase, in: app))
+        XCTAssertEqual(count.value as? String, "0")
+        increase.tap()
+        expectation(
+            for: NSPredicate(format: "value == %@", "1"),
+            evaluatedWith: count
+        )
+        waitForExpectations(timeout: 5)
+
+        app.tabBars.buttons["Progress"].tap()
+        let selectedMonth = app.staticTexts["selectedReportMonth"]
+        XCTAssertTrue(selectedMonth.waitForExistence(timeout: 5))
+        XCTAssertEqual(selectedMonth.label, "September 2026")
+        app.buttons["nextReportMonthButton"].tap()
+        XCTAssertEqual(selectedMonth.label, "October 2026")
+
+        let preview = app.staticTexts["reportPreview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 5))
+        XCTAssertTrue(preview.label.contains("Bible studies: 1"))
+    }
+
     func testQuickSurfaceTimerIsOffUntilEnabledAndLeavesManualEntryUnchanged() {
         let app = launchQuickSurfaceApp()
 

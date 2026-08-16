@@ -13,6 +13,7 @@ enum HourleafBackupLimitsV1 {
     static let maximumPresets = 1_000
     static let maximumAcknowledgements = 100_000
     static let maximumArchives = 10_000
+    static let maximumBibleStudyCounts = maximumStates
     // App settings and report copy currently have no smaller byte limits.
     // The outer UTF-8 file cap is therefore the compatible string bound; do
     // not make a healthy locally-created ledger unexportable with a new,
@@ -87,14 +88,61 @@ struct VerifiedHourleafBackupV1: Equatable, Sendable {
     var recordCounts: HourleafBackupRecordCountsV1 { content.records.counts }
 }
 
+/// The exact version-1 encoding omitted the additive Bible-study collection.
+/// These projections keep its checksum and canonical-byte contract intact
+/// while the in-memory representation supplies an empty collection.
+private struct LegacyHourleafBackupRecordsV1: Encodable {
+    let acknowledgements: [HourleafDayAcknowledgementV1]
+    let archives: [HourleafServiceYearArchiveV1]
+    let entries: [HourleafEntryV1]
+    let policies: [HourleafPolicyRevisionV1]
+    let presets: [HourleafPresetV1]
+    let receipts: [HourleafReportReceiptV1]
+    let reminders: [HourleafReminderV1]
+    let revisions: [HourleafEntryRevisionV1]
+    let settings: HourleafSettingsV1
+    let states: [HourleafReportStateV1]
+
+    init(_ records: HourleafBackupRecordsV1) {
+        acknowledgements = records.acknowledgements
+        archives = records.archives
+        entries = records.entries
+        policies = records.policies
+        presets = records.presets
+        receipts = records.receipts
+        reminders = records.reminders
+        revisions = records.revisions
+        settings = records.settings
+        states = records.states
+    }
+}
+
+private struct LegacyHourleafBackupContentV1: Encodable {
+    let format: String
+    let version: Int
+    let exportedAt: Double
+    let records: LegacyHourleafBackupRecordsV1
+
+    init(_ content: HourleafBackupContentV1) {
+        format = content.format
+        version = content.version
+        exportedAt = content.exportedAt
+        records = LegacyHourleafBackupRecordsV1(content.records)
+    }
+}
+
+private struct LegacyHourleafBackupEnvelopeV1: Encodable {
+    let content: LegacyHourleafBackupContentV1
+    let checksum: HourleafBackupChecksumV1
+}
+
 enum HourleafBackupCodec {
     static func encode(content: HourleafBackupContentV1) throws -> VerifiedHourleafBackupV1 {
         try validate(content: content)
         let canonicalContent = try canonicalized(content)
-        let contentData = try canonicalData(canonicalContent)
+        let contentData = try canonicalContentData(canonicalContent)
         let checksum = HourleafBackupChecksumV1(value: sha256(contentData))
-        let envelope = HourleafBackupEnvelopeV1(content: canonicalContent, checksum: checksum)
-        let data = try canonicalData(envelope)
+        let data = try canonicalEnvelopeData(content: canonicalContent, checksum: checksum)
         guard data.count <= HourleafBackupLimitsV1.maximumFileBytes else {
             throw HourleafBackupError.fileTooLarge(
                 actual: data.count,
@@ -132,17 +180,16 @@ enum HourleafBackupCodec {
         }
 
         let canonicalContent = try canonicalized(envelope.content)
-        let canonicalContentData = try canonicalData(canonicalContent)
+        let canonicalContentData = try canonicalContentData(canonicalContent)
         let digest = sha256(canonicalContentData)
         guard digest == envelope.checksum.value else {
             throw HourleafBackupError.checksumMismatch
         }
 
-        let canonicalEnvelope = HourleafBackupEnvelopeV1(
+        guard try canonicalEnvelopeData(
             content: canonicalContent,
             checksum: envelope.checksum
-        )
-        guard try canonicalData(canonicalEnvelope) == data else {
+        ) == data else {
             throw HourleafBackupError.nonCanonicalJSON
         }
 
@@ -163,6 +210,26 @@ enum HourleafBackupCodec {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         return try encoder.encode(value)
+    }
+
+    private static func canonicalContentData(_ content: HourleafBackupContentV1) throws -> Data {
+        if content.version == HourleafBackupV1.legacyVersion {
+            return try canonicalData(LegacyHourleafBackupContentV1(content))
+        }
+        return try canonicalData(content)
+    }
+
+    private static func canonicalEnvelopeData(
+        content: HourleafBackupContentV1,
+        checksum: HourleafBackupChecksumV1
+    ) throws -> Data {
+        if content.version == HourleafBackupV1.legacyVersion {
+            return try canonicalData(LegacyHourleafBackupEnvelopeV1(
+                content: LegacyHourleafBackupContentV1(content),
+                checksum: checksum
+            ))
+        }
+        return try canonicalData(HourleafBackupEnvelopeV1(content: content, checksum: checksum))
     }
 
     private static func sha256(_ data: Data) -> String {
@@ -189,6 +256,7 @@ enum HourleafBackupCodec {
         HourleafBackupRecordsV1(
             acknowledgements: records.acknowledgements.sorted { ($0.id ?? "") < ($1.id ?? "") },
             archives: records.archives.sorted { ($0.id ?? "") < ($1.id ?? "") },
+            bibleStudyCounts: records.bibleStudyCounts.sorted { ($0.monthKey ?? "") < ($1.monthKey ?? "") },
             entries: records.entries.sorted { ($0.id ?? "") < ($1.id ?? "") },
             policies: records.policies.sorted { ($0.id ?? "") < ($1.id ?? "") },
             presets: records.presets.sorted { ($0.id ?? "") < ($1.id ?? "") },
@@ -204,8 +272,13 @@ enum HourleafBackupCodec {
         guard content.format == HourleafBackupV1.format else {
             throw HourleafBackupError.wrongFormat(content.format)
         }
-        guard content.version == HourleafBackupV1.version else {
+        guard HourleafBackupV1.supportedVersions.contains(content.version) else {
             throw HourleafBackupError.unsupportedVersion(content.version)
+        }
+        guard content.version != HourleafBackupV1.legacyVersion || content.records.bibleStudyCounts.isEmpty else {
+            throw HourleafBackupError.invalidRecord(
+                "version 1 cannot contain monthly Bible-study counts"
+            )
         }
         try validateDate(content.exportedAt, path: "content.exportedAt")
         try validate(records: content.records)
@@ -213,7 +286,7 @@ enum HourleafBackupCodec {
 
     private static func validate(records: HourleafBackupRecordsV1) throws {
         let counts = records.counts
-        guard counts.total <= HourleafBackupLimitsV1.maximumRecords else {
+        guard counts.total <= HourleafBackupLimitsV1.maximumRecords - records.bibleStudyCounts.count else {
             throw HourleafBackupError.invalidRecord("total record count exceeds the limit")
         }
         try validateCount(counts.entries, maximum: HourleafBackupLimitsV1.maximumEntries, path: "entries")
@@ -225,6 +298,11 @@ enum HourleafBackupCodec {
         try validateCount(counts.presets, maximum: HourleafBackupLimitsV1.maximumPresets, path: "presets")
         try validateCount(counts.acknowledgements, maximum: HourleafBackupLimitsV1.maximumAcknowledgements, path: "acknowledgements")
         try validateCount(counts.archives, maximum: HourleafBackupLimitsV1.maximumArchives, path: "archives")
+        try validateCount(
+            records.bibleStudyCounts.count,
+            maximum: HourleafBackupLimitsV1.maximumBibleStudyCounts,
+            path: "bibleStudyCounts"
+        )
 
         var allRecordIDs = Set<String>()
         func registerRecordID(_ id: String, path: String) throws {
@@ -322,6 +400,21 @@ enum HourleafBackupCodec {
             guard statesByMonth[month]?.currentSnapshotID == newestReceiptID else {
                 throw HourleafBackupError.invalidGraph(
                     "report state for \(month) does not point to its newest receipt"
+                )
+            }
+        }
+
+
+        var bibleStudyMonths = Set<String>()
+        for (index, value) in records.bibleStudyCounts.enumerated() {
+            let path = "bibleStudyCounts[\(index)]"
+            let month = try validate(bibleStudyCount: value, path: path)
+            guard bibleStudyMonths.insert(month).inserted else {
+                throw HourleafBackupError.invalidGraph("duplicate Bible-study count for \(month)")
+            }
+            guard statesByMonth[month] != nil else {
+                throw HourleafBackupError.invalidGraph(
+                    "Bible-study count for \(month) has no report state"
                 )
             }
         }
@@ -499,6 +592,19 @@ enum HourleafBackupCodec {
         try validateDate(reminder.createdAt, path: "\(path).createdAt")
         try validateDate(reminder.updatedAt, path: "\(path).updatedAt")
         return id
+    }
+
+    private static func validate(
+        bibleStudyCount: HourleafBibleStudyCountV2,
+        path: String
+    ) throws -> String {
+        let month = try requireMonth(bibleStudyCount.monthKey, path: "\(path).monthKey")
+        try validateInteger(
+            Int64(bibleStudyCount.count),
+            range: 1...Int64(MonthlyBibleStudyCount.allowedRange.upperBound),
+            path: "\(path).count"
+        )
+        return month.key
     }
 
     private static func validate(receipt: HourleafReportReceiptV1, path: String) throws -> String {

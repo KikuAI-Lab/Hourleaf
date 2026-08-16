@@ -51,7 +51,7 @@ final class HourleafRestorePreparationTests: XCTestCase {
 
         let preview = try await coordinator.prepare(from: source)
         XCTAssertEqual(preview.exportedAt, exportedAt)
-        XCTAssertEqual(preview.formatVersion, 1)
+        XCTAssertEqual(preview.formatVersion, HourleafBackupV1.version)
         XCTAssertEqual(preview.activeEntryCount, 2)
         XCTAssertEqual(preview.deletedEntryCount, 1)
         XCTAssertEqual(
