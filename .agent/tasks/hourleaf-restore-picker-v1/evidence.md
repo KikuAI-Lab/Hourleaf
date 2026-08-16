@@ -199,8 +199,12 @@ unchanged one-entry ledger opens before any restore is attempted.
 - A bounded read-only lazy-senior review selected the same platform-native,
   exact-empty cleanup approach and rejected recursive deletion or widening the
   accepted recovery shapes.
+- Retained signed build 9 archive readback: PASS for the iPhone, Quick Surfaces,
+  and Watch bundles at `1.0.0 (9)`, including nested signatures, privacy
+  manifests, and the host dSYM.
+- App Store Connect upload: PASS with `Upload succeeded` and no reported upload
+  warning or error lines.
 
-Remaining gate: signed build 9 archive/upload, TestFlight installation, then one
-uninterrupted 20-active-plus-1-deleted restore followed by relaunch and ledger
-comparison. The Personal Team app and all durable recovery copies remain
-preserved.
+Remaining gate: TestFlight processing/installation, then one uninterrupted
+20-active-plus-1-deleted restore followed by relaunch and ledger comparison.
+The Personal Team app and all durable recovery copies remain preserved.
