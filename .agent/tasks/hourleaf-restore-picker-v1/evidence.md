@@ -34,3 +34,27 @@ Verified on 2026-08-13 against the task-owned build-3 working tree.
 Signed archive/upload, TestFlight processing/install, physical picker smoke,
 validated restore, digest/count comparison, and Watch acceptance remain
 separate release actions under GitHub Issue #3.
+
+## Build 4 security-scope correction — 2026-08-16
+
+- Physical build 3 reproduced a second restore-picker failure: files exported
+  to Apple Preview and Brave were visible but preview returned the sanitized
+  verification error before any production-store replacement.
+- The picker now claims its security-scoped URL synchronously in the import
+  completion callback, keeps that scope alive across the asynchronous preview,
+  and releases it after preview completion. Restore validation reads only the
+  URL supplied by `NSFileCoordinator`.
+- Focused restore and CSV import tests: PASS, 27/27.
+- Full `HourleafTests`: PASS, 489/489.
+- Release-readiness guard and self-test: PASS.
+- Unsigned generic Release build: PASS with iPhone, Quick Surfaces, and Watch
+  bundles all at `1.0.0 (4)`.
+- Retained signed archive package readback: PASS for all three bundle versions,
+  nested signatures, privacy manifests, and dSYMs.
+- App Store Connect upload: PASS with `Upload succeeded` and no reported upload
+  errors or warnings.
+
+Apple processing, TestFlight installation, physical Files-provider preview,
+confirmed restore, post-relaunch ledger comparison, and final iPhone/Watch
+acceptance remain separate gates. The Personal Team app and all recovery
+copies remain preserved.
