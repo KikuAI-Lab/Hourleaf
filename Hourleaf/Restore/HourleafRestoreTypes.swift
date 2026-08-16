@@ -126,18 +126,23 @@ struct FoundationFileProtectionReader: HourleafFileProtectionReading {
         }
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         if let value = attributes[.protectionKey] as? FileProtectionType {
-            return value.rawValue
+            return Self.canonicalProtectionClass(rawValue: value.rawValue)
         }
         if let value = attributes[.protectionKey] as? String {
-            return value
+            return Self.canonicalProtectionClass(rawValue: value)
         }
         return nil
     }
 
     static func canonicalProtectionClass(_ value: URLFileProtection) -> String {
-        if value == .completeUntilFirstUserAuthentication {
+        canonicalProtectionClass(rawValue: value.rawValue)
+    }
+
+    static func canonicalProtectionClass(rawValue: String) -> String {
+        if rawValue == FileProtectionType.completeUntilFirstUserAuthentication.rawValue
+            || rawValue == URLFileProtection.completeUntilFirstUserAuthentication.rawValue {
             return FileProtectionType.completeUntilFirstUserAuthentication.rawValue
         }
-        return value.rawValue
+        return rawValue
     }
 }

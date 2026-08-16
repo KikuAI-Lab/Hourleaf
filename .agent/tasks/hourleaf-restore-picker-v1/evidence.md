@@ -87,3 +87,32 @@ copies remain preserved.
 - Adversarial review found no data-loss or protection-bypass regression. The
   remaining gate is a signed build-5 TestFlight preview and confirmed restore
   with the production App Group, followed by post-relaunch ledger comparison.
+
+## Build 6 empty recovery-root correction — 2026-08-16
+
+- Build 5 uploaded and processed successfully in TestFlight with no upload
+  errors or warnings; the iPhone installed `1.0.0 (5)` and retained its existing
+  10-minute entry.
+- Production build 5 verified the known backup and showed the expected preview
+  (20 active entries, 1 deleted entry). The attempted confirmation did not
+  replace the live store. A subsequent forced relaunch surfaced Hourleaf's
+  protected recovery screen instead of opening uncertain data.
+- Before any further action, the closed production app container and App Group
+  were copied to a new private durable recovery directory. All 24 regular files
+  passed exact size and SHA-256 verification. SQLite integrity is `ok`; the live
+  store still contains exactly 1 entry and 1 revision.
+- Readback shows an empty `RestoreRecovery` directory and no published active
+  journal. The candidate staging slot remains isolated. This is consistent with
+  journal arming failing while validating the recovery directory's protection,
+  before store replacement.
+- Build 6 canonicalizes both the URL resource value and the raw string fallback
+  for the same supported `completeUntilFirstUserAuthentication` protection
+  class. Unsupported values remain unchanged and therefore fail closed.
+- Focused restore preparation + journal tests: PASS, 46/46.
+- Full `HourleafTests`: PASS, 490/490. The first full attempt was externally
+  terminated during compilation by a parallel Xcode job; the clean isolated
+  rerun passed.
+
+Remaining gate: release guard/build/archive/upload for build 6, TestFlight
+installation, proof that the empty recovery root opens safely, and a complete
+restore without terminating the app until it returns a verified terminal state.

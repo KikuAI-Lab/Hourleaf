@@ -7,11 +7,24 @@ import XCTest
 @MainActor
 final class HourleafRestorePreparationTests: XCTestCase {
     func testURLProtectionClassCanonicalizesToFileAttributeValue() {
+        let expected = FileProtectionType.completeUntilFirstUserAuthentication.rawValue
+        XCTAssertEqual(
+            FoundationFileProtectionReader.canonicalProtectionClass(.completeUntilFirstUserAuthentication),
+            expected
+        )
         XCTAssertEqual(
             FoundationFileProtectionReader.canonicalProtectionClass(
-                .completeUntilFirstUserAuthentication
+                rawValue: URLFileProtection.completeUntilFirstUserAuthentication.rawValue
             ),
-            FileProtectionType.completeUntilFirstUserAuthentication.rawValue
+            expected
+        )
+        XCTAssertEqual(
+            FoundationFileProtectionReader.canonicalProtectionClass(rawValue: expected),
+            expected
+        )
+        XCTAssertEqual(
+            FoundationFileProtectionReader.canonicalProtectionClass(rawValue: "unsupported"),
+            "unsupported"
         )
     }
 
