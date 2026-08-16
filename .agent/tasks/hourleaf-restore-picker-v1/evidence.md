@@ -163,7 +163,9 @@ uninterrupted restore with post-relaunch ledger comparison.
 - Focused `RestoreJournalTests`: PASS, 35/35.
 - Full `HourleafTests`: PASS, 491/491.
 - Release-readiness guard, guard self-test, and installer self-test: PASS.
+- Retained signed build 8 archive readback: PASS for all three bundle versions,
+  nested signatures, privacy manifests, and the host dSYM.
+- App Store Connect upload: PASS with no warning or error lines.
 
-Remaining gate: signed build 8 archive/upload, TestFlight installation, and
-physical proof that the unchanged one-entry ledger opens before any restore is
-attempted.
+Remaining gate: TestFlight processing/installation and physical proof that the
+unchanged one-entry ledger opens before any restore is attempted.
