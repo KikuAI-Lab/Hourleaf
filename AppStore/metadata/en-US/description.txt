@@ -9,6 +9,7 @@ Hourleaf includes:
 • Fast entry for service and credit time
 • List and calendar history with editing and deletion
 • Monthly report preparation and sharing
+• Monthly Bible-study count in the prepared report
 • Service-year progress toward a 600-hour goal
 • Monthly and inactivity reminders you control
 • Apple Watch entry
