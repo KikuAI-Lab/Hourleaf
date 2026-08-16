@@ -1647,7 +1647,14 @@ final class RestoreJournalStoreV1: RestoreJournalStoring, @unchecked Sendable {
     func cleanupCompletedTransactions() throws {
         try lock.withLock {
             guard pathEntryExists(at: rootDirectory) else { return }
-            try verifyProtectedDirectory(at: rootDirectory)
+            try verifyDirectoryShape(at: rootDirectory)
+            let rootMembers = try FileManager.default.contentsOfDirectory(
+                at: rootDirectory,
+                includingPropertiesForKeys: nil,
+                options: []
+            )
+            guard !rootMembers.isEmpty else { return }
+            try verifyProtection(at: rootDirectory)
             try validateRecoveryRootMembers()
             for completedURL in try completedTransactionDirectories() {
                 try cleanupCompletedTransaction(at: completedURL, expectedTransactionID: nil)

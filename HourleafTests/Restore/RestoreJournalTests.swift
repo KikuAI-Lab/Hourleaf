@@ -1205,6 +1205,8 @@ final class RestoreJournalTests: XCTestCase {
         )
 
         XCTAssertEqual(try mismatched.inspectBeforeStoreLoad(), .idle)
+        XCTAssertNoThrow(try mismatched.cleanupCompletedTransactions())
+        XCTAssertEqual(try mismatched.inspectBeforeStoreLoad(), .idle)
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), before)
         XCTAssertThrowsError(try mismatched.arm(preparedJournal())) {
             XCTAssertEqual($0 as? RestoreJournalError, .protectionMismatch)

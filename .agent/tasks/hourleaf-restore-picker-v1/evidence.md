@@ -145,3 +145,25 @@ restore without terminating the app until it returns a verified terminal state.
 Remaining gate: TestFlight processing/installation, proof that the existing
 empty recovery root opens the unchanged one-entry ledger, and then a complete
 uninterrupted restore with post-relaunch ledger comparison.
+
+## Build 8 complete empty-root startup correction — 2026-08-16
+
+- TestFlight build 7 still displayed the protected recovery screen while the
+  production app remained unchanged and closed after observation.
+- The first startup inspection correctly returned idle for the empty recovery
+  root, but startup immediately called completed-transaction cleanup. That
+  second read-only path still required the abandoned root's unverified
+  protection and blocked before the Core Data store was opened.
+- Completed-transaction cleanup now applies the same strict empty-root rule:
+  only an actual non-symlink directory with zero members returns without
+  protection validation. Any member proceeds through the original protection,
+  root-member, and transaction validation before cleanup.
+- The regression test exercises the full production startup sequence:
+  inspect idle, cleanup succeeds without writing, and readback remains idle.
+- Focused `RestoreJournalTests`: PASS, 35/35.
+- Full `HourleafTests`: PASS, 491/491.
+- Release-readiness guard, guard self-test, and installer self-test: PASS.
+
+Remaining gate: signed build 8 archive/upload, TestFlight installation, and
+physical proof that the unchanged one-entry ledger opens before any restore is
+attempted.
