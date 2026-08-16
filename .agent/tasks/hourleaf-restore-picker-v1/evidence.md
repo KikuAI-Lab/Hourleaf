@@ -58,3 +58,32 @@ Apple processing, TestFlight installation, physical Files-provider preview,
 confirmed restore, post-relaunch ledger comparison, and final iPhone/Watch
 acceptance remain separate gates. The Personal Team app and all recovery
 copies remain preserved.
+
+## Build 5 physical file-protection correction — 2026-08-16
+
+- TestFlight build 4 still rejected both a fresh 21 KB backup and the known
+  verified 18 KB backup before showing a restore preview.
+- A disposable signed diagnostic build on the physical iPhone proved that the
+  picker security scope was active and the filename extension was correct.
+  The failure occurred while reading back the app-owned staging directory's
+  data-protection class, before any backup bytes were decoded.
+- `FileManager` returned no protection attribute on the physical device. The
+  supported URL resource API returned the requested class using the equivalent
+  `NSURLFileProtection...` spelling, while the existing verifier expected the
+  `NSFileProtection...` spelling.
+- The production reader now uses `URLResourceValues.fileProtection`,
+  canonicalizes the requested `completeUntilFirstUserAuthentication` value,
+  and retains the existing attribute fallback. Directory protection is applied
+  with the typed `FileProtectionType` value instead of its raw string.
+- Physical diagnostic readback then passed coordinated copy, checksum/decode,
+  staged-store validation, and produced the expected aggregate preview for the
+  known backup: 20 active entries and 1 deleted entry. No restore confirmation
+  or production-store replacement was performed in the disposable app.
+- Focused restore-preparation tests: PASS, 12/12.
+- Full `HourleafTests`: PASS, 490/490.
+- `scripts/verify-release-readiness.sh` and its self-test: PASS.
+- Unsigned generic Release build: PASS with iPhone, Quick Surfaces, and Watch
+  bundles all at `1.0.0 (5)`.
+- Adversarial review found no data-loss or protection-bypass regression. The
+  remaining gate is a signed build-5 TestFlight preview and confirmed restore
+  with the production App Group, followed by post-relaunch ledger comparison.

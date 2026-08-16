@@ -295,7 +295,10 @@ actor HourleafRestoreCoordinator {
         guard values.isDirectory == true, values.isSymbolicLink != true else {
             throw HourleafRestoreError.preparationFailed
         }
-        try fileManager.setAttributes([.protectionKey: Self.protectionClass], ofItemAtPath: directory.path)
+        try fileManager.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: directory.path
+        )
         try verifyProtection(of: directory)
     }
 

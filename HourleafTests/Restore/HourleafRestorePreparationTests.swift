@@ -6,6 +6,15 @@ import XCTest
 
 @MainActor
 final class HourleafRestorePreparationTests: XCTestCase {
+    func testURLProtectionClassCanonicalizesToFileAttributeValue() {
+        XCTAssertEqual(
+            FoundationFileProtectionReader.canonicalProtectionClass(
+                .completeUntilFirstUserAuthentication
+            ),
+            FileProtectionType.completeUntilFirstUserAuthentication.rawValue
+        )
+    }
+
     func testPrepareImportsAllTenEntitiesAndReturnsOnlyAggregatePreview() async throws {
         let sandbox = try makeSandbox()
         defer { try? FileManager.default.removeItem(at: sandbox) }

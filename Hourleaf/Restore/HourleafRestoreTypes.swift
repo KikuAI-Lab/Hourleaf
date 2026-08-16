@@ -121,6 +121,9 @@ protocol HourleafFileProtectionReading: Sendable {
 
 struct FoundationFileProtectionReader: HourleafFileProtectionReading {
     func protectionClass(at url: URL) throws -> String? {
+        if let value = try url.resourceValues(forKeys: [.fileProtectionKey]).fileProtection {
+            return Self.canonicalProtectionClass(value)
+        }
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         if let value = attributes[.protectionKey] as? FileProtectionType {
             return value.rawValue
@@ -129,5 +132,12 @@ struct FoundationFileProtectionReader: HourleafFileProtectionReading {
             return value
         }
         return nil
+    }
+
+    static func canonicalProtectionClass(_ value: URLFileProtection) -> String {
+        if value == .completeUntilFirstUserAuthentication {
+            return FileProtectionType.completeUntilFirstUserAuthentication.rawValue
+        }
+        return value.rawValue
     }
 }
