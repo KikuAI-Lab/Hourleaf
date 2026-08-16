@@ -1425,8 +1425,12 @@ final class RestoreJournalStoreV1: RestoreJournalStoring, @unchecked Sendable {
             guard !pathEntryExists(at: armingURL) else {
                 throw RestoreJournalError.fileSystem("arming transaction already exists")
             }
-            try FileManager.default.createDirectory(at: armingURL, withIntermediateDirectories: false)
-            try setAndVerifyDirectoryProtection(at: armingURL)
+            try FileManager.default.createDirectory(
+                at: armingURL,
+                withIntermediateDirectories: false,
+                attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+            )
+            try verifyProtectedDirectory(at: armingURL)
 
             let journal = try RestoreJournalCodecV1.encode(content: prepared)
             let marker = try RestoreJournalCodecV1.encode(marker: RestoreJournalCodecV1.marker(for: prepared))
@@ -1656,6 +1660,9 @@ final class RestoreJournalStoreV1: RestoreJournalStoring, @unchecked Sendable {
             guard !rootMembers.isEmpty else { return }
             try verifyProtection(at: rootDirectory)
             try validateRecoveryRootMembers()
+            if try removeAbandonedEmptyArmingDirectories() {
+                try durableWriter.synchronizeDirectory(at: rootDirectory)
+            }
             for completedURL in try completedTransactionDirectories() {
                 try cleanupCompletedTransaction(at: completedURL, expectedTransactionID: nil)
             }
@@ -1876,7 +1883,15 @@ final class RestoreJournalStoreV1: RestoreJournalStoring, @unchecked Sendable {
             if basename == RestoreJournalV1.activeDirectoryName {
                 try verifyProtectedDirectory(at: url)
             } else if isTransactionDirectory(basename, prefix: ".arming-") {
-                try verifyProtectedDirectory(at: url)
+                try verifyDirectoryShape(at: url)
+                if try activeMemberNames(at: url).isEmpty {
+                    // Creating a protected transaction directory can fail
+                    // before either metadata file exists. This exact empty
+                    // shape contains no recoverable transaction or payload;
+                    // mutating startup cleanup removes it with atomic rmdir.
+                    continue
+                }
+                try verifyProtection(at: url)
             } else if isTransactionDirectory(basename, prefix: ".completed-") {
                 try validateCompletedTransactionDirectory(at: url)
             } else {
@@ -1893,6 +1908,26 @@ final class RestoreJournalStoreV1: RestoreJournalStoring, @unchecked Sendable {
         )
         .filter { isTransactionDirectory($0.lastPathComponent, prefix: ".completed-") }
         .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    /// Removes only exact empty pre-publication transaction directories.
+    /// `rmdir` is deliberately used instead of recursive removal so a raced or
+    /// unexpected member makes cleanup fail closed without deleting payloads.
+    private func removeAbandonedEmptyArmingDirectories() throws -> Bool {
+        var removedAny = false
+        for url in try FileManager.default.contentsOfDirectory(
+            at: rootDirectory,
+            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+            options: []
+        ) where isTransactionDirectory(url.lastPathComponent, prefix: ".arming-") {
+            try verifyDirectoryShape(at: url)
+            guard try activeMemberNames(at: url).isEmpty else { continue }
+            guard Darwin.rmdir(url.path) == 0 else {
+                throw RestoreJournalError.fileSystem("could not remove abandoned arming directory")
+            }
+            removedAny = true
+        }
+        return removedAny
     }
 
     private func validateCompletedTransactionDirectory(at url: URL) throws {
@@ -1984,8 +2019,12 @@ final class RestoreJournalStoreV1: RestoreJournalStoring, @unchecked Sendable {
             }
             return
         }
-        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        try setAndVerifyDirectoryProtection(at: url)
+        try FileManager.default.createDirectory(
+            at: url,
+            withIntermediateDirectories: true,
+            attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+        )
+        try verifyProtectedDirectory(at: url)
     }
 
     private func setAndVerifyDirectoryProtection(at url: URL) throws {

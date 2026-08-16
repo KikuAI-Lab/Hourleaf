@@ -1214,6 +1214,57 @@ final class RestoreJournalTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), before)
     }
 
+    func testStartupRemovesOnlyExactEmptyAbandonedArmingDirectory() throws {
+        let sandbox = try makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let root = sandbox.appendingPathComponent("RestoreRecovery", isDirectory: true)
+        let arming = root.appendingPathComponent(
+            ".arming-00000000-0000-0000-0000-000000000009",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: arming, withIntermediateDirectories: true)
+        let store = makeStore(
+            root: root,
+            protectionReader: PathSensitiveJournalProtectionReader(
+                mismatchedPaths: [arming.standardizedFileURL.path]
+            )
+        )
+
+        XCTAssertEqual(try store.inspectBeforeStoreLoad(), .idle)
+        XCTAssertEqual(try names(in: root), [arming.lastPathComponent])
+        XCTAssertNoThrow(try store.cleanupCompletedTransactions())
+        XCTAssertEqual(try names(in: root), [])
+        XCTAssertEqual(try store.inspectBeforeStoreLoad(), .idle)
+    }
+
+    func testNonemptyUnprotectedArmingDirectoryRemainsCriticalAndUntouched() throws {
+        let sandbox = try makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let root = sandbox.appendingPathComponent("RestoreRecovery", isDirectory: true)
+        let arming = root.appendingPathComponent(
+            ".arming-00000000-0000-0000-0000-000000000009",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: arming, withIntermediateDirectories: true)
+        let payload = arming.appendingPathComponent("unexpected")
+        try Data("preserve me".utf8).write(to: payload)
+        let store = makeStore(
+            root: root,
+            protectionReader: PathSensitiveJournalProtectionReader(
+                mismatchedPaths: [arming.standardizedFileURL.path]
+            )
+        )
+
+        XCTAssertEqual(
+            try store.inspectBeforeStoreLoad(),
+            .critical(RedactedRestoreCriticalState(reasonCode: "protection-mismatch"))
+        )
+        XCTAssertThrowsError(try store.cleanupCompletedTransactions()) {
+            XCTAssertEqual($0 as? RestoreJournalError, .protectionMismatch)
+        }
+        XCTAssertEqual(try Data(contentsOf: payload), Data("preserve me".utf8))
+    }
+
     func testRootAndActiveSymlinksAndUnexpectedHiddenRootMemberBlockPreflight() throws {
         let sandbox = try makeSandbox()
         defer { try? FileManager.default.removeItem(at: sandbox) }

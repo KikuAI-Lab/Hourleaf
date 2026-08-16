@@ -169,3 +169,38 @@ uninterrupted restore with post-relaunch ledger comparison.
 
 Remaining gate: TestFlight processing/installation and physical proof that the
 unchanged one-entry ledger opens before any restore is attempted.
+
+## Build 9 abandoned arming-directory correction — 2026-08-16
+
+- TestFlight build 8 opened the normal Quick Entry screen and preserved the
+  production ledger's existing 10-minute service entry. The protected recovery
+  screen was gone, so the complete empty-root startup correction passed on the
+  physical iPhone without data loss.
+- The known 18 KB backup again produced the exact controlled preview: 20 active
+  entries and 1 deleted entry. Confirmation returned to Settings without a
+  visible terminal result, and History still showed only the original entry;
+  this was treated as a failed restore, never as success.
+- After the app returned to an interactive state, it was closed normally and
+  the production container was inventoried read-only. `RestoreRecovery`
+  contained one exact empty `.arming-<UUID>` directory and no journal, marker,
+  candidate, or store-replacement artifact. The live store was therefore not
+  replaced; failure occurred after creating the pre-publication transaction
+  directory and before writing either metadata file.
+- New recovery directories are now created with Foundation's native typed file
+  protection attribute in the creation call and then verified. Startup accepts
+  only an exact, non-symlink, empty `.arming-<UUID>` directory as an abandoned
+  pre-publication reservation. Mutating cleanup removes only that empty shape
+  with atomic `rmdir`; any nonempty directory, unexpected member, symlink, or
+  protection mismatch remains critical and untouched.
+- Focused `RestoreJournalTests`: PASS, 37/37, including the physical startup
+  sequence and a fail-closed nonempty control.
+- Full `HourleafTests`: PASS, 493/493.
+- Release-readiness guard, guard self-test, and installer self-test: PASS.
+- A bounded read-only lazy-senior review selected the same platform-native,
+  exact-empty cleanup approach and rejected recursive deletion or widening the
+  accepted recovery shapes.
+
+Remaining gate: signed build 9 archive/upload, TestFlight installation, then one
+uninterrupted 20-active-plus-1-deleted restore followed by relaunch and ledger
+comparison. The Personal Team app and all durable recovery copies remain
+preserved.
