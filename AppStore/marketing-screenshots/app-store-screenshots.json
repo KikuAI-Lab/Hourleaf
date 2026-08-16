@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 2,
+  "appName": "Hourleaf: Ministry Hours",
+  "themeId": "hourleaf-night",
+  "connectedCanvas": true,
+  "locales": [
+    "en-US",
+    "ru",
+    "uk"
+  ],
+  "locale": "en-US",
+  "device": "iphone",
+  "orientation": "portrait",
+  "appIcon": "/app-icon.svg",
+  "slidesByDevice": {
+    "iphone": [
+      {
+        "id": "hourleaf-hero",
+        "layout": "hero",
+        "label": {
+          "en-US": "",
+          "ru": "",
+          "uk": ""
+        },
+        "headline": {
+          "en-US": "Ministry hours.\nMade simple.",
+          "ru": "Часы служения.\nБез лишнего.",
+          "uk": "Години служіння.\nБез зайвого."
+        },
+        "screenshot": "/screenshots/apple/iphone/{locale}/01.png"
+      },
+      {
+        "id": "hourleaf-calendar",
+        "layout": "device-bottom",
+        "label": {
+          "en-US": "",
+          "ru": "",
+          "uk": ""
+        },
+        "headline": {
+          "en-US": "The whole month.\nOne clear view.",
+          "ru": "Весь месяц.\nОдним взглядом.",
+          "uk": "Увесь місяць.\nОдним поглядом."
+        },
+        "screenshot": "/screenshots/apple/iphone/{locale}/02.png",
+        "inverted": true
+      },
+      {
+        "id": "hourleaf-report",
+        "layout": "device-top",
+        "label": {
+          "en-US": "",
+          "ru": "",
+          "uk": ""
+        },
+        "headline": {
+          "en-US": "Your report.\nReady to review.",
+          "ru": "Ваш отчёт.\nГотов к проверке.",
+          "uk": "Ваш звіт.\nГотовий до перевірки."
+        },
+        "screenshot": "/screenshots/apple/iphone/{locale}/03.png"
+      }
+    ],
+    "android": [],
+    "ipad": [],
+    "android-7": [],
+    "android-10": [],
+    "feature-graphic": []
+  }
+}

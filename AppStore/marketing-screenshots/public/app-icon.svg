@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <mask id="clock-cutout" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#FFFFFF"/>
+      <path d="M398 900C399 723 435 625 500 536" fill="none" stroke="#000000" stroke-width="42" stroke-linecap="round"/>
+      <path d="M500 536L637 405" fill="none" stroke="#000000" stroke-width="42" stroke-linecap="round"/>
+      <circle cx="500" cy="536" r="26" fill="#000000"/>
+    </mask>
+  </defs>
+  <rect x="48" y="48" width="928" height="928" rx="214" fill="#05070B"/>
+  <path
+    fill="#FFFFFF"
+    mask="url(#clock-cutout)"
+    d="M407 815C318 770 265 692 254 598C241 491 279 396 359 329C435 266 541 240 627 218C690 202 737 181 775 147C800 244 805 340 791 432C768 580 699 689 594 748C534 782 472 793 418 786L418 841C418 853 408 862 396 862C384 862 374 853 374 841L376 776C388 682 424 596 487 516L606 403C615 394 628 394 637 403C646 412 646 426 637 435L520 545C467 614 436 690 426 779C421 796 415 808 407 815Z"
+  />
+</svg>
