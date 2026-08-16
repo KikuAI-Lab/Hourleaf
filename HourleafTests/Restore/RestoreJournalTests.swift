@@ -1192,6 +1192,26 @@ final class RestoreJournalTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: orphan.path))
     }
 
+    func testEmptyRecoveryRootWithUnverifiedProtectionIsIdleButArmingStillRevalidates() throws {
+        let sandbox = try makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let root = sandbox.appendingPathComponent("RestoreRecovery", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let before = try FileManager.default.contentsOfDirectory(atPath: root.path)
+        let mismatched = RestoreJournalStoreV1(
+            rootDirectory: root,
+            protectionReader: JournalProtectionReader(value: "NSFileProtectionNone"),
+            clock: { 10 }
+        )
+
+        XCTAssertEqual(try mismatched.inspectBeforeStoreLoad(), .idle)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), before)
+        XCTAssertThrowsError(try mismatched.arm(preparedJournal())) {
+            XCTAssertEqual($0 as? RestoreJournalError, .protectionMismatch)
+        }
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), before)
+    }
+
     func testRootAndActiveSymlinksAndUnexpectedHiddenRootMemberBlockPreflight() throws {
         let sandbox = try makeSandbox()
         defer { try? FileManager.default.removeItem(at: sandbox) }

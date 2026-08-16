@@ -1160,7 +1160,7 @@ struct RestoreDurableJSONWriter: RestoreJournalDurableWriting, Sendable {
         }
         do {
             try FileManager.default.setAttributes(
-                [.protectionKey: RestoreJournalV1.requiredProtectionClass],
+                [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
                 ofItemAtPath: partialURL.path
             )
             try verifyProtectedRegularFile(at: partialURL)
@@ -1366,7 +1366,21 @@ final class RestoreJournalStoreV1: RestoreJournalStoring, @unchecked Sendable {
                 guard pathEntryExists(at: rootDirectory) else {
                     return .idle
                 }
-                try verifyProtectedDirectory(at: rootDirectory)
+                try verifyDirectoryShape(at: rootDirectory)
+                let rootMembers = try FileManager.default.contentsOfDirectory(
+                    at: rootDirectory,
+                    includingPropertiesForKeys: nil,
+                    options: []
+                )
+                // A failed first arm can leave only the empty recovery root
+                // behind before its data-protection readback succeeds. With no
+                // members there is no transaction or protected payload to
+                // recover, so this read-only startup check may safely proceed.
+                // The next arm reapplies and verifies the required protection.
+                guard !rootMembers.isEmpty else {
+                    return .idle
+                }
+                try verifyProtection(at: rootDirectory)
                 try validateRecoveryRootMembers()
                 let activeURL = try exactChildURL(
                     in: rootDirectory,
@@ -1950,7 +1964,17 @@ final class RestoreJournalStoreV1: RestoreJournalStoring, @unchecked Sendable {
 
     private func ensureProtectedDirectory(at url: URL) throws {
         if pathEntryExists(at: url) {
-            try verifyProtectedDirectory(at: url)
+            try verifyDirectoryShape(at: url)
+            let members = try FileManager.default.contentsOfDirectory(
+                at: url,
+                includingPropertiesForKeys: nil,
+                options: []
+            )
+            if members.isEmpty {
+                try setAndVerifyDirectoryProtection(at: url)
+            } else {
+                try verifyProtection(at: url)
+            }
             return
         }
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
@@ -1959,18 +1983,22 @@ final class RestoreJournalStoreV1: RestoreJournalStoring, @unchecked Sendable {
 
     private func setAndVerifyDirectoryProtection(at url: URL) throws {
         try FileManager.default.setAttributes(
-            [.protectionKey: RestoreJournalV1.requiredProtectionClass],
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
             ofItemAtPath: url.path
         )
         try verifyProtectedDirectory(at: url)
     }
 
     private func verifyProtectedDirectory(at url: URL) throws {
+        try verifyDirectoryShape(at: url)
+        try verifyProtection(at: url)
+    }
+
+    private func verifyDirectoryShape(at url: URL) throws {
         let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
         guard values.isDirectory == true, values.isSymbolicLink != true else {
             throw RestoreJournalError.transactionUnavailable
         }
-        try verifyProtection(at: url)
     }
 
     private func verifyProtectedRegularFile(at url: URL) throws {

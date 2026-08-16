@@ -116,3 +116,28 @@ copies remain preserved.
 Remaining gate: release guard/build/archive/upload for build 6, TestFlight
 installation, proof that the empty recovery root opens safely, and a complete
 restore without terminating the app until it returns a verified terminal state.
+
+## Build 7 abandoned-empty-root recovery — 2026-08-16
+
+- TestFlight build 6 still opened the protected recovery screen. Device
+  inventory confirmed that `RestoreRecovery` existed but contained no files or
+  subdirectories, while the verified live SQLite store remained unchanged at
+  1 entry and 1 revision.
+- Startup now treats only an actual, non-symlink, empty recovery directory as
+  idle. Any member, symlink, active transaction, unexpected residue, or invalid
+  protected evidence remains critical and blocks store loading.
+- Journal arming reapplies and verifies the required protection when reclaiming
+  an empty root. Both recovery directories and journal metadata files now set
+  protection with the typed `FileProtectionType` value used successfully by
+  the physical staging diagnostic, rather than a raw string.
+- Focused `RestoreJournalTests`: PASS, 35/35.
+- Full `HourleafTests`: PASS, 491/491. The first full launch encountered a
+  CoreSimulator Mach-server failure before executing tests; the same compiled
+  bundle passed after rebooting the single canonical simulator.
+- Release-readiness guard, guard self-test, and installer self-test: PASS.
+- Unsigned generic Release build: PASS with iPhone, Quick Surfaces, and Watch
+  bundles all at `1.0.0 (7)`.
+
+Remaining gate: signed archive/upload, TestFlight installation, proof that the
+existing empty recovery root opens the unchanged one-entry ledger, and then a
+complete uninterrupted restore with post-relaunch ledger comparison.
