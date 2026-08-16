@@ -137,7 +137,11 @@ restore without terminating the app until it returns a verified terminal state.
 - Release-readiness guard, guard self-test, and installer self-test: PASS.
 - Unsigned generic Release build: PASS with iPhone, Quick Surfaces, and Watch
   bundles all at `1.0.0 (7)`.
+- Retained signed archive readback: PASS for all three bundle versions, nested
+  signatures, privacy manifests, and the host dSYM.
+- App Store Connect upload: PASS with `Upload succeeded` and no reported upload
+  errors or warnings.
 
-Remaining gate: signed archive/upload, TestFlight installation, proof that the
-existing empty recovery root opens the unchanged one-entry ledger, and then a
-complete uninterrupted restore with post-relaunch ledger comparison.
+Remaining gate: TestFlight processing/installation, proof that the existing
+empty recovery root opens the unchanged one-entry ledger, and then a complete
+uninterrupted restore with post-relaunch ledger comparison.
