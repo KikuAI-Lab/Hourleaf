@@ -233,7 +233,12 @@ The Personal Team app and all durable recovery copies remain preserved.
 - Focused `RestoreJournalTests`: PASS, 38/38.
 - Full `HourleafTests`: PASS, 494/494.
 - Release-readiness guard, guard self-test, and installer self-test: PASS.
+- Retained signed build 10 archive readback: PASS for the iPhone, Quick
+  Surfaces, and Watch bundles at `1.0.0 (10)`, including nested signatures,
+  privacy manifests, and the host dSYM.
+- App Store Connect upload: PASS with `Upload succeeded` and no reported upload
+  warning or error lines.
 
-Remaining gate: signed build 10 archive/upload and one uninterrupted physical
-restore plus post-relaunch ledger comparison. No production-store replacement
-has occurred in the failed build 8 or build 9 confirmations.
+Remaining gate: TestFlight processing/installation and one uninterrupted
+physical restore plus post-relaunch ledger comparison. No production-store
+replacement has occurred in the failed build 8 or build 9 confirmations.
