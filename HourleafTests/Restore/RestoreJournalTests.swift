@@ -1237,6 +1237,19 @@ final class RestoreJournalTests: XCTestCase {
         XCTAssertEqual(try store.inspectBeforeStoreLoad(), .idle)
     }
 
+    func testArmDefersEmptyArmingProtectionReadbackUntilProtectedMetadataExists() throws {
+        let sandbox = try makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let root = sandbox.appendingPathComponent("RestoreRecovery", isDirectory: true)
+        let store = makeStore(
+            root: root,
+            protectionReader: EmptyArmingDirectoryProtectionReader()
+        )
+
+        XCTAssertNoThrow(try store.arm(preparedJournal()))
+        try assertRecover(store, phase: .prepared)
+    }
+
     func testNonemptyUnprotectedArmingDirectoryRemainsCriticalAndUntouched() throws {
         let sandbox = try makeSandbox()
         defer { try? FileManager.default.removeItem(at: sandbox) }
@@ -1748,6 +1761,19 @@ private final class PathSensitiveJournalProtectionReader: HourleafFileProtection
     func protectionClass(at url: URL) throws -> String? {
         if mismatchedPaths.contains(url.standardizedFileURL.path) {
             return "NSFileProtectionNone"
+        }
+        return FileProtectionType.completeUntilFirstUserAuthentication.rawValue
+    }
+}
+
+private final class EmptyArmingDirectoryProtectionReader: HourleafFileProtectionReading, @unchecked Sendable {
+    func protectionClass(at url: URL) throws -> String? {
+        if url.lastPathComponent.hasPrefix(".arming-") {
+            let values = try url.resourceValues(forKeys: [.isDirectoryKey])
+            if values.isDirectory == true,
+               try FileManager.default.contentsOfDirectory(atPath: url.path).isEmpty {
+                return nil
+            }
         }
         return FileProtectionType.completeUntilFirstUserAuthentication.rawValue
     }

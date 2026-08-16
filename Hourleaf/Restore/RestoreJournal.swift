@@ -1092,6 +1092,7 @@ protocol RestoreJournalDurableWriting: Sendable {
         to finalURL: URL,
         kind: RestoreJournalFileKind,
         replacingExistingFinal: Bool,
+        allowEmptyParentBeforeFirstProtectedWrite: Bool,
         verify: @escaping @Sendable (Data) throws -> Void
     ) throws
 
@@ -1120,6 +1121,7 @@ struct RestoreDurableJSONWriter: RestoreJournalDurableWriting, Sendable {
         to finalURL: URL,
         kind: RestoreJournalFileKind,
         replacingExistingFinal: Bool,
+        allowEmptyParentBeforeFirstProtectedWrite: Bool,
         verify: @escaping @Sendable (Data) throws -> Void
     ) throws {
         try RestoreJournalCodecV1.validateBasename(finalURL.lastPathComponent)
@@ -1128,7 +1130,15 @@ struct RestoreDurableJSONWriter: RestoreJournalDurableWriting, Sendable {
         guard standardizedFinal.deletingLastPathComponent() == parent else {
             throw RestoreJournalError.invalidBasename(finalURL.lastPathComponent)
         }
-        try verifyProtectedDirectory(at: parent)
+        if allowEmptyParentBeforeFirstProtectedWrite {
+            try verifyDirectoryShape(at: parent)
+            let members = try FileManager.default.contentsOfDirectory(atPath: parent.path)
+            if !members.isEmpty {
+                try verifyProtectedDirectory(at: parent)
+            }
+        } else {
+            try verifyProtectedDirectory(at: parent)
+        }
         let maximumBytes = kind == .journal
             ? RestoreJournalV1.maximumJournalBytes
             : RestoreJournalV1.maximumMarkerBytes
@@ -1236,11 +1246,15 @@ struct RestoreDurableJSONWriter: RestoreJournalDurableWriting, Sendable {
     }
 
     private func verifyProtectedDirectory(at url: URL) throws {
+        try verifyDirectoryShape(at: url)
+        try verifyProtection(at: url)
+    }
+
+    private func verifyDirectoryShape(at url: URL) throws {
         let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
         guard values.isDirectory == true, values.isSymbolicLink != true else {
             throw RestoreJournalError.fileSystem("metadata parent is not a directory")
         }
-        try verifyProtection(at: url)
     }
 
     private func verifyProtection(at url: URL) throws {
@@ -1430,7 +1444,7 @@ final class RestoreJournalStoreV1: RestoreJournalStoring, @unchecked Sendable {
                 withIntermediateDirectories: false,
                 attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
             )
-            try verifyProtectedDirectory(at: armingURL)
+            try verifyDirectoryShape(at: armingURL)
 
             let journal = try RestoreJournalCodecV1.encode(content: prepared)
             let marker = try RestoreJournalCodecV1.encode(marker: RestoreJournalCodecV1.marker(for: prepared))
@@ -1441,6 +1455,7 @@ final class RestoreJournalStoreV1: RestoreJournalStoring, @unchecked Sendable {
                 to: journalURL,
                 kind: .journal,
                 replacingExistingFinal: false,
+                allowEmptyParentBeforeFirstProtectedWrite: true,
                 verify: { data in
                     _ = try RestoreJournalCodecV1.decodeAndVerify(data)
                 }
@@ -1450,6 +1465,7 @@ final class RestoreJournalStoreV1: RestoreJournalStoring, @unchecked Sendable {
                 to: markerURL,
                 kind: .marker,
                 replacingExistingFinal: false,
+                allowEmptyParentBeforeFirstProtectedWrite: false,
                 verify: { data in
                     _ = try RestoreJournalCodecV1.decodeAndVerifyMarker(data)
                 }
@@ -1529,6 +1545,7 @@ final class RestoreJournalStoreV1: RestoreJournalStoring, @unchecked Sendable {
                 to: journalURL,
                 kind: .journal,
                 replacingExistingFinal: true,
+                allowEmptyParentBeforeFirstProtectedWrite: false,
                 verify: { data in
                     _ = try RestoreJournalCodecV1.decodeAndVerify(data)
                 }

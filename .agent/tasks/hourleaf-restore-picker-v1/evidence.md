@@ -208,3 +208,32 @@ unchanged one-entry ledger opens before any restore is attempted.
 Remaining gate: TestFlight processing/installation, then one uninterrupted
 20-active-plus-1-deleted restore followed by relaunch and ledger comparison.
 The Personal Team app and all durable recovery copies remain preserved.
+
+## Build 10 first-protected-write correction — 2026-08-16
+
+- TestFlight build 9 safely removed the prior empty `.arming-<UUID>` residue,
+  opened the unchanged 10-minute ledger, and again produced the controlled
+  20-active-plus-1-deleted backup preview.
+- Restore confirmation still left the live ledger unchanged. After the app
+  returned to an interactive state, it was closed and inventoried read-only;
+  the only recovery residue was a new exact empty `.arming-<UUID>` directory.
+  This independently confirms that iOS rejected protection readback while the
+  newly created transaction directory was still empty, before the journal
+  writer was called.
+- Build 10 no longer demands protection readback from that empty directory.
+  It verifies the exact non-symlink directory shape, then the first writer
+  creates a `0600` partial, applies and verifies the required typed protection
+  before writing any payload, publishes the journal, and immediately verifies
+  and synchronizes the now-nonempty protected parent. Every later write keeps
+  the original strict parent-protection precondition.
+- A deterministic reader regression reproduces the physical behavior: the
+  arming directory reports no class while empty and the required class once
+  protected metadata exists. Full arm and trusted readback succeed only with
+  the corrected ordering.
+- Focused `RestoreJournalTests`: PASS, 38/38.
+- Full `HourleafTests`: PASS, 494/494.
+- Release-readiness guard, guard self-test, and installer self-test: PASS.
+
+Remaining gate: signed build 10 archive/upload and one uninterrupted physical
+restore plus post-relaunch ledger comparison. No production-store replacement
+has occurred in the failed build 8 or build 9 confirmations.
