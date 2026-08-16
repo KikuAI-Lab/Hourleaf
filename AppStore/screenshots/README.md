@@ -7,11 +7,12 @@ identifiers.
 
 ## iPhone 6.9-inch
 
-Each localization contains three `1320 x 2868` PNG files in this order:
+Each localization contains four `1320 x 2868` PNG files in this order:
 
 1. `01-quick-entry.png`
-2. `02-history-calendar.png`
-3. `03-monthly-report.png`
+2. `02-bible-studies.png`
+3. `03-history-calendar.png`
+4. `04-monthly-report.png`
 
 Directories: `en-US/iphone-6.9`, `ru/iphone-6.9`, and `uk/iphone-6.9`.
 

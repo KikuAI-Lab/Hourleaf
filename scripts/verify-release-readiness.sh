@@ -73,7 +73,7 @@ assert_screenshot_dimensions() {
 }
 
 for screenshot_locale in en-US ru uk; do
-    for screenshot_name in 01-quick-entry.png 02-history-calendar.png 03-monthly-report.png; do
+    for screenshot_name in 01-quick-entry.png 02-bible-studies.png 03-history-calendar.png 04-monthly-report.png; do
         assert_screenshot_dimensions \
             "$app_store_screenshots_root/$screenshot_locale/iphone-6.9/$screenshot_name" \
             1320 \

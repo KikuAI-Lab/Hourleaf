@@ -5,7 +5,7 @@ set -euo pipefail
 script_dir="${0:A:h}"
 root="${1:-${script_dir:h}/exports/iphone-6.9}"
 locales=(en-US ru uk)
-files=(01-hero.png 02-device-bottom.png 03-device-top.png)
+files=(01-hero.png 02-device-top.png 03-device-bottom.png 04-device-top.png)
 
 [[ -d "$root" ]] || { print -u2 "Missing export directory: $root"; exit 1; }
 

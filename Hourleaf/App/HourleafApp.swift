@@ -502,6 +502,11 @@ final class HourleafAppLauncher: ObservableObject {
             } else {
                 await model.saveSettings(settings)
             }
+            if arguments.contains("-seedBibleStudyUITest") {
+                let previous = model.currentMonth.advanced(by: -1, calendar: .hourleaf)
+                _ = await model.updateBibleStudyCount(1, for: previous)
+                _ = await model.updateBibleStudyCount(1, for: model.currentMonth)
+            }
 #if DEBUG
             // UI tests use an in-memory Core Data store on every launch while
             // intentionally preserving the disposable quick-surface sidecar.

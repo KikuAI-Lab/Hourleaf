@@ -8,11 +8,13 @@ The upstream copyright notice is preserved in
 
 ## Preview
 
-| Quick entry | Calendar | Monthly report |
-|---|---|---|
-| ![Hourleaf quick entry](exports/iphone-6.9/en-US/01-hero.png) | ![Hourleaf calendar](exports/iphone-6.9/en-US/02-device-bottom.png) | ![Hourleaf monthly report](exports/iphone-6.9/en-US/03-device-top.png) |
+| Quick entry | Bible studies |
+|---|---|
+| ![Hourleaf quick entry](exports/iphone-6.9/en-US/01-hero.png) | ![Hourleaf Bible studies](exports/iphone-6.9/en-US/02-device-top.png) |
+| Calendar | Monthly report |
+| ![Hourleaf calendar](exports/iphone-6.9/en-US/03-device-bottom.png) | ![Hourleaf monthly report](exports/iphone-6.9/en-US/04-device-top.png) |
 
-The canonical deck has three iPhone slides in `en-US`, `ru`, and `uk`. It uses
+The canonical deck has four iPhone slides in `en-US`, `ru`, and `uk`. It uses
 reviewed Release-build captures from `../screenshots/`; it contains no personal
 ledger data, account details, or generated app UI. Apple Watch captures remain
 in Apple's separate Watch screenshot section.
@@ -44,7 +46,7 @@ Before upload, run:
 bun run verify:exports
 ```
 
-The guard requires all nine files to be opaque RGB PNGs at exactly 1320×2868.
+The guard requires all twelve files to be opaque RGB PNGs at exactly 1320×2868.
 Every Store slide shows Hourleaf in use; text-only artwork is intentionally not
 part of the release deck.
 

@@ -30,6 +30,22 @@
         "screenshot": "/screenshots/apple/iphone/{locale}/01.png"
       },
       {
+        "id": "hourleaf-bible-studies",
+        "layout": "device-top",
+        "label": {
+          "en-US": "",
+          "ru": "",
+          "uk": ""
+        },
+        "headline": {
+          "en-US": "Bible studies.\nAlready in your report.",
+          "ru": "Изучения.\nСразу в отчёте.",
+          "uk": "Вивчення.\nОдразу у звіті."
+        },
+        "screenshot": "/screenshots/apple/iphone/{locale}/02.png",
+        "inverted": true
+      },
+      {
         "id": "hourleaf-calendar",
         "layout": "device-bottom",
         "label": {
@@ -42,8 +58,7 @@
           "ru": "Весь месяц.\nОдним взглядом.",
           "uk": "Увесь місяць.\nОдним поглядом."
         },
-        "screenshot": "/screenshots/apple/iphone/{locale}/02.png",
-        "inverted": true
+        "screenshot": "/screenshots/apple/iphone/{locale}/03.png"
       },
       {
         "id": "hourleaf-report",
@@ -58,7 +73,8 @@
           "ru": "Ваш отчёт.\nГотов к проверке.",
           "uk": "Ваш звіт.\nГотовий до перевірки."
         },
-        "screenshot": "/screenshots/apple/iphone/{locale}/03.png"
+        "screenshot": "/screenshots/apple/iphone/{locale}/04.png",
+        "inverted": true
       }
     ],
     "android": [],
