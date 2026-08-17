@@ -8,7 +8,23 @@ final class HourleafBackupExportTests: XCTestCase {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
 
-        let records = makeValidRecords()
+        var records = makeValidRecords()
+        records.states = [
+            HourleafReportStateV1(
+                changedAt: nil,
+                currentSnapshotID: nil,
+                id: fixedUUID(11).uuidString.lowercased(),
+                lastStableState: nil,
+                monthKey: "2026-01",
+                reviewedCalculationFingerprint: nil,
+                reviewedPresentationFingerprint: nil,
+                state: ReportLifecycleState.draft.rawValue,
+                updatedAt: 1
+            )
+        ]
+        records.bibleStudyCounts = [
+            HourleafBibleStudyCountV2(count: 2, monthKey: "2026-01")
+        ]
         let exportedAt = Date(timeIntervalSinceReferenceDate: 1_234_567)
         let exporter = HourleafBackupExporter(source: FixtureBackupSource(records: records))
 
@@ -23,6 +39,10 @@ final class HourleafBackupExportTests: XCTestCase {
         XCTAssertEqual(artifact.recordCounts, verified.recordCounts)
         XCTAssertEqual(artifact.recordsDigest, verified.recordsDigest)
         XCTAssertEqual(verified.content.records, records)
+        XCTAssertEqual(
+            verified.content.records.bibleStudyCounts,
+            [HourleafBibleStudyCountV2(count: 2, monthKey: "2026-01")]
+        )
         XCTAssertFalse(artifact.url.lastPathComponent.hasPrefix("."))
     }
 

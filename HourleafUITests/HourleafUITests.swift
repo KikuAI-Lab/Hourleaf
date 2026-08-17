@@ -116,11 +116,16 @@ final class HourleafUITests: XCTestCase {
         let app = launchApp(
             additionalArguments: [
                 "-seedUITestData",
+                "-seedBibleStudyUITest",
                 "-hourleafTestNow",
                 "2026-10-02T12:00:00Z"
             ]
         )
         app.tabBars.buttons["Progress"].tap()
+
+        let preview = app.staticTexts["reportPreview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 5))
+        XCTAssertTrue(preview.label.contains("Bible studies: 1"))
         app.buttons["reportReviewButton"].tap()
         XCTAssertTrue(app.buttons["finishReportReviewButton"].waitForExistence(timeout: 5))
         app.buttons["finishReportReviewButton"].tap()
