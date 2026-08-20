@@ -33,6 +33,7 @@ final class HourleafAppStoreScreenshotTests: XCTestCase {
             "The complete Bible-study counter must be visible in the Store capture."
         )
         XCTAssertEqual(count.value as? String, "1")
+        XCTAssertFalse(app.staticTexts[locale.removedBibleStudyHint].exists)
 
         keepScreenshot(named: "\(locale.folder)_02_bible-studies", from: app)
         app.terminate()
@@ -169,6 +170,14 @@ private enum StoreLocale: CaseIterable {
         case .english: "Bible studies: 1"
         case .russian: "Изучения Библии: 1"
         case .ukrainian: "Вивчення Біблії: 1"
+        }
+    }
+
+    var removedBibleStudyHint: String {
+        switch self {
+        case .english: "Different studies this month"
+        case .russian: "Разные изучения за месяц"
+        case .ukrainian: "Різні вивчення за місяць"
         }
     }
 }

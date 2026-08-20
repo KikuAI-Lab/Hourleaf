@@ -248,15 +248,9 @@ struct QuickEntryView: View {
     }
 
     private var bibleStudyLabel: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("quick.bible_studies")
-                .font(.headline)
-                .accessibilityIdentifier("bibleStudyLabel")
-            Text("quick.bible_studies_hint")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        Text("quick.bible_studies")
+            .font(.headline)
+            .accessibilityIdentifier("bibleStudyLabel")
     }
 
     private func bibleStudyButtons(

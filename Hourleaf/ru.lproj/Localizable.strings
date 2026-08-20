@@ -14,7 +14,6 @@
 "quick.month_credit" = "Кредит в этом месяце";
 "quick.share_report" = "Поделиться отчётом";
 "quick.bible_studies" = "Изучения Библии";
-"quick.bible_studies_hint" = "Разные изучения за месяц";
 "quick.bible_studies.decrease" = "Уменьшить число изучений";
 "quick.bible_studies.increase" = "Увеличить число изучений";
 "one_tap.repeat_last" = "Повторить последнюю запись";
