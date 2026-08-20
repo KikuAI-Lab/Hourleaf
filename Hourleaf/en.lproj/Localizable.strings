@@ -171,6 +171,11 @@
 "service_year.archive.correction_format" = "Correction %d";
 "service_year.period_format" = "Service year %@ – %@";
 "settings.title" = "Settings";
+"settings.appearance.title" = "Appearance";
+"settings.appearance.mode" = "Theme";
+"settings.appearance.system" = "Match iPhone";
+"settings.appearance.light" = "Light";
+"settings.appearance.dark" = "Dark";
 "settings.reporting" = "Reporting";
 "settings.report_language" = "Report language";
 "settings.credit_label" = "Credit wording";

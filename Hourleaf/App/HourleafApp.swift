@@ -7,10 +7,12 @@ struct HourleafApp: App {
     @StateObject private var launcher = HourleafAppLauncher(
         arguments: ProcessInfo.processInfo.arguments
     )
+    @AppStorage(AppAppearance.storageKey) private var appearanceRawValue = AppAppearance.system.rawValue
 
     var body: some Scene {
         WindowGroup {
             HourleafLaunchView(launcher: launcher)
+                .preferredColorScheme(AppAppearance(storedValue: appearanceRawValue).colorScheme)
         }
     }
 }

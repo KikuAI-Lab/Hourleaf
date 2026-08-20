@@ -1,0 +1,12 @@
+{
+  "task": "hourleaf-light-mode-v1",
+  "status": "PASS",
+  "acceptance": [
+    {"id": "AC1", "status": "PASS", "proof": ["raw/full-unit-summary.json"]},
+    {"id": "AC2", "status": "PASS", "proof": ["raw/full-unit-summary.json", "raw/localization-parity.log"]},
+    {"id": "AC3", "status": "PASS", "proof": ["raw/ui3-summary.json"]},
+    {"id": "AC4", "status": "PASS", "proof": ["raw/ui3-summary.json", "raw/light-quick-entry-ready.png"]},
+    {"id": "AC5", "status": "PASS", "proof": ["raw/verification-receipt.txt"]},
+    {"id": "AC6", "status": "PASS", "proof": ["raw/full-unit-summary.json", "raw/ui-regressions-summary.json", "raw/verification-receipt.txt"]}
+  ]
+}

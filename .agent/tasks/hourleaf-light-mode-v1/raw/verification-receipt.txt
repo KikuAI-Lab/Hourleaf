@@ -1,0 +1,43 @@
+Hourleaf light appearance v1 — final verification receipt
+Date: 2026-08-20
+Device: canonical iPhone 17 simulator, iOS 26.5
+
+1. No-sign all-target test build
+   xcodebuild -project Hourleaf.xcodeproj -scheme Hourleaf \
+     -destination 'platform=iOS Simulator,id=<canonical-device>' \
+     -derivedDataPath <validated-mktemp-root>/DerivedData \
+     CODE_SIGNING_ALLOWED=NO build-for-testing
+   Result: TEST BUILD SUCCEEDED
+   Embedded Watch app and Quick Surfaces extension validation completed.
+
+2. Full unit/integration suite
+   xcodebuild ... CODE_SIGNING_ALLOWED=NO \
+     -only-testing:HourleafTests test-without-building
+   Result: 504 passed, 0 failed, 0 skipped.
+   Machine-readable receipt: full-unit-summary.json
+
+3. Light appearance persistence and critical surfaces
+   xcodebuild ... CODE_SIGNING_ALLOWED=NO \
+     -only-testing:HourleafUITests/HourleafUITests/testLightAppearanceChoicePersistsAndKeepsCriticalSurfacesUsable \
+     test-without-building
+   Result: 1 passed, 0 failed, 0 skipped.
+   Machine-readable receipt: ui3-summary.json
+
+4. Dark appearance, Settings, Russian, and Ukrainian regressions
+   xcodebuild ... CODE_SIGNING_ALLOWED=NO with four selected UI tests
+   Result: 4 passed, 0 failed, 0 skipped.
+   Machine-readable receipt: ui-regressions-summary.json
+
+5. Static/release checks
+   ./scripts/verify-release-readiness.sh — PASS
+   ./scripts/test-verify-release-readiness.sh — PASS
+   git diff --check — PASS
+   plutil lint EN/RU/UK Localizable.strings — PASS
+   EN/RU/UK localization key parity — PASS, 376 keys per locale
+   Swift frontend parse for changed source and tests — PASS
+
+6. Visual receipt
+   light-quick-entry-ready.png — final build running in Light on the canonical
+   simulator; semantic surfaces and #4A6DA7 accent visually inspected.
+
+Post-run hygiene: simulator shut down; no xcodebuild/XCTest runner retained.

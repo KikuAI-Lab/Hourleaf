@@ -9,6 +9,7 @@ struct SettingsScreen: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var backupStatus: BackupConfidenceStatusModel
+    @AppStorage(AppAppearance.storageKey) private var appearanceRawValue = AppAppearance.system.rawValue
     @State private var showAddReminder = false
     @State private var showQuickSurfaceResetConfirmation = false
 
@@ -24,6 +25,16 @@ struct SettingsScreen: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("settings.appearance.title") {
+                    Picker("settings.appearance.mode", selection: appearanceBinding) {
+                        ForEach(AppAppearance.allCases) { appearance in
+                            Text(appearance.localizedName).tag(appearance)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .accessibilityIdentifier("appearancePicker")
+                }
+
                 Section("settings.reporting") {
                     Picker("settings.report_language", selection: reportLanguageBinding) {
                         ForEach(ReportLanguage.allCases) { Text($0.localizedName).tag($0) }
@@ -341,6 +352,13 @@ struct SettingsScreen: View {
         Binding(get: { model.settings.reportLanguage }, set: { value in
             Task { await model.updateReportLanguage(value) }
         })
+    }
+
+    private var appearanceBinding: Binding<AppAppearance> {
+        Binding(
+            get: { AppAppearance(storedValue: appearanceRawValue) },
+            set: { appearanceRawValue = $0.rawValue }
+        )
     }
 
     private var remainderModeBinding: Binding<RemainderMode> {

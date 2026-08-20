@@ -171,6 +171,11 @@
 "service_year.archive.correction_format" = "Исправление %d";
 "service_year.period_format" = "Служебный год %@ – %@";
 "settings.title" = "Настройки";
+"settings.appearance.title" = "Оформление";
+"settings.appearance.mode" = "Тема";
+"settings.appearance.system" = "Как на iPhone";
+"settings.appearance.light" = "Светлая";
+"settings.appearance.dark" = "Тёмная";
 "settings.reporting" = "Отчётность";
 "settings.report_language" = "Язык отчёта";
 "settings.credit_label" = "Подпись кредита";

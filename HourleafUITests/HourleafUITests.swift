@@ -1047,6 +1047,54 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(createBackup.isHittable)
     }
 
+    func testLightAppearanceChoicePersistsAndKeepsCriticalSurfacesUsable() {
+        let app = launchApp(
+            additionalArguments: [
+                "-seedUITestData",
+                "-hourleafTestNow",
+                "2026-10-02T12:00:00Z"
+            ]
+        )
+
+        app.tabBars.buttons["Settings"].tap()
+        selectAppearance("Match iPhone", in: app)
+        selectAppearance("Light", in: app)
+        assertAppearancePickerValue("Light", in: app)
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
+        app.tabBars.buttons["Settings"].tap()
+        assertAppearancePickerValue("Light", in: app)
+
+        app.tabBars.buttons["Add"].tap()
+        let wheels = app.pickerWheels
+        XCTAssertTrue(wheels.element(boundBy: 0).waitForExistence(timeout: 5))
+        wheels.element(boundBy: 0).adjust(toPickerWheelValue: "1")
+        wheels.element(boundBy: 1).adjust(toPickerWheelValue: "15")
+        app.buttons["saveEntryButton"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["mutationToast"].waitForExistence(timeout: 5))
+
+        app.tabBars.buttons["History"].tap()
+        XCTAssertTrue(firstHistoryEntry(in: app).waitForExistence(timeout: 5))
+
+        app.tabBars.buttons["Progress"].tap()
+        let review = app.buttons["reportReviewButton"]
+        XCTAssertTrue(review.waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollUntilHittable(review, in: app))
+        review.tap()
+        XCTAssertTrue(app.buttons["finishReportReviewButton"].waitForExistence(timeout: 5))
+
+        app.tabBars.buttons["Settings"].tap()
+        let dataManagement = app.buttons["dataManagementButton"]
+        XCTAssertTrue(scrollUntilHittable(dataManagement, in: app))
+        dataManagement.tap()
+        XCTAssertTrue(app.buttons["createBackupButton"].waitForExistence(timeout: 5))
+
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        selectAppearance("Match iPhone", in: app)
+    }
+
     func testCriticalControlsExposeLocalizedAccessibilityLabels() {
         for language in ["en", "ru", "uk"] {
             let app = XCUIApplication()
@@ -1192,6 +1240,50 @@ final class HourleafUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 5))
         return app
+    }
+
+    private func selectAppearance(_ option: String, in app: XCUIApplication) {
+        let picker = app.descendants(matching: .any)["appearancePicker"]
+        XCTAssertTrue(scrollAppearancePickerIntoView(picker, in: app))
+        picker.tap()
+
+        let button = app.buttons[option]
+        if button.waitForExistence(timeout: 2) {
+            button.tap()
+            return
+        }
+
+        let text = app.staticTexts[option]
+        XCTAssertTrue(text.waitForExistence(timeout: 2))
+        text.tap()
+    }
+
+    private func assertAppearancePickerValue(_ expected: String, in app: XCUIApplication) {
+        let picker = app.descendants(matching: .any)["appearancePicker"]
+        XCTAssertTrue(scrollAppearancePickerIntoView(picker, in: app))
+        picker.tap()
+        let option = app.buttons[expected]
+        XCTAssertTrue(option.waitForExistence(timeout: 2))
+        XCTAssertTrue(option.isSelected, "Appearance option was not selected: \(expected)")
+        option.tap()
+    }
+
+    private func scrollAppearancePickerIntoView(
+        _ picker: XCUIElement,
+        in app: XCUIApplication
+    ) -> Bool {
+        for _ in 0..<8 {
+            if picker.exists, picker.isHittable {
+                return true
+            }
+            let form = app.collectionViews.firstMatch
+            if form.exists {
+                form.swipeDown()
+            } else {
+                app.swipeDown()
+            }
+        }
+        return picker.exists && picker.isHittable
     }
 
     private func launchLocalizedReportApp(language: String) -> XCUIApplication {

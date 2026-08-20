@@ -1,0 +1,42 @@
+{
+  "devicesAndConfigurations" : [
+    {
+      "device" : {
+        "architecture" : "arm64",
+        "deviceId" : "1C56B0CD-451C-44DD-8356-D32C5A618BB2",
+        "deviceName" : "iPhone 17",
+        "modelName" : "iPhone 17",
+        "osBuildNumber" : "23F77",
+        "osVersion" : "26.5",
+        "platform" : "iOS Simulator"
+      },
+      "expectedFailures" : 0,
+      "failedTests" : 0,
+      "passedTests" : 4,
+      "skippedTests" : 0,
+      "testPlanConfiguration" : {
+        "configurationId" : "1",
+        "configurationName" : "Test Scheme Action"
+      }
+    }
+  ],
+  "environmentDescription" : "Hourleaf · Built with macOS 26.5.1",
+  "expectedFailures" : 0,
+  "failedTests" : 0,
+  "finishTime" : 1787246250.105,
+  "passedTests" : 4,
+  "result" : "Passed",
+  "skippedTests" : 0,
+  "startTime" : 1787246170.993,
+  "statistics" : [
+
+  ],
+  "testFailures" : [
+
+  ],
+  "title" : "Test - Hourleaf",
+  "topInsights" : [
+
+  ],
+  "totalTestCount" : 4
+}

@@ -1,0 +1,46 @@
+{
+  "devicesAndConfigurations" : [
+    {
+      "device" : {
+        "architecture" : "arm64",
+        "deviceId" : "1C56B0CD-451C-44DD-8356-D32C5A618BB2",
+        "deviceName" : "iPhone 17",
+        "modelName" : "iPhone 17",
+        "osBuildNumber" : "23F77",
+        "osVersion" : "26.5",
+        "platform" : "iOS Simulator"
+      },
+      "expectedFailures" : 0,
+      "failedTests" : 0,
+      "passedTests" : 504,
+      "skippedTests" : 0,
+      "testPlanConfiguration" : {
+        "configurationId" : "1",
+        "configurationName" : "Test Scheme Action"
+      }
+    }
+  ],
+  "environmentDescription" : "Hourleaf · Built with macOS 26.5.1",
+  "expectedFailures" : 0,
+  "failedTests" : 0,
+  "finishTime" : 1787246075.165,
+  "passedTests" : 504,
+  "result" : "Passed",
+  "skippedTests" : 0,
+  "startTime" : 1787246052.615,
+  "statistics" : [
+
+  ],
+  "testFailures" : [
+
+  ],
+  "title" : "Test - Hourleaf",
+  "topInsights" : [
+    {
+      "category" : "Longest Test Runs",
+      "impact" : "28% of duration",
+      "text" : "3 longest test runs with outlier durations exceeding 0.55s (three standard deviations)"
+    }
+  ],
+  "totalTestCount" : 504
+}
