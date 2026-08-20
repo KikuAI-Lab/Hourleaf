@@ -60,6 +60,7 @@ copy_fixture() {
         "$fixture_root/Hourleaf/Persistence/HourleafModel.xcdatamodeld/HourleafModelV1.xcdatamodel" \
         "$fixture_root/Hourleaf/Persistence/HourleafModel.xcdatamodeld/HourleafModelV2.xcdatamodel" \
         "$fixture_root/Hourleaf/UI/DataManagement"
+    mkdir -p "$fixture_root/Hourleaf/UI"
 
     cp "$repo_root/Hourleaf/PrivacyInfo.xcprivacy" \
         "$fixture_root/Hourleaf/PrivacyInfo.xcprivacy"
@@ -93,6 +94,8 @@ copy_fixture() {
         "$fixture_root/Hourleaf/AppIntents/HourleafShortcuts.swift"
     cp "$repo_root/Hourleaf/UI/DataManagement/DataManagementView.swift" \
         "$fixture_root/Hourleaf/UI/DataManagement/DataManagementView.swift"
+    cp "$repo_root/Hourleaf/UI/SettingsScreen.swift" \
+        "$fixture_root/Hourleaf/UI/SettingsScreen.swift"
     cp "$repo_root/AppStore/README.md" \
         "$repo_root/AppStore/privacy-details.md" \
         "$repo_root/AppStore/review-notes.md" \
@@ -255,8 +258,20 @@ assert_failure_contains "extension privacy manifest has an unexpected NSPrivacyA
 reset_fixture
 replace_in_file \
     "$fixture_root/Hourleaf.xcodeproj/project.pbxproj" \
-    's/MARKETING_VERSION = 1.0.0;/MARKETING_VERSION = 0.9.0;/g'
-assert_failure_contains "all shipping targets must use marketing version 1.0.0"
+    's/MARKETING_VERSION = 1.0.1;/MARKETING_VERSION = 0.9.0;/g'
+assert_failure_contains "all shipping targets must use marketing version 1.0.1"
+
+reset_fixture
+replace_in_file \
+    "$fixture_root/Hourleaf.xcodeproj/project.pbxproj" \
+    's/CURRENT_PROJECT_VERSION = 12;/CURRENT_PROJECT_VERSION = 11;/g'
+assert_failure_contains "all shipping targets must use build number 12"
+
+reset_fixture
+replace_in_file \
+    "$fixture_root/Hourleaf/UI/SettingsScreen.swift" \
+    's/forInfoDictionaryKey: "CFBundleShortVersionString"/forInfoDictionaryKey: "CFBundleDisplayName"/'
+assert_failure_contains "Settings must read the installed version from bundle metadata"
 
 reset_fixture
 replace_in_file \

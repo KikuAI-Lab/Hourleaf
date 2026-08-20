@@ -250,7 +250,12 @@ struct SettingsScreen: View {
                 }
 
                 Section {
-                    LabeledContent("settings.version", value: "0.1.0")
+                    LabeledContent(
+                        "settings.version",
+                        value: Bundle.main.object(
+                            forInfoDictionaryKey: "CFBundleShortVersionString"
+                        ) as? String ?? "—"
+                    )
                     LabeledContent("settings.developer", value: "KikuAI")
                     Link(destination: URL(string: "https://kikuai.dev")!) {
                         Label("settings.developer_website", systemImage: "safari")

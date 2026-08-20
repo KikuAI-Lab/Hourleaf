@@ -1,6 +1,6 @@
 # Hourleaf App Store source
 
-This directory is the maintained source for the Hourleaf 1.0 App Store
+This directory is the maintained source for the Hourleaf 1.0.1 App Store
 listing. Update it with every public release and copy the reviewed values into
 App Store Connect only after the matching archive is verified.
 
@@ -9,7 +9,7 @@ App Store Connect only after the matching archive is verified.
 - Platform record: iOS with an embedded watchOS companion app
 - App Store name: `Hourleaf: Ministry Hours`
 - Bundle identifier: `com.kikuai.hourleaf`
-- Version: `1.0.0` (`11`)
+- Version: `1.0.1` (`12`)
 - Primary language: English (U.S.)
 - Localizations: English (U.S.), Russian, Ukrainian
 - Primary category: Productivity

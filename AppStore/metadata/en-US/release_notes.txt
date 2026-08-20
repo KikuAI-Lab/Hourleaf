@@ -1,1 +1,1 @@
-First public release of Hourleaf for iPhone and Apple Watch.
+The Bible-study counter is now simpler and easier to read. The About screen now shows the installed app version correctly.

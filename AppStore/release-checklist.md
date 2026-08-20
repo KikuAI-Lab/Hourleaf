@@ -1,4 +1,4 @@
-# Hourleaf 1.0 submission checklist
+# Hourleaf 1.0.1 submission checklist
 
 ## Source and package
 
@@ -18,8 +18,8 @@
 
 - [x] Active Apple Developer Program membership.
 - [x] Create the iOS app record with bundle ID `com.kikuai.hourleaf`, version
-      `1.0.0`, and name `Hourleaf: Ministry Hours`. The current release
-      candidate is build `11`.
+      `1.0.1`, and name `Hourleaf: Ministry Hours`. The current release
+      candidate is build `12`.
 - [x] Copy metadata from `AppStore/metadata` and URLs from `AppStore/README.md`.
 - [ ] Enter private App Review contact details.
 - [ ] Complete App Privacy using `AppStore/privacy-details.md`.

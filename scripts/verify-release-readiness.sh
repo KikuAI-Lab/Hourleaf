@@ -29,6 +29,7 @@ project_file="$repo_root/Hourleaf.xcodeproj/project.pbxproj"
 installer_file="$repo_root/scripts/install-local-device.sh"
 models_root="$repo_root/Hourleaf/Persistence/HourleafModel.xcdatamodeld"
 data_management_file="$repo_root/Hourleaf/UI/DataManagement/DataManagementView.swift"
+settings_file="$repo_root/Hourleaf/UI/SettingsScreen.swift"
 extension_info_file="$repo_root/HourleafQuickSurfaces/Info.plist"
 app_info_file="$repo_root/Hourleaf/Info.plist"
 app_store_root="$repo_root/AppStore"
@@ -42,6 +43,7 @@ for required_file in \
     "$project_file" \
     "$installer_file" \
     "$data_management_file" \
+    "$settings_file" \
     "$app_info_file" \
     "$extension_info_file" \
     "$app_store_export_options"; do
@@ -273,9 +275,17 @@ watch_bundle_config_count="$(grep -F 'PRODUCT_BUNDLE_IDENTIFIER = "$(HOURLEAF_WA
 watch_deployment_count="$(grep -F 'WATCHOS_DEPLOYMENT_TARGET = 10.0;' "$project_file" | wc -l | tr -d '[:space:]' || true)"
 [[ "$watch_deployment_count" == "2" ]] \
     || fail "HourleafWatch must support watchOS 10 or later in both configurations"
-release_version_count="$(grep -Fo 'MARKETING_VERSION = 1.0.0;' "$project_file" | wc -l | tr -d '[:space:]' || true)"
+release_version_count="$(grep -Fo 'MARKETING_VERSION = 1.0.1;' "$project_file" | wc -l | tr -d '[:space:]' || true)"
 [[ "$release_version_count" == "6" ]] \
-    || fail "all shipping targets must use marketing version 1.0.0"
+    || fail "all shipping targets must use marketing version 1.0.1"
+release_build_count="$(grep -Fo 'CURRENT_PROJECT_VERSION = 12;' "$project_file" | wc -l | tr -d '[:space:]' || true)"
+[[ "$release_build_count" == "6" ]] \
+    || fail "all shipping targets must use build number 12"
+grep -Fq 'forInfoDictionaryKey: "CFBundleShortVersionString"' "$settings_file" \
+    || fail "Settings must read the installed version from bundle metadata"
+if grep -Eq 'LabeledContent\([^)]*settings\.version[^)]*value:[[:space:]]*"[0-9]+\.[0-9]+\.[0-9]+"' "$settings_file"; then
+    fail "Settings contains a hard-coded app version"
+fi
 watch_encryption_count="$(grep -F 'INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;' "$project_file" | wc -l | tr -d '[:space:]' || true)"
 [[ "$watch_encryption_count" == "2" ]] \
     || fail "HourleafWatch export-compliance declaration is missing"
