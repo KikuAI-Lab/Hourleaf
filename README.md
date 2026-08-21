@@ -1,9 +1,10 @@
 # Hourleaf
 
-Hourleaf is a private, local-first ministry time ledger for iPhone and Apple
+Hourleaf is an open-source, local-first ministry time ledger for iPhone and Apple
 Watch. It records service and credit time, follows service-year progress, and
 prepares monthly reports without an account or remote backend.
 
+- App Store: **[Download Hourleaf](https://apps.apple.com/app/id6801032003)**
 - App Store name: **Hourleaf: Ministry Hours**
 - Platforms: iOS 17+ and watchOS 10+
 - Languages: English, Russian, Ukrainian
@@ -40,9 +41,8 @@ account; portable backups leave the app only when the user chooses to share
 them. Private iCloud sync is a separate future opt-in feature.
 
 The maintained App Store metadata, privacy answers, review notes, and release
-checklist live in [`AppStore/`](AppStore/README.md). Version 1.0 is being
-prepared for review; this repository does not claim that the App Store listing
-is live before Apple accepts it.
+checklist live in [`AppStore/`](AppStore/README.md). The source repository can
+be ahead of the version currently available on the App Store.
 
 ## Personal Team device testing
 
@@ -83,3 +83,9 @@ To move data to a later TestFlight or App Store build:
 3. In Data Management, choose that backup and restore it.
 4. Check entries, reports, reminders, and settings in the new app.
 5. Remove the old local build only after those checks, if you wish.
+
+## License
+
+Hourleaf source code is available under the [MIT License](LICENSE). The bundled
+App Store screenshot editor retains its original MIT notice in
+[`AppStore/marketing-screenshots/LICENSE.app-store-screenshots`](AppStore/marketing-screenshots/LICENSE.app-store-screenshots).
