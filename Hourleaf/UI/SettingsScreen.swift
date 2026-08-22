@@ -1,4 +1,3 @@
-import AppIntents
 import SwiftUI
 import UIKit
 
@@ -142,27 +141,25 @@ struct SettingsScreen: View {
                 }
 
                 Section {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("settings.voice_shortcuts.intro")
-                        Text("settings.voice_shortcuts.service_example")
-                            .font(.footnote)
-                        Text("settings.voice_shortcuts.credit_example")
-                            .font(.footnote)
-                        Text("settings.voice_shortcuts.watch_note")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    SiriTipView(intent: RecordTimeIntent(kind: .service))
-                        .accessibilityIdentifier("serviceSiriTip")
-
-                    ShortcutsLink()
-                        .accessibilityIdentifier("shortcutsLink")
+                    guideLink(
+                        title: "settings.guides.watch.title",
+                        detail: "settings.guides.watch.detail",
+                        systemImage: "applewatch",
+                        anchor: "apple-watch",
+                        identifier: "watchGuideLink"
+                    )
+                    guideLink(
+                        title: "settings.guides.voice.title",
+                        detail: "settings.guides.voice.detail",
+                        systemImage: "waveform",
+                        anchor: "voice",
+                        identifier: "voiceGuideLink"
+                    )
                 } header: {
-                    Text("settings.shortcuts")
+                    Text("settings.guides.title")
                 } footer: {
-                    Text("settings.shortcuts_footer")
-                        .accessibilityIdentifier("shortcutsFooter")
+                    Text("settings.guides.footer")
+                        .accessibilityIdentifier("settingsGuidesFooter")
                 }
 
                 if model.quickSurfaceAvailability.isVisibleInSettings {
@@ -324,6 +321,37 @@ struct SettingsScreen: View {
 
     private var privacyDetail: String {
         String(localized: "settings.privacy_detail")
+    }
+
+    private func guideLink(
+        title: LocalizedStringKey,
+        detail: LocalizedStringKey,
+        systemImage: String,
+        anchor: String,
+        identifier: String
+    ) -> some View {
+        Link(destination: hourleafGuideURL(anchor: anchor)) {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } icon: {
+                Image(systemName: systemImage)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 24)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(identifier)
+    }
+
+    private func hourleafGuideURL(anchor: String) -> URL {
+        let preferredLanguage = Bundle.main.preferredLocalizations.first ?? "en"
+        let languagePath = preferredLanguage.hasPrefix("ru") ? "ru/" : ""
+        return URL(string: "https://kikuai.dev/hourleaf/guide/\(languagePath)#\(anchor)")!
     }
 
     private func reminderRow(_ reminder: ReminderSchedule) -> some View {

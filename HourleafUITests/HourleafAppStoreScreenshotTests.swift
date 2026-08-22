@@ -29,8 +29,8 @@ final class HourleafAppStoreScreenshotTests: XCTestCase {
         let count = app.staticTexts["bibleStudyCount"]
         let increase = app.buttons["increaseBibleStudyCountButton"]
         XCTAssertTrue(
-            scrollUntilFullyVisible([label, decrease, count, increase], in: app),
-            "The complete Bible-study counter must be visible in the Store capture."
+            elementsAreFullyVisible([label, decrease, count, increase], in: app),
+            "The complete Bible-study counter must be visible without scrolling."
         )
         XCTAssertEqual(count.value as? String, "1")
         XCTAssertFalse(app.staticTexts[locale.removedBibleStudyHint].exists)
@@ -118,6 +118,22 @@ final class HourleafAppStoreScreenshotTests: XCTestCase {
             app.swipeUp(velocity: .slow)
         }
 
+        let visibleTop = app.windows.firstMatch.frame.minY + 24
+        let visibleBottom = tabBar.frame.minY - 24
+        return elements.allSatisfy { element in
+            element.exists
+                && element.isHittable
+                && element.frame.minY >= visibleTop
+                && element.frame.maxY <= visibleBottom
+        }
+    }
+
+    private func elementsAreFullyVisible(
+        _ elements: [XCUIElement],
+        in app: XCUIApplication
+    ) -> Bool {
+        let tabBar = app.tabBars.firstMatch
+        guard tabBar.waitForExistence(timeout: 5) else { return false }
         let visibleTop = app.windows.firstMatch.frame.minY + 24
         let visibleBottom = tabBar.frame.minY - 24
         return elements.allSatisfy { element in

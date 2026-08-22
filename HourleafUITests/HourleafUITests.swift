@@ -536,6 +536,32 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(preview.label.contains("Bible studies: 1"))
     }
 
+    func testQuickEntryShowsBibleStudiesWithoutInitialScrollAtDefaultTextSize() {
+        let app = launchApp(
+            additionalArguments: [
+                "-pastDateUITest",
+                "-hourleafTestNow",
+                "2026-10-02T12:00:00Z"
+            ]
+        )
+
+        let tabBar = app.tabBars.firstMatch
+        let elements = [
+            app.staticTexts["bibleStudyLabel"],
+            app.buttons["decreaseBibleStudyCountButton"],
+            app.staticTexts["bibleStudyCount"],
+            app.buttons["increaseBibleStudyCountButton"]
+        ]
+
+        XCTAssertTrue(tabBar.waitForExistence(timeout: 5))
+        XCTAssertTrue(elements[0].waitForExistence(timeout: 5))
+        for element in elements {
+            XCTAssertTrue(element.exists)
+            XCTAssertGreaterThanOrEqual(element.frame.minY, app.windows.firstMatch.frame.minY)
+            XCTAssertLessThanOrEqual(element.frame.maxY, tabBar.frame.minY)
+        }
+    }
+
     func testQuickSurfaceTimerIsOffUntilEnabledAndLeavesManualEntryUnchanged() {
         let app = launchQuickSurfaceApp()
 
@@ -831,21 +857,18 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts[todayIdentifier].exists)
     }
 
-    func testSettingsOffersShortcutsLink() {
+    func testSettingsOffersPlainLanguageWatchAndVoiceGuides() {
         let app = launchApp()
         app.tabBars.buttons["Settings"].tap()
 
-        let siriTip = app.staticTexts.matching(identifier: "serviceSiriTip").firstMatch
-        XCTAssertTrue(scrollUntilVisible(siriTip, in: app))
-        XCTAssertTrue(
-            app.staticTexts[
-                "Add two shortcuts named “Record service” and “Record credit.” Then you do not need to say the app name."
-            ].exists
-        )
-
-        let shortcutsLink = app.descendants(matching: .any)["shortcutsLink"]
-        XCTAssertTrue(scrollUntilVisible(shortcutsLink, in: app))
-        XCTAssertTrue(app.staticTexts["shortcutsFooter"].exists)
+        let watchGuide = app.descendants(matching: .any)["watchGuideLink"]
+        XCTAssertTrue(scrollUntilVisible(watchGuide, in: app))
+        XCTAssertTrue(app.staticTexts["Apple Watch and voice"].exists)
+        let voiceGuide = app.descendants(matching: .any)["voiceGuideLink"]
+        XCTAssertTrue(scrollUntilVisible(voiceGuide, in: app))
+        XCTAssertTrue(app.staticTexts["settingsGuidesFooter"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["serviceSiriTip"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["shortcutsLink"].exists)
     }
 
     func testSettingsOpensDataManagement() {
@@ -934,8 +957,11 @@ final class HourleafUITests: XCTestCase {
         XCTAssertFalse(app.buttons["repeatLastEntryButton"].exists)
         XCTAssertTrue(app.buttons["shareReportButton"].waitForExistence(timeout: 5))
         app.tabBars.buttons["Настройки"].tap()
-        XCTAssertTrue(scrollUntilVisible(app.staticTexts["Быстрые команды"], in: app))
-        XCTAssertTrue(scrollUntilVisible(app.staticTexts["shortcutsFooter"], in: app))
+        let watchGuide = app.descendants(matching: .any)["watchGuideLink"]
+        XCTAssertTrue(scrollUntilVisible(watchGuide, in: app))
+        XCTAssertTrue(app.staticTexts["Apple Watch и голос"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["voiceGuideLink"].exists)
+        XCTAssertFalse(app.staticTexts["Быстрые команды"].exists)
     }
 
     func testUkrainianInterfaceLaunches() {
@@ -948,8 +974,11 @@ final class HourleafUITests: XCTestCase {
         XCTAssertFalse(app.buttons["repeatLastEntryButton"].exists)
         XCTAssertTrue(app.buttons["shareReportButton"].waitForExistence(timeout: 5))
         app.tabBars.buttons["Налаштування"].tap()
-        XCTAssertTrue(scrollUntilVisible(app.staticTexts["Швидкі команди"], in: app))
-        XCTAssertTrue(scrollUntilVisible(app.staticTexts["shortcutsFooter"], in: app))
+        let watchGuide = app.descendants(matching: .any)["watchGuideLink"]
+        XCTAssertTrue(scrollUntilVisible(watchGuide, in: app))
+        XCTAssertTrue(app.staticTexts["Apple Watch і голос"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["voiceGuideLink"].exists)
+        XCTAssertFalse(app.staticTexts["Швидкі команди"].exists)
     }
 
     func testFreshInstallOpensQuickEntryWithoutOnboarding() {
@@ -1206,7 +1235,7 @@ final class HourleafUITests: XCTestCase {
     }
 #endif
 
-    func testSimplifiedSettingsShowsMonthlyReminderAndVoiceExamplesWithoutRemovedControls() {
+    func testSimplifiedSettingsShowsMonthlyReminderAndGuidesWithoutRemovedControls() {
         let app = launchApp()
         app.tabBars.buttons["Settings"].tap()
 
@@ -1222,16 +1251,13 @@ final class HourleafUITests: XCTestCase {
         XCTAssertFalse(app.buttons["existingTimeButton"].exists)
         XCTAssertFalse(app.staticTexts["Time before Hourleaf"].exists)
 
-        let voiceIntro = app.staticTexts[
-            "Add two shortcuts named “Record service” and “Record credit.” Then you do not need to say the app name."
-        ]
-        XCTAssertTrue(scrollUntilVisible(voiceIntro, in: app))
-        XCTAssertTrue(app.staticTexts[
-            "Tell Siri: “Record service,” then say the duration."
-        ].exists)
-        XCTAssertTrue(app.staticTexts[
-            "For credit, say: “Record credit,” then say the duration."
-        ].exists)
+        let watchGuide = app.descendants(matching: .any)["watchGuideLink"]
+        XCTAssertTrue(scrollUntilVisible(watchGuide, in: app))
+        XCTAssertTrue(app.staticTexts["Hourleaf on Apple Watch"].exists)
+        let voiceGuide = app.descendants(matching: .any)["voiceGuideLink"]
+        XCTAssertTrue(scrollUntilVisible(voiceGuide, in: app))
+        XCTAssertTrue(app.staticTexts["Add time with Siri"].exists)
+        XCTAssertFalse(app.staticTexts["Shortcuts"].exists)
     }
 
     private func launchApp(additionalArguments: [String] = []) -> XCUIApplication {

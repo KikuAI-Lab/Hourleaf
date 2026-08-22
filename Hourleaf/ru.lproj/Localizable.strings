@@ -188,8 +188,12 @@
 "settings.reminders" = "Напоминания";
 "settings.add_reminder" = "Добавить напоминание";
 "settings.reminders_footer" = "Напоминания только открывают Hourleaf и ничего не записывают сами.";
-"settings.shortcuts" = "Быстрые команды";
-"settings.shortcuts_footer" = "Открыть команды Hourleaf в приложении «Быстрые команды».";
+"settings.guides.title" = "Apple Watch и голос";
+"settings.guides.watch.title" = "Hourleaf на Apple Watch";
+"settings.guides.watch.detail" = "Как установить и записывать время с часов";
+"settings.guides.voice.title" = "Добавлять время голосом";
+"settings.guides.voice.detail" = "Как настроить две простые фразы для Siri";
+"settings.guides.footer" = "Откроется простая инструкция на kikuai.dev.";
 "settings.data" = "Данные";
 "settings.data_help" = "Резервная копия, восстановление и экспорт записей.";
 "settings.opening_balances" = "Время до начала Hourleaf";
@@ -227,10 +231,6 @@
 "report_reminder.open_settings" = "Открыть настройки iPhone";
 "report_reminder.notification.title" = "Отчёт Hourleaf";
 "report_reminder.notification.body" = "Отчёт за прошлый месяц готов к проверке.";
-"settings.voice_shortcuts.intro" = "Добавьте две команды и назовите их «Запиши служение» и «Запиши кредит». Тогда название приложения произносить не нужно.";
-"settings.voice_shortcuts.service_example" = "Скажите Siri: «Запиши служение», затем назовите время.";
-"settings.voice_shortcuts.credit_example" = "Для кредита скажите: «Запиши кредит», затем назовите время.";
-"settings.voice_shortcuts.watch_note" = "Команды появятся и на Apple Watch. iPhone должен быть рядом; для ручного ввода откройте Hourleaf на часах.";
 "intent.record.title" = "Записать время";
 "intent.record.description" = "Записывает время служения или кредита.";
 "intent.record.kind" = "Тип";

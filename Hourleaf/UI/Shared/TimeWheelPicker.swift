@@ -6,6 +6,7 @@ struct TimeWheelPicker: View {
     var maximumHours = 99
     var usesDirectHourEntry = false
     var maximumDirectHours = 24 * 366
+    var wheelHeight: CGFloat = 150
 
     var body: some View {
         HStack(spacing: 8) {
@@ -24,7 +25,7 @@ struct TimeWheelPicker: View {
                 values: Array(0...59)
             )
         }
-        .frame(height: 150)
+        .frame(height: wheelHeight)
         .dynamicTypeSize(.xSmall ... .xxxLarge)
     }
 

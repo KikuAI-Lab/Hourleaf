@@ -1,12 +1,12 @@
-# Hourleaf 1.0.1 submission checklist
+# Hourleaf 1.0.2 submission checklist
 
 ## Source and package
 
 - [x] Release guard and self-test pass.
-- [x] Full unit suite passes. The full UI suite passed 48 of 49 tests; the only
-      failure was a stale expected localization string, and its corrected
-      focused rerun passed.
-- [x] Unsigned release archive contains the iPhone app, Watch app, WidgetKit
+- [x] Full unit suite passes: 504 of 504 tests.
+- [x] Full UI suite passes 52 of 52 tests, including Light appearance, compact Add layout,
+      Settings guides, accessibility text, and the existing ledger flows.
+- [x] Signed release archive contains the iPhone app, Watch app, WidgetKit
       extension, app icons, all three localizations, and the required privacy
       manifests.
 - [x] Signed distribution entitlements match the production App Group and
@@ -17,9 +17,8 @@
 ## App Store Connect
 
 - [x] Active Apple Developer Program membership.
-- [x] Create the iOS app record with bundle ID `com.kikuai.hourleaf`, version
-      `1.0.1`, and name `Hourleaf: Ministry Hours`. The current release
-      candidate is build `12`.
+- [ ] Create version `1.0.2` on the existing iOS app record with bundle ID
+      `com.kikuai.hourleaf`. The release candidate is build `13`.
 - [x] Copy metadata from `AppStore/metadata` and URLs from `AppStore/README.md`.
 - [ ] Enter private App Review contact details.
 - [ ] Complete App Privacy using `AppStore/privacy-details.md`.
@@ -31,7 +30,7 @@
 - [x] Prepare reviewed iPhone and Apple Watch screenshots with no personal
       data. Upload remains an owner action in App Store Connect.
 - [ ] Choose availability, trader status, and manual or automatic release.
-- [x] Upload the signed archive and wait for processing before submission.
+- [ ] Upload the signed archive and wait for processing before submission.
       For a command-line owner upload, use
       `AppStore/ExportOptions-AppStore.plist`; never add account credentials to
       that file or the repository.

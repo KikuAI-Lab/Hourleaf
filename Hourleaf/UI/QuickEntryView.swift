@@ -36,7 +36,7 @@ struct QuickEntryView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 18) {
+                VStack(spacing: usesCompactVerticalLayout ? 14 : 18) {
                     if let state = previousReportBannerState { reportBanner(state) }
                     if shouldShowQuickSurfaceTimer {
                         QuickSurfaceTimerRow(manualDraftIsPristine: manualDraftIsPristine)
@@ -44,7 +44,8 @@ struct QuickEntryView: View {
                     entryCard
                     monthSummary
                 }
-                .padding()
+                .padding(.horizontal)
+                .padding(.vertical, usesCompactVerticalLayout ? 12 : 16)
             }
             .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
@@ -122,7 +123,7 @@ struct QuickEntryView: View {
     }
 
     private var entryCard: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: usesCompactVerticalLayout ? 14 : 16) {
             Picker("entry.type", selection: $kind) {
                 ForEach(EntryKind.allCases) { item in
                     Text(item.localizedName).tag(item)
@@ -135,7 +136,11 @@ struct QuickEntryView: View {
             dateInput
 
             Divider()
-            TimeWheelPicker(hours: $hours, minutes: $minutes)
+            TimeWheelPicker(
+                hours: $hours,
+                minutes: $minutes,
+                wheelHeight: usesCompactVerticalLayout ? 138 : 150
+            )
             Divider()
 
             TextField("entry.note_placeholder", text: $note, axis: .vertical)
@@ -154,14 +159,15 @@ struct QuickEntryView: View {
                 }
                 .font(.headline)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 13)
+                .padding(.vertical, usesCompactVerticalLayout ? 11 : 13)
             }
             .buttonStyle(.borderedProminent)
             .tint(Color.accentColor)
             .disabled(isSaving || (hours == 0 && minutes == 0))
             .accessibilityIdentifier("saveEntryButton")
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.vertical, usesCompactVerticalLayout ? 14 : 16)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
@@ -195,7 +201,7 @@ struct QuickEntryView: View {
     private var monthSummary: some View {
         let month = MonthKey(date, calendar: .hourleaf)
         let report = model.report(for: month)
-        return VStack(spacing: 14) {
+        return VStack(spacing: usesCompactVerticalLayout ? 12 : 14) {
             Group {
                 if dynamicTypeSize.isAccessibilitySize {
                     VStack(alignment: .leading, spacing: 12) {
@@ -213,7 +219,8 @@ struct QuickEntryView: View {
             Divider()
             bibleStudyCounter(for: month)
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.vertical, usesCompactVerticalLayout ? 14 : 16)
         .background(
             Color(.secondarySystemGroupedBackground),
             in: RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -306,6 +313,10 @@ struct QuickEntryView: View {
 
     private var shouldShowQuickSurfaceTimer: Bool {
         model.quickSurfacePreferences.timerVisible || model.quickSurfaceTimerWasRequested
+    }
+
+    private var usesCompactVerticalLayout: Bool {
+        !dynamicTypeSize.isAccessibilitySize
     }
 
     private var manualDraftIsPristine: Bool {
