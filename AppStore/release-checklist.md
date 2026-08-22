@@ -9,7 +9,7 @@
 - [x] Signed release archive contains the iPhone app, Watch app, WidgetKit
       extension, app icons, all three localizations, and the required privacy
       manifests.
-- [x] Signed distribution entitlements match the production App Group and
+- [ ] Signed distribution entitlements match the production App Group and
       bundle identifiers.
 - [ ] Migration from the Personal Team build is verified using an exported
       Hourleaf backup before the old app is removed.
