@@ -51,16 +51,25 @@ Canonical state: `KikuAI-Lab/Hourleaf#3`.
 - Cloudflare Pages deployment `49bb9bbb-0dd2-4196-8a1c-2d204c1e33ca`
   completed successfully.
 
-## Remaining provider gate
+## Provider submission
 
-The verified distribution IPA is ready. A fresh upload attempt after the green
-CI run stopped before network transfer on 2026-08-23 at 13:02 Europe/Uzhgorod:
-`xcodebuild` exited 70 with `Failed to Use Accounts`. Xcode therefore has no
-usable Apple Account for App Store Connect. The remaining work is owner-local
-Xcode sign-in, upload, processing readback, App Store version attachment, and
-submission.
+- On 2026-08-23 at 18:42 Europe/Uzhgorod, `xcodebuild -exportArchive`
+  completed App Store Connect analysis and upload with `Upload succeeded`,
+  `Uploaded package is processing`, and `** EXPORT SUCCEEDED **`.
+- App Store Connect finished processing the package. Its build picker showed
+  build `13`, version `1.0.2`; the attached assets included the iPhone app and
+  embedded Apple Watch app.
+- Version `1.0.2` was created on the existing app record, build `13` was
+  attached, and the canonical English, Russian, and Ukrainian release notes
+  from `AppStore/metadata` were saved. Existing automatic release and the
+  provider metadata passed the submission validation.
+- At 18:55 Europe/Uzhgorod, App Store Connect displayed `1 Item Submitted` for
+  `iOS App 1.0.2` / `1.0.2 (13)`. The durable provider state readback is
+  `Waiting for Review`.
+- No physical iPhone or Apple Watch was installed, mirrored, or controlled
+  during upload or submission.
 
-Provider readback on 2026-08-23 shows public version `1.0.1` (build 12),
-automatic release configured, 175 territories selected, and public storefront
-availability in the United States, Lithuania, and Ukraine. Build 13 is not
-claimed as uploaded or submitted.
+The public App Store lookup still returned `1.0.1` in the United States,
+Lithuania, and Ukraine at submission time. That is expected until Apple makes a
+review decision and the configured automatic release completes; approval and
+public `1.0.2` availability are not claimed by this receipt.

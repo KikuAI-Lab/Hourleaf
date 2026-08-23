@@ -22,26 +22,32 @@
 ## App Store Connect
 
 - [x] Active Apple Developer Program membership.
-- [ ] Create version `1.0.2` on the existing iOS app record with bundle ID
+- [x] Create version `1.0.2` on the existing iOS app record with bundle ID
       `com.kikuai.hourleaf`. The release candidate is build `13`.
 - [x] Copy metadata from `AppStore/metadata` and URLs from `AppStore/README.md`.
-- [ ] Enter private App Review contact details.
-- [ ] Complete App Privacy using `AppStore/privacy-details.md`.
+- [x] Keep the existing private App Review contact details in App Store
+      Connect. The provider accepted them without exposing them to Git or chat.
+- [x] Complete App Privacy using `AppStore/privacy-details.md`; the existing
+      answers passed the version-submission validation.
 - [x] Complete the age-rating questionnaire using `AppStore/age-rating.md`.
 - [ ] Add only the verified accessibility features from
-      `AppStore/accessibility.md`.
+      `AppStore/accessibility.md` after the documented physical-device smoke.
+      No new accessibility claim was added in this Mac-only pass.
 - [x] Confirm export compliance: only exempt Apple operating-system encryption;
       `ITSAppUsesNonExemptEncryption` is `NO` in each shipping bundle.
 - [x] Prepare reviewed iPhone and Apple Watch screenshots with no personal
       data. Upload remains an owner action in App Store Connect.
 - [x] Availability and trader status are configured; 175 territories are
       selected and automatic release is enabled.
-- [ ] Upload the signed archive and wait for processing before submission.
+- [x] Upload the signed archive and wait for processing before submission.
       For a command-line owner upload, use
       `AppStore/ExportOptions-AppStore.plist`; never add account credentials to
       that file or the repository.
+- [x] Attach build `13`, save EN/RU/UK release notes, and submit iOS version
+      `1.0.2`. App Store Connect displayed `1 Item Submitted` and
+      `Waiting for Review` on 2026-08-23 at 18:55 Europe/Uzhgorod.
 
-## Physical acceptance
+## Physical acceptance (not performed in this Mac-only submission pass)
 
 - [ ] Fresh install and update both preserve the ledger.
 - [ ] Add, edit, delete, monthly report, backup, restore, CSV, reminders, and
