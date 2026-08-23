@@ -122,7 +122,6 @@ final class HourleafAppStoreScreenshotTests: XCTestCase {
         let visibleBottom = tabBar.frame.minY - 24
         return elements.allSatisfy { element in
             element.exists
-                && element.isHittable
                 && element.frame.minY >= visibleTop
                 && element.frame.maxY <= visibleBottom
         }

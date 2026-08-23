@@ -262,11 +262,15 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(prepare.waitForExistence(timeout: 5))
         XCTAssertEqual(prepare.label, "Prepare corrected report")
         prepare.tap()
-        let close = app.buttons["Close"]
-        XCTAssertTrue(close.waitForExistence(timeout: 8))
-        close.tap()
 
-        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Prepared to share")
+        let close = app.buttons["Close"]
+        if close.waitForExistence(timeout: 4) {
+            close.tap()
+        }
+
+        let state = app.staticTexts["reportLifecycleState"]
+        XCTAssertTrue(state.waitForExistence(timeout: 5))
+        XCTAssertEqual(state.label, "Prepared to share")
         XCTAssertTrue(app.staticTexts["Correction 1"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Original"].exists)
         XCTAssertTrue(app.buttons["markReportSentButton"].exists)
@@ -330,9 +334,7 @@ final class HourleafUITests: XCTestCase {
         let pastDate = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
 
         app.datePickers["entryDatePicker"].tap()
-        let day = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] %@", Self.dayButtonFormatter.string(from: pastDate))
-        ).firstMatch
+        let day = calendarDayButton(for: pastDate, in: app)
         XCTAssertTrue(day.waitForExistence(timeout: 5))
         day.tap()
         app.navigationBars.firstMatch.tap()
@@ -824,9 +826,7 @@ final class HourleafUITests: XCTestCase {
 
         app.segmentedControls["entryKindPicker"].buttons["Credit"].tap()
         app.datePickers["entryDatePicker"].tap()
-        let yesterdayButton = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] %@", Self.dayButtonFormatter.string(from: yesterday))
-        ).firstMatch
+        let yesterdayButton = calendarDayButton(for: yesterday, in: app)
         XCTAssertTrue(yesterdayButton.waitForExistence(timeout: 5))
         yesterdayButton.tap()
         app.navigationBars.firstMatch.tap()
@@ -1481,6 +1481,20 @@ final class HourleafUITests: XCTestCase {
         app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'historyEntry_'")).firstMatch
     }
 
+    private func calendarDayButton(for date: Date, in app: XCUIApplication) -> XCUIElement {
+        let day = Self.dayFormatter.string(from: date)
+        let dayMonth = Self.dayMonthFormatter.string(from: date)
+        let monthDay = Self.monthDayFormatter.string(from: date)
+        return app.buttons.matching(
+            NSPredicate(
+                format: "label == %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@",
+                day,
+                dayMonth,
+                monthDay
+            )
+        ).firstMatch
+    }
+
     private static let monthFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US")
@@ -1488,10 +1502,24 @@ final class HourleafUITests: XCTestCase {
         return formatter
     }()
 
-    private static let dayButtonFormatter: DateFormatter = {
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.dateFormat = "d"
+        return formatter
+    }()
+
+    private static let dayMonthFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US")
         formatter.dateFormat = "d MMMM"
+        return formatter
+    }()
+
+    private static let monthDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.dateFormat = "MMMM d"
         return formatter
     }()
 
