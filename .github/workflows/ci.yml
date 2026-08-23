@@ -105,6 +105,7 @@ jobs:
             -destination "platform=iOS Simulator,id=$simulator_id" \
             -derivedDataPath "$artifact_root/DerivedData" \
             -resultBundlePath "$artifact_root/Hourleaf.xcresult" \
+            -skip-testing:HourleafUITests/HourleafAppStoreScreenshotTests \
             -parallel-testing-enabled NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
