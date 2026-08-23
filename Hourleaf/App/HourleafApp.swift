@@ -74,6 +74,11 @@ final class HourleafAppLauncher: ObservableObject {
 
     init(arguments: [String]) {
         let uiTesting = arguments.contains("-uiTesting")
+        if uiTesting, arguments.contains("-resetTimeSelectionFeedbackUITest") {
+            UserDefaults.standard.removeObject(
+                forKey: TimeSelectionFeedbackPreference.storageKey
+            )
+        }
         let fixedTestNow = Self.fixedTestNow(in: arguments, isUITesting: uiTesting)
         let fixedClock = fixedTestNow.map(FixedUITestClock.init)
         let clock: @Sendable () -> Date = if let fixedClock {

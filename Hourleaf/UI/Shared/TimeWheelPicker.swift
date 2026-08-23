@@ -7,6 +7,9 @@ struct TimeWheelPicker: View {
     var usesDirectHourEntry = false
     var maximumDirectHours = 24 * 366
     var wheelHeight: CGFloat = 150
+    var selectionFeedbackEnabled = false
+
+    @State private var selectionFeedbackTrigger = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -15,18 +18,19 @@ struct TimeWheelPicker: View {
             } else {
                 wheel(
                     title: String(localized: "time.hours"),
-                    selection: $hours,
+                    selection: feedbackSelection($hours),
                     values: Array(0...maximumHours)
                 )
             }
             wheel(
                 title: String(localized: "time.minutes"),
-                selection: $minutes,
+                selection: feedbackSelection($minutes),
                 values: Array(0...59)
             )
         }
         .frame(height: wheelHeight)
         .dynamicTypeSize(.xSmall ... .xxxLarge)
+        .sensoryFeedback(.selection, trigger: selectionFeedbackTrigger)
     }
 
     private var directHourInput: some View {
@@ -64,5 +68,26 @@ struct TimeWheelPicker: View {
                 .frame(width: 50, alignment: .leading)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// Only Picker writes pass through this binding. Parent-driven updates,
+    /// including the reset after saving, update the source binding directly
+    /// and therefore do not request feedback.
+    private func feedbackSelection(_ selection: Binding<Int>) -> Binding<Int> {
+        Binding(
+            get: { selection.wrappedValue },
+            set: { selectedValue in
+                let previousValue = selection.wrappedValue
+                selection.wrappedValue = selectedValue
+                if TimeSelectionFeedbackPreference.shouldRequestFeedback(
+                    for: .userInteraction,
+                    isEnabled: selectionFeedbackEnabled,
+                    previousValue: previousValue,
+                    selectedValue: selectedValue
+                ) {
+                    selectionFeedbackTrigger.toggle()
+                }
+            }
+        )
     }
 }

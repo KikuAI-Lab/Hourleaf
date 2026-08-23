@@ -3,6 +3,8 @@ import SwiftUI
 struct QuickEntryView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @AppStorage(TimeSelectionFeedbackPreference.storageKey)
+    private var timeSelectionFeedbackEnabled = TimeSelectionFeedbackPreference.defaultValue
     @State private var kind: EntryKind = .service
     @State private var date = Date()
     @State private var hours = 0
@@ -139,7 +141,8 @@ struct QuickEntryView: View {
             TimeWheelPicker(
                 hours: $hours,
                 minutes: $minutes,
-                wheelHeight: usesCompactVerticalLayout ? 138 : 150
+                wheelHeight: usesCompactVerticalLayout ? 138 : 150,
+                selectionFeedbackEnabled: timeSelectionFeedbackEnabled
             )
             Divider()
 

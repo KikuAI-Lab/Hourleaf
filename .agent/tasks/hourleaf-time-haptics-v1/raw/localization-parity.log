@@ -1,0 +1,4 @@
+localization_plist_lint=PASS
+localization_key_parity=PASS
+locales=en,ru,uk
+keys_per_locale=378

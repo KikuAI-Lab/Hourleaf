@@ -1,0 +1,9 @@
+{
+  "test": "HourleafUITests.testTimeSelectionFeedbackTogglePersistsAcrossRelaunch",
+  "device": "iPhone 17 simulator",
+  "os": "iOS 26.5",
+  "result": "Passed",
+  "passedTests": 1,
+  "failedTests": 0,
+  "skippedTests": 0
+}

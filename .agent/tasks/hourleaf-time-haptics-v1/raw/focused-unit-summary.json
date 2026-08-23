@@ -1,0 +1,9 @@
+{
+  "suite": "TimeSelectionFeedbackPreferenceTests",
+  "device": "iPhone 17 simulator",
+  "os": "iOS 26.5",
+  "result": "Passed",
+  "passedTests": 3,
+  "failedTests": 0,
+  "skippedTests": 0
+}

@@ -134,7 +134,7 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(prepare.waitForExistence(timeout: 5))
         prepare.tap()
 
-        let close = app.buttons["Close"]
+        let close = app.buttons["header.closeButton"]
         XCTAssertTrue(close.waitForExistence(timeout: 8))
         close.tap()
 
@@ -263,7 +263,7 @@ final class HourleafUITests: XCTestCase {
         XCTAssertEqual(prepare.label, "Prepare corrected report")
         prepare.tap()
 
-        let close = app.buttons["Close"]
+        let close = app.buttons["header.closeButton"]
         if close.waitForExistence(timeout: 4) {
             close.tap()
         }
@@ -1258,6 +1258,45 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(scrollUntilVisible(voiceGuide, in: app))
         XCTAssertTrue(app.staticTexts["Add time with Siri"].exists)
         XCTAssertFalse(app.staticTexts["Shortcuts"].exists)
+    }
+
+    func testTimeSelectionFeedbackTogglePersistsAcrossRelaunch() {
+        let resetArgument = "-resetTimeSelectionFeedbackUITest"
+        let app = launchApp(additionalArguments: [resetArgument])
+        app.tabBars.buttons["Settings"].tap()
+
+        let toggle = app.switches["timeSelectionFeedbackToggle"]
+        XCTAssertTrue(scrollUntilHittable(toggle, in: app))
+        XCTAssertEqual(toggle.value as? String, "1")
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.84, dy: 0.5)).tap()
+        app.tabBars.buttons["Add"].tap()
+        app.tabBars.buttons["Settings"].tap()
+        let disabledToggle = app.switches["timeSelectionFeedbackToggle"]
+        XCTAssertTrue(scrollUntilHittable(disabledToggle, in: app))
+        XCTAssertEqual(disabledToggle.value as? String, "0")
+
+        app.terminate()
+        let relaunchedApp = launchApp()
+        relaunchedApp.tabBars.buttons["Settings"].tap()
+
+        let persistedToggle = relaunchedApp.switches["timeSelectionFeedbackToggle"]
+        XCTAssertTrue(scrollUntilHittable(persistedToggle, in: relaunchedApp))
+        XCTAssertEqual(persistedToggle.value as? String, "0")
+
+        // Restore the default so this persisted presentation preference cannot
+        // influence another UI test in the same installed app container.
+        persistedToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        relaunchedApp.tabBars.buttons["Add"].tap()
+        relaunchedApp.tabBars.buttons["Settings"].tap()
+        let enabledToggle = relaunchedApp.switches["timeSelectionFeedbackToggle"]
+        XCTAssertTrue(scrollUntilHittable(enabledToggle, in: relaunchedApp))
+        XCTAssertEqual(enabledToggle.value as? String, "1")
+        relaunchedApp.terminate()
+        let restoredApp = launchApp()
+        restoredApp.tabBars.buttons["Settings"].tap()
+        let restoredToggle = restoredApp.switches["timeSelectionFeedbackToggle"]
+        XCTAssertTrue(scrollUntilHittable(restoredToggle, in: restoredApp))
+        XCTAssertEqual(restoredToggle.value as? String, "1")
     }
 
     private func launchApp(additionalArguments: [String] = []) -> XCUIApplication {

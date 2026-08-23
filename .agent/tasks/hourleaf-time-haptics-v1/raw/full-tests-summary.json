@@ -1,0 +1,12 @@
+{
+  "scheme": "Hourleaf",
+  "device": "iPhone 17 simulator",
+  "os": "iOS 26.5",
+  "result": "Passed",
+  "unitAndIntegrationTests": 510,
+  "appOwnedUITests": 53,
+  "passedTests": 563,
+  "failedTests": 0,
+  "skippedTests": 0,
+  "excludedArtifactLane": "HourleafAppStoreScreenshotTests"
+}

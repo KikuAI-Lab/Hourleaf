@@ -9,6 +9,8 @@ struct SettingsScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var backupStatus: BackupConfidenceStatusModel
     @AppStorage(AppAppearance.storageKey) private var appearanceRawValue = AppAppearance.system.rawValue
+    @AppStorage(TimeSelectionFeedbackPreference.storageKey)
+    private var timeSelectionFeedbackEnabled = TimeSelectionFeedbackPreference.defaultValue
     @State private var showAddReminder = false
     @State private var showQuickSurfaceResetConfirmation = false
 
@@ -24,7 +26,7 @@ struct SettingsScreen: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("settings.appearance.title") {
+                Section {
                     Picker("settings.appearance.mode", selection: appearanceBinding) {
                         ForEach(AppAppearance.allCases) { appearance in
                             Text(appearance.localizedName).tag(appearance)
@@ -32,6 +34,17 @@ struct SettingsScreen: View {
                     }
                     .pickerStyle(.menu)
                     .accessibilityIdentifier("appearancePicker")
+
+                    Toggle(
+                        "settings.time_selection_feedback",
+                        isOn: $timeSelectionFeedbackEnabled
+                    )
+                    .accessibilityHint(Text("settings.time_selection_feedback_help"))
+                    .accessibilityIdentifier("timeSelectionFeedbackToggle")
+                } header: {
+                    Text("settings.appearance.title")
+                } footer: {
+                    Text("settings.time_selection_feedback_help")
                 }
 
                 Section("settings.reporting") {

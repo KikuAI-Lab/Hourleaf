@@ -1,0 +1,11 @@
+{
+  "result": "Passed",
+  "passedTests": 2,
+  "failedTests": 0,
+  "rootCause": "iOS 26.5 exposed the system share-sheet close label in the simulator language, not the app language.",
+  "correction": "The two share-sheet UI tests use the system accessibility identifier header.closeButton instead of localized text.",
+  "tests": [
+    "testClosingShareMenuStillRequiresExplicitMarkAsSent",
+    "testChangedReportKeepsSentOriginalAndPreparesCorrection"
+  ]
+}
