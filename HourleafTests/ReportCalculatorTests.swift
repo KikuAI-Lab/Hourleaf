@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import Hourleaf
 
@@ -129,7 +130,116 @@ final class ReportCalculatorTests: XCTestCase {
         XCTAssertEqual(reports[1].serviceCarryOut, 0)
     }
 
+    func testVersionedContractFixturesMatchCurrentReportCalculator() throws {
+        let fixture = try loadContractFixture()
+
+        XCTAssertEqual(fixture.contract, "hourleaf-report-service-year")
+        XCTAssertEqual(fixture.schemaVersion, 1)
+        XCTAssertEqual(
+            fixture.monthlyReportCases.map(\.id),
+            [
+                "carry-independent-ledgers",
+                "august-to-september-reset",
+                "round-nearest-boundary",
+                "discard-remainder",
+                "over-fifty-hours-is-not-capped"
+            ]
+        )
+
+        for fixtureCase in fixture.monthlyReportCases {
+            let reports = ReportCalculator.timeline(
+                entries: try fixtureCase.entries.map { entry in
+                    TimeEntry(
+                        kind: try XCTUnwrap(EntryKind(rawValue: entry.kind)),
+                        day: try XCTUnwrap(LocalDay(key: entry.day)),
+                        minutes: entry.minutes
+                    )
+                },
+                from: try XCTUnwrap(MonthKey(key: fixtureCase.from)),
+                through: try XCTUnwrap(MonthKey(key: fixtureCase.through)),
+                openingServiceCarry: fixtureCase.openingServiceCarry,
+                openingCreditCarry: fixtureCase.openingCreditCarry,
+                policies: try fixtureCase.policies.enumerated().map { index, policy in
+                    ReportingPolicy(
+                        effectiveMonth: try XCTUnwrap(MonthKey(key: policy.effectiveMonth)),
+                        mode: try XCTUnwrap(RemainderMode(rawValue: policy.mode)),
+                        createdAt: Date(timeIntervalSince1970: TimeInterval(index))
+                    )
+                }
+            )
+
+            XCTAssertEqual(reports.count, fixtureCase.expected.count, fixtureCase.id)
+            for (report, expected) in zip(reports, fixtureCase.expected) {
+                XCTAssertEqual(report.month.key, expected.month, fixtureCase.id)
+                XCTAssertEqual(report.rawServiceMinutes, expected.rawServiceMinutes, fixtureCase.id)
+                XCTAssertEqual(report.rawCreditMinutes, expected.rawCreditMinutes, fixtureCase.id)
+                XCTAssertEqual(report.serviceCarryIn, expected.serviceCarryIn, fixtureCase.id)
+                XCTAssertEqual(report.creditCarryIn, expected.creditCarryIn, fixtureCase.id)
+                XCTAssertEqual(report.serviceHours, expected.serviceHours, fixtureCase.id)
+                XCTAssertEqual(report.creditHours, expected.creditHours, fixtureCase.id)
+                XCTAssertEqual(report.serviceCarryOut, expected.serviceCarryOut, fixtureCase.id)
+                XCTAssertEqual(report.creditCarryOut, expected.creditCarryOut, fixtureCase.id)
+            }
+        }
+    }
+
     private func entry(_ kind: EntryKind, month: MonthKey, minutes: Int) -> TimeEntry {
         TimeEntry(kind: kind, day: LocalDay(year: month.year, month: month.month, day: 10), minutes: minutes)
+    }
+
+    private func loadContractFixture() throws -> ReportContractFixture {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let data = try Data(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Contracts/report-service-year-fixtures-v1.json"
+            )
+        )
+        return try JSONDecoder().decode(ReportContractFixture.self, from: data)
+    }
+
+    private struct ReportContractFixture: Decodable {
+        let contract: String
+        let schemaVersion: Int
+        let monthlyReportCases: [MonthlyReportCase]
+        let serviceYearCases: [IgnoredContractCase]
+        let formatterCases: [IgnoredContractCase]
+    }
+
+    private struct IgnoredContractCase: Decodable {}
+
+    private struct MonthlyReportCase: Decodable {
+        let id: String
+        let from: String
+        let through: String
+        let openingServiceCarry: Int
+        let openingCreditCarry: Int
+        let policies: [Policy]
+        let entries: [Entry]
+        let expected: [Expected]
+
+        struct Policy: Decodable {
+            let effectiveMonth: String
+            let mode: String
+        }
+
+        struct Entry: Decodable {
+            let kind: String
+            let day: String
+            let minutes: Int
+        }
+
+        struct Expected: Decodable {
+            let month: String
+            let rawServiceMinutes: Int
+            let rawCreditMinutes: Int
+            let serviceCarryIn: Int
+            let creditCarryIn: Int
+            let serviceHours: Int
+            let creditHours: Int
+            let serviceCarryOut: Int
+            let creditCarryOut: Int
+        }
     }
 }

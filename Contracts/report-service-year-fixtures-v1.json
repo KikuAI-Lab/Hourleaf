@@ -1,0 +1,287 @@
+{
+  "contract": "hourleaf-report-service-year",
+  "schemaVersion": 1,
+  "monthlyReportCases": [
+    {
+      "id": "carry-independent-ledgers",
+      "from": "2026-01",
+      "through": "2026-02",
+      "openingServiceCarry": 0,
+      "openingCreditCarry": 0,
+      "policies": [
+        {
+          "effectiveMonth": "2026-01",
+          "mode": "carry"
+        }
+      ],
+      "entries": [
+        {
+          "kind": "service",
+          "day": "2026-01-10",
+          "minutes": 3165
+        },
+        {
+          "kind": "credit",
+          "day": "2026-01-10",
+          "minutes": 440
+        }
+      ],
+      "expected": [
+        {
+          "month": "2026-01",
+          "rawServiceMinutes": 3165,
+          "rawCreditMinutes": 440,
+          "serviceCarryIn": 0,
+          "creditCarryIn": 0,
+          "serviceHours": 52,
+          "creditHours": 7,
+          "serviceCarryOut": 45,
+          "creditCarryOut": 20
+        },
+        {
+          "month": "2026-02",
+          "rawServiceMinutes": 0,
+          "rawCreditMinutes": 0,
+          "serviceCarryIn": 45,
+          "creditCarryIn": 20,
+          "serviceHours": 0,
+          "creditHours": 0,
+          "serviceCarryOut": 45,
+          "creditCarryOut": 20
+        }
+      ]
+    },
+    {
+      "id": "august-to-september-reset",
+      "from": "2026-08",
+      "through": "2026-09",
+      "openingServiceCarry": 0,
+      "openingCreditCarry": 0,
+      "policies": [
+        {
+          "effectiveMonth": "2026-08",
+          "mode": "carry"
+        }
+      ],
+      "entries": [
+        {
+          "kind": "service",
+          "day": "2026-08-10",
+          "minutes": 40
+        },
+        {
+          "kind": "credit",
+          "day": "2026-08-10",
+          "minutes": 20
+        }
+      ],
+      "expected": [
+        {
+          "month": "2026-08",
+          "rawServiceMinutes": 40,
+          "rawCreditMinutes": 20,
+          "serviceCarryIn": 0,
+          "creditCarryIn": 0,
+          "serviceHours": 0,
+          "creditHours": 0,
+          "serviceCarryOut": 0,
+          "creditCarryOut": 0
+        },
+        {
+          "month": "2026-09",
+          "rawServiceMinutes": 0,
+          "rawCreditMinutes": 0,
+          "serviceCarryIn": 0,
+          "creditCarryIn": 0,
+          "serviceHours": 0,
+          "creditHours": 0,
+          "serviceCarryOut": 0,
+          "creditCarryOut": 0
+        }
+      ]
+    },
+    {
+      "id": "round-nearest-boundary",
+      "from": "2026-01",
+      "through": "2026-01",
+      "openingServiceCarry": 0,
+      "openingCreditCarry": 0,
+      "policies": [
+        {
+          "effectiveMonth": "2026-01",
+          "mode": "roundNearest"
+        }
+      ],
+      "entries": [
+        {
+          "kind": "service",
+          "day": "2026-01-10",
+          "minutes": 749
+        },
+        {
+          "kind": "credit",
+          "day": "2026-01-10",
+          "minutes": 270
+        }
+      ],
+      "expected": [
+        {
+          "month": "2026-01",
+          "rawServiceMinutes": 749,
+          "rawCreditMinutes": 270,
+          "serviceCarryIn": 0,
+          "creditCarryIn": 0,
+          "serviceHours": 12,
+          "creditHours": 5,
+          "serviceCarryOut": 0,
+          "creditCarryOut": 0
+        }
+      ]
+    },
+    {
+      "id": "discard-remainder",
+      "from": "2026-01",
+      "through": "2026-01",
+      "openingServiceCarry": 0,
+      "openingCreditCarry": 0,
+      "policies": [
+        {
+          "effectiveMonth": "2026-01",
+          "mode": "discard"
+        }
+      ],
+      "entries": [
+        {
+          "kind": "service",
+          "day": "2026-01-10",
+          "minutes": 359
+        }
+      ],
+      "expected": [
+        {
+          "month": "2026-01",
+          "rawServiceMinutes": 359,
+          "rawCreditMinutes": 0,
+          "serviceCarryIn": 0,
+          "creditCarryIn": 0,
+          "serviceHours": 5,
+          "creditHours": 0,
+          "serviceCarryOut": 0,
+          "creditCarryOut": 0
+        }
+      ]
+    },
+    {
+      "id": "over-fifty-hours-is-not-capped",
+      "from": "2026-01",
+      "through": "2026-01",
+      "openingServiceCarry": 0,
+      "openingCreditCarry": 0,
+      "policies": [
+        {
+          "effectiveMonth": "2026-01",
+          "mode": "carry"
+        }
+      ],
+      "entries": [
+        {
+          "kind": "service",
+          "day": "2026-01-10",
+          "minutes": 3060
+        }
+      ],
+      "expected": [
+        {
+          "month": "2026-01",
+          "rawServiceMinutes": 3060,
+          "rawCreditMinutes": 0,
+          "serviceCarryIn": 0,
+          "creditCarryIn": 0,
+          "serviceHours": 51,
+          "creditHours": 0,
+          "serviceCarryOut": 0,
+          "creditCarryOut": 0
+        }
+      ]
+    }
+  ],
+  "serviceYearCases": [
+    {
+      "id": "service-year-excludes-credit",
+      "serviceYearContainingDate": "2026-08-01",
+      "baselineMinutes": 60,
+      "entries": [
+        {
+          "kind": "service",
+          "day": "2025-09-01",
+          "minutes": 100
+        },
+        {
+          "kind": "service",
+          "day": "2026-08-31",
+          "minutes": 200
+        },
+        {
+          "kind": "credit",
+          "day": "2026-05-01",
+          "minutes": 9000
+        },
+        {
+          "kind": "service",
+          "day": "2026-09-01",
+          "minutes": 400
+        }
+      ],
+      "expectedProgressMinutes": 360,
+      "goalTargetMinutes": 36000,
+      "expectedGoalExceeded": false
+    },
+    {
+      "id": "service-year-exceeds-goal-without-capping",
+      "serviceYearContainingDate": "2026-08-01",
+      "baselineMinutes": 39015,
+      "entries": [],
+      "expectedProgressMinutes": 39015,
+      "goalTargetMinutes": 36000,
+      "expectedGoalExceeded": true
+    }
+  ],
+  "formatterCases": [
+    {
+      "id": "formatter-en-zero-credit",
+      "month": "2026-07",
+      "language": "en",
+      "serviceHours": 52,
+      "creditHours": 0,
+      "bibleStudyCount": 0,
+      "expected": "July 2026\nHours: 52"
+    },
+    {
+      "id": "formatter-ru-zero-credit",
+      "month": "2026-07",
+      "language": "ru",
+      "serviceHours": 52,
+      "creditHours": 0,
+      "bibleStudyCount": 0,
+      "expected": "Июль 2026\nЧасы: 52"
+    },
+    {
+      "id": "formatter-uk-zero-credit",
+      "month": "2026-07",
+      "language": "uk",
+      "serviceHours": 52,
+      "creditHours": 0,
+      "bibleStudyCount": 0,
+      "expected": "Липень 2026\nГодини: 52"
+    },
+    {
+      "id": "formatter-en-credit-and-bible-study",
+      "month": "2026-08",
+      "language": "en",
+      "serviceHours": 52,
+      "creditHours": 7,
+      "bibleStudyCount": 1,
+      "expected": "August 2026\nHours: 52\nCredit hours: 7\nBible studies: 1"
+    }
+  ]
+}

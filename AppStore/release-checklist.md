@@ -6,10 +6,12 @@
 - [x] Full unit suite passes: 504 of 504 tests.
 - [x] Full UI suite passes 52 of 52 tests, including Light appearance, compact Add layout,
       Settings guides, accessibility text, and the existing ledger flows.
+- [ ] The first isolated `main` CI run passes with the portable report and
+      backup fixtures enabled.
 - [x] Signed release archive contains the iPhone app, Watch app, WidgetKit
       extension, app icons, all three localizations, and the required privacy
       manifests.
-- [ ] Signed distribution entitlements match the production App Group and
+- [x] Signed distribution entitlements match the production App Group and
       bundle identifiers.
 - [ ] Migration from the Personal Team build is verified using an exported
       Hourleaf backup before the old app is removed.
@@ -29,7 +31,8 @@
       `ITSAppUsesNonExemptEncryption` is `NO` in each shipping bundle.
 - [x] Prepare reviewed iPhone and Apple Watch screenshots with no personal
       data. Upload remains an owner action in App Store Connect.
-- [ ] Choose availability, trader status, and manual or automatic release.
+- [x] Availability and trader status are configured; 175 territories are
+      selected and automatic release is enabled.
 - [ ] Upload the signed archive and wait for processing before submission.
       For a command-line owner upload, use
       `AppStore/ExportOptions-AppStore.plist`; never add account credentials to

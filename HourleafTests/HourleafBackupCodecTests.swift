@@ -1,4 +1,5 @@
 @preconcurrency import CoreData
+import Foundation
 import XCTest
 @testable import Hourleaf
 
@@ -10,6 +11,20 @@ final class HourleafBackupCodecTests: XCTestCase {
         XCTAssertEqual(backup.byteCount, 3_426)
         XCTAssertEqual(backup.checksum.value, "ac775b74b60c458673a505ee9753a9764b32be90d982581ecf1c8699fcb7d77b")
         XCTAssertEqual(try HourleafBackupCodec.decodeAndVerify(backup.data), backup)
+    }
+
+    func testCheckedInCanonicalContractFixtureMatchesGoldenBytesAndDecodes() throws {
+        let fixtureData = try checkedInContractFixtureData()
+        let expected = try HourleafBackupCodec.encode(content: makeContent())
+
+        XCTAssertEqual(fixtureData, expected.data)
+        let verified = try HourleafBackupCodec.decodeAndVerify(fixtureData)
+        XCTAssertEqual(verified.byteCount, 3_426)
+        XCTAssertEqual(
+            verified.checksum.value,
+            "ac775b74b60c458673a505ee9753a9764b32be90d982581ecf1c8699fcb7d77b"
+        )
+        XCTAssertEqual(verified, expected)
     }
 
     func testShuffledArraysProduceTheSameCanonicalBytesAndStoreDigest() throws {
@@ -380,6 +395,17 @@ final class HourleafBackupCodecTests: XCTestCase {
 
     private func content(records: HourleafBackupRecordsV1, exportedAt: Double = 20) -> HourleafBackupContentV1 {
         HourleafBackupContentV1(exportedAt: exportedAt, records: records)
+    }
+
+    private func checkedInContractFixtureData() throws -> Data {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        return try Data(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Contracts/canonical-backup-v2.hourleafbackup"
+            )
+        )
     }
 
     private func makeContent() -> HourleafBackupContentV1 {

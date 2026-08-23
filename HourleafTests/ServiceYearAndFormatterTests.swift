@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import Hourleaf
 
@@ -109,5 +110,118 @@ final class ServiceYearAndFormatterTests: XCTestCase {
             ReportFormatter.format(report, settings: settings),
             "August 2026\nHours: 52\nCredit hours: 7\nBible studies: 1"
         )
+    }
+
+    func testVersionedContractFixturesMatchServiceYearAndFormatterBehavior() throws {
+        let fixture = try loadContractFixture()
+
+        XCTAssertEqual(fixture.contract, "hourleaf-report-service-year")
+        XCTAssertEqual(fixture.schemaVersion, 1)
+        XCTAssertEqual(
+            fixture.serviceYearCases.map(\.id),
+            [
+                "service-year-excludes-credit",
+                "service-year-exceeds-goal-without-capping"
+            ]
+        )
+
+        for fixtureCase in fixture.serviceYearCases {
+            let result = ServiceYearCalculator.progressMinutes(
+                entries: try fixtureCase.entries.map { entry in
+                    TimeEntry(
+                        kind: try XCTUnwrap(EntryKind(rawValue: entry.kind)),
+                        day: try XCTUnwrap(LocalDay(key: entry.day)),
+                        minutes: entry.minutes
+                    )
+                },
+                containing: try XCTUnwrap(LocalDay(key: fixtureCase.serviceYearContainingDate)),
+                baselineMinutes: fixtureCase.baselineMinutes
+            )
+
+            XCTAssertEqual(result, fixtureCase.expectedProgressMinutes, fixtureCase.id)
+            XCTAssertEqual(GoalPolicy.regularPioneer.targetMinutes, fixtureCase.goalTargetMinutes)
+            XCTAssertEqual(
+                result > fixtureCase.goalTargetMinutes,
+                fixtureCase.expectedGoalExceeded,
+                fixtureCase.id
+            )
+        }
+
+        XCTAssertEqual(
+            fixture.formatterCases.map(\.id),
+            [
+                "formatter-en-zero-credit",
+                "formatter-ru-zero-credit",
+                "formatter-uk-zero-credit",
+                "formatter-en-credit-and-bible-study"
+            ]
+        )
+
+        for fixtureCase in fixture.formatterCases {
+            var settings = AppSettings()
+            settings.reportLanguage = try XCTUnwrap(ReportLanguage(rawValue: fixtureCase.language))
+            let report = MonthlyReport(
+                month: try XCTUnwrap(MonthKey(key: fixtureCase.month)),
+                rawServiceMinutes: 0,
+                rawCreditMinutes: 0,
+                serviceCarryIn: 0,
+                creditCarryIn: 0,
+                serviceHours: fixtureCase.serviceHours,
+                creditHours: fixtureCase.creditHours,
+                serviceCarryOut: 0,
+                creditCarryOut: 0,
+                bibleStudyCount: fixtureCase.bibleStudyCount
+            )
+
+            XCTAssertEqual(ReportFormatter.format(report, settings: settings), fixtureCase.expected, fixtureCase.id)
+        }
+    }
+
+    private func loadContractFixture() throws -> ServiceYearFormatterContractFixture {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let data = try Data(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                "Contracts/report-service-year-fixtures-v1.json"
+            )
+        )
+        return try JSONDecoder().decode(ServiceYearFormatterContractFixture.self, from: data)
+    }
+
+    private struct ServiceYearFormatterContractFixture: Decodable {
+        let contract: String
+        let schemaVersion: Int
+        let monthlyReportCases: [IgnoredContractCase]
+        let serviceYearCases: [ServiceYearCase]
+        let formatterCases: [FormatterCase]
+    }
+
+    private struct IgnoredContractCase: Decodable {}
+
+    private struct ServiceYearCase: Decodable {
+        let id: String
+        let serviceYearContainingDate: String
+        let baselineMinutes: Int
+        let entries: [Entry]
+        let expectedProgressMinutes: Int
+        let goalTargetMinutes: Int
+        let expectedGoalExceeded: Bool
+
+        struct Entry: Decodable {
+            let kind: String
+            let day: String
+            let minutes: Int
+        }
+    }
+
+    private struct FormatterCase: Decodable {
+        let id: String
+        let month: String
+        let language: String
+        let serviceHours: Int
+        let creditHours: Int
+        let bibleStudyCount: Int
+        let expected: String
     }
 }

@@ -137,6 +137,9 @@ final class PersistenceAndAppModelTests: XCTestCase {
         let july = MonthKey(year: 2026, month: 7)
         let repository = makeRepository(clock: { now })
         try await configureLedgerStart(repository, month: july)
+        var reportSettings = try await repository.loadSettings()
+        reportSettings.reportLanguage = .english
+        try await repository.saveSettings(reportSettings)
         _ = try await AddTimeEntryCommand(repository: repository).execute(
             kind: .service,
             date: fixedDate(year: 2026, month: 7, day: 12),

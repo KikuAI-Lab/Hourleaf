@@ -26,6 +26,10 @@ screenshots in the Apple Watch section; do not create a second app record.
 The reviewed screenshot order, dimensions, and privacy boundary are documented
 in `screenshots/README.md`.
 
+Post-upload, review, crash, and performance checks are documented in
+[`release-monitoring.md`](release-monitoring.md). The runbook uses only Apple
+first-party surfaces and does not add analytics or another SDK to Hourleaf.
+
 `ExportOptions-AppStore.plist` is the reviewed automatic-signing export
 configuration for the owner-controlled upload. It deliberately contains no
 Team ID, Apple ID, password, API key, or other account material.
