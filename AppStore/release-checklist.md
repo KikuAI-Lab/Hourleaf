@@ -3,10 +3,13 @@
 ## Source and package
 
 - [x] Release guard and self-test pass.
-- [x] Full unit suite passes: 504 of 504 tests.
-- [x] Full UI suite passes 52 of 52 tests, including Light appearance, compact Add layout,
-      Settings guides, accessibility text, and the existing ledger flows.
-- [ ] The first isolated `main` CI run passes with the portable report and
+- [x] Full unit suite passes: 507 of 507 tests on isolated GitHub runners.
+- [x] Full app-owned UI suite passes 52 of 52 tests, including Light
+      appearance, compact Add layout, Settings guides, accessibility text, and
+      the existing ledger flows.
+- [x] Manual Store capture lane passes 1 of 1 with 12 EN/RU/UK attachments on
+      the canonical iPhone 17 / iOS 26.5 simulator.
+- [x] The final standard `main` CI run passes with the portable report and
       backup fixtures enabled.
 - [x] Signed release archive contains the iPhone app, Watch app, WidgetKit
       extension, app icons, all three localizations, and the required privacy
