@@ -1,9 +1,15 @@
 {
-  "test": "HourleafUITests.testTimeSelectionFeedbackTogglePersistsAcrossRelaunch",
-  "device": "iPhone 17 simulator",
+  "suite": "Restored Add-screen wheel, history edit, and Bible-study flows",
+  "device": "canonical iPhone 17 simulator",
   "os": "iOS 26.5",
   "result": "Passed",
-  "passedTests": 1,
+  "passedTests": 4,
   "failedTests": 0,
-  "skippedTests": 0
+  "skippedTests": 0,
+  "tests": [
+    "testQuickEntryAppearsInHistory",
+    "testEntryCanBeEdited",
+    "testQuickEntryBibleStudyCounterUpdatesCurrentMonthReport",
+    "testQuickEntryShowsBibleStudiesWithoutInitialScrollAtDefaultTextSize"
+  ]
 }

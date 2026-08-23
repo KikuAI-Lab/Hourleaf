@@ -12,6 +12,7 @@ struct QuickEntryView: View {
     @State private var note = ""
     @State private var isSaving = false
     @State private var didInitializeDate = false
+    @State private var bibleStudyFeedback = SelectionHapticFeedback()
     @FocusState private var noteFocused: Bool
 
     private var previousMonth: MonthKey {
@@ -51,6 +52,7 @@ struct QuickEntryView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
+            .scrollBounceBehavior(.basedOnSize)
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: model.quickEntryResetGeneration) { _, _ in
                 resetDraft()
@@ -270,7 +272,7 @@ struct QuickEntryView: View {
     ) -> some View {
         HStack(spacing: 6) {
             Button {
-                Task { _ = await model.updateBibleStudyCount(count - 1, for: month) }
+                updateBibleStudyCount(count - 1, for: month)
             } label: {
                 Image(systemName: "minus")
                     .frame(width: 36, height: 36)
@@ -289,7 +291,7 @@ struct QuickEntryView: View {
                 .accessibilityIdentifier("bibleStudyCount")
 
             Button {
-                Task { _ = await model.updateBibleStudyCount(count + 1, for: month) }
+                updateBibleStudyCount(count + 1, for: month)
             } label: {
                 Image(systemName: "plus")
                     .frame(width: 36, height: 36)
@@ -298,6 +300,17 @@ struct QuickEntryView: View {
             .disabled(isUpdating || count >= MonthlyBibleStudyCount.allowedRange.upperBound)
             .accessibilityLabel(Text("quick.bible_studies.increase"))
             .accessibilityIdentifier("increaseBibleStudyCountButton")
+        }
+    }
+
+    private func updateBibleStudyCount(_ count: Int, for month: MonthKey) {
+        if timeSelectionFeedbackEnabled {
+            bibleStudyFeedback.prepare()
+        }
+        Task {
+            guard await model.updateBibleStudyCount(count, for: month),
+                  timeSelectionFeedbackEnabled else { return }
+            bibleStudyFeedback.play()
         }
     }
 

@@ -176,8 +176,8 @@
 "settings.appearance.system" = "Match iPhone";
 "settings.appearance.light" = "Light";
 "settings.appearance.dark" = "Dark";
-"settings.time_selection_feedback" = "Vibrate when choosing time";
-"settings.time_selection_feedback_help" = "iPhone gives a light vibration when hours or minutes change.";
+"settings.time_selection_feedback" = "Light vibration";
+"settings.time_selection_feedback_help" = "A light tap when you choose hours, minutes, or Bible studies.";
 "settings.reporting" = "Reporting";
 "settings.report_language" = "Report language";
 "settings.credit_label" = "Credit wording";

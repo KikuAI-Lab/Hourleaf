@@ -9,28 +9,30 @@ struct TimeWheelPicker: View {
     var wheelHeight: CGFloat = 150
     var selectionFeedbackEnabled = false
 
-    @State private var selectionFeedbackTrigger = false
+    @State private var selectionFeedback = SelectionHapticFeedback()
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: usesDirectHourEntry ? 8 : 0) {
             if usesDirectHourEntry {
                 directHourInput
             } else {
                 wheel(
                     title: String(localized: "time.hours"),
-                    selection: feedbackSelection($hours),
+                    selection: $hours,
                     values: Array(0...maximumHours)
                 )
             }
             wheel(
                 title: String(localized: "time.minutes"),
-                selection: feedbackSelection($minutes),
+                selection: $minutes,
                 values: Array(0...59)
             )
         }
         .frame(height: wheelHeight)
         .dynamicTypeSize(.xSmall ... .xxxLarge)
-        .sensoryFeedback(.selection, trigger: selectionFeedbackTrigger)
+        .onAppear {
+            selectionFeedback.prepare()
+        }
     }
 
     private var directHourInput: some View {
@@ -54,25 +56,30 @@ struct TimeWheelPicker: View {
     }
 
     private func wheel(title: String, selection: Binding<Int>, values: [Int]) -> some View {
-        HStack(spacing: 0) {
-            Picker(title, selection: selection) {
+        ZStack(alignment: .trailing) {
+            Picker(title, selection: feedbackSelection(selection)) {
                 ForEach(values, id: \.self) { value in
                     Text("\(value)").tag(value)
                 }
             }
             .pickerStyle(.wheel)
             .accessibilityLabel(title)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+
             Text(title)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
                 .frame(width: 50, alignment: .leading)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
     }
 
-    /// Only Picker writes pass through this binding. Parent-driven updates,
-    /// including the reset after saving, update the source binding directly
-    /// and therefore do not request feedback.
+    /// SwiftUI commits the wheel binding after the native wheel settles on the
+    /// physical device. Parent-driven resets bypass this binding and stay quiet.
     private func feedbackSelection(_ selection: Binding<Int>) -> Binding<Int> {
         Binding(
             get: { selection.wrappedValue },
@@ -85,7 +92,7 @@ struct TimeWheelPicker: View {
                     previousValue: previousValue,
                     selectedValue: selectedValue
                 ) {
-                    selectionFeedbackTrigger.toggle()
+                    selectionFeedback.play()
                 }
             }
         )

@@ -1,7 +1,7 @@
 {
   "task": "hourleaf-time-haptics-v1",
   "verdict": "PASS",
-  "review_mode": "fresh-read-only-cold-review",
+  "review_mode": "final-read-only-after-owner-scope-decision",
   "findings": [],
   "acceptance": {
     "AC1": "PASS",
@@ -9,7 +9,10 @@
     "AC3": "PASS",
     "AC4": "PASS",
     "AC5": "PASS",
-    "AC6": "PASS"
+    "AC6": "PASS",
+    "AC7": "PASS",
+    "AC8": "PASS",
+    "AC9": "PASS"
   },
-  "residual_risk": "Simulator evidence cannot prove subjective Taptic Engine feel. Physical-device acceptance is deferred to a later signed next-version build; no physical iPhone or Watch was accessed and 1.0.2 (13) was not changed or uploaded."
+  "residual_risk": "Simulator tests cannot measure subjective haptic strength. Acceptance relies on the owner's prior physical confirmation of the exact restored Core Haptics path while unplugged; per-numeral scrolling feedback is intentionally out of scope."
 }

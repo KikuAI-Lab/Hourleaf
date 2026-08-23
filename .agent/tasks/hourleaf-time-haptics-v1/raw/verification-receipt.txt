@@ -1,39 +1,35 @@
-Hourleaf time-selection haptics — final verification receipt
-Date: 2026-08-23
-Device: canonical iPhone 17 simulator, iOS 26.5
+Hourleaf settled-time and Bible-study haptics — final verification receipt
+Date: 2026-08-24
+Simulator: canonical iPhone 17, iOS 26.5
+Physical preview: isolated Hourleaf Haptic Test on iPhone 15 Pro
 Xcode: 26.6 (17F113)
 
 1. Focused feedback policy and localization tests
    xcodebuild test ... -only-testing:HourleafTests/TimeSelectionFeedbackPreferenceTests
    Result: 3 passed, 0 failed, 0 skipped.
 
-2. Focused Settings default, toggle, and relaunch persistence flow
-   xcodebuild test ...
-     -only-testing:HourleafUITests/HourleafUITests/testTimeSelectionFeedbackTogglePersistsAcrossRelaunch
-   Result: 1 passed, 0 failed, 0 skipped.
+2. Focused restored interaction flows
+   xcodebuild test ... with four Add/history/Bible-study UI cases
+   Result: 4 passed, 0 failed, 0 skipped.
+   Visual readback: native wheels fit evenly inside the card; Bible-study
+   controls are visible without initial scrolling.
 
-3. Stable CI-equivalent suite
-   xcodebuild test -project Hourleaf.xcodeproj -scheme Hourleaf \
-     -destination 'platform=iOS Simulator,id=<canonical-device>' \
-     -derivedDataPath <validated-mktemp-root>/DerivedData \
-     -skip-testing:HourleafUITests/HourleafAppStoreScreenshotTests \
-     -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO
-   Result: 563 passed, 0 failed, 0 skipped: 510 unit/integration and
-   53 app-owned UI tests.
+3. Complete unit and integration suite
+   xcodebuild test ... -only-testing:HourleafTests
+   Result: 510 passed, 0 failed, 0 skipped.
 
-4. Share-sheet compatibility readback
-   The original run exposed a pre-existing localized system-button selector.
-   The captured hierarchy identified header.closeButton; the two affected
-   sharing tests passed after the test-only selector correction, and both were
-   included in the clean 563/563 run.
+4. Complete stable app-owned UI suite
+   xcodebuild test ... -only-testing:HourleafUITests/HourleafUITests
+   Result: 53 passed, 0 failed, 0 skipped.
+   Combined stable total: 563 passed, 0 failed, 0 skipped.
 
 5. Unsigned Release build
    xcodebuild build -project Hourleaf.xcodeproj -scheme Hourleaf \
      -configuration Release -destination 'generic/platform=iOS Simulator' \
-     -derivedDataPath <validated-mktemp-root>/ReleaseDerivedData \
+     -derivedDataPath <validated-mktemp-root>/DerivedData-release-restored \
      CODE_SIGNING_ALLOWED=NO
    Result: BUILD SUCCEEDED for Hourleaf, HourleafQuickSurfaces, and
-   HourleafWatch. Bundle readback remained 1.0.2 (13) for all three targets.
+   HourleafWatch. Bundle readback: 1.0.2 (13).
 
 6. Static and release checks
    scripts/verify-release-readiness.sh — PASS
@@ -41,11 +37,14 @@ Xcode: 26.6 (17F113)
    git diff --check — PASS
    EN/RU/UK Localizable.strings plist lint — PASS
    EN/RU/UK localization key parity — PASS, 378 keys per locale
-   Release-boundary diff check — PASS; no project, entitlement, privacy,
-   Watch source, or version file changed.
+   Experimental UIPickerView/scroll diagnostics absence — PASS
 
-7. Scope and device boundary
-   No physical iPhone or Apple Watch was installed, mirrored, or controlled.
-   No App Store build was bumped, archived, uploaded, replaced, or withdrawn.
-   Simulator proves policy, UI wiring, persistence, and regression behavior;
-   it does not prove physical Taptic Engine feel.
+7. Physical and privacy boundary
+   The owner previously confirmed the Core Haptics response after a wheel
+   settled and after Bible-study count changes while the iPhone was unplugged.
+   Per-numeral scrolling feedback was later dropped by owner decision.
+   The final restored source was built, separately signed, installed, and
+   launched only as com.kikuai.hourleaf.hapticpreview with isolated database
+   UUID B5EE266B-DA58-44DF-891A-65C8D713D450.
+   The App Store Hourleaf bundle and ledger were not uninstalled or modified.
+   No App Store archive, upload, submission, replacement, or withdrawal ran.

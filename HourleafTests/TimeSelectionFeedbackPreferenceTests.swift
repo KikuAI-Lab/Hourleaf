@@ -55,19 +55,19 @@ final class TimeSelectionFeedbackPreferenceTests: XCTestCase {
     func testSettingsCopyExistsInEverySupportedLanguage() throws {
         let expected: [String: [String: String]] = [
             "en": [
-                "settings.time_selection_feedback": "Vibrate when choosing time",
+                "settings.time_selection_feedback": "Light vibration",
                 "settings.time_selection_feedback_help":
-                    "iPhone gives a light vibration when hours or minutes change."
+                    "A light tap when you choose hours, minutes, or Bible studies."
             ],
             "ru": [
-                "settings.time_selection_feedback": "Вибрация при выборе времени",
+                "settings.time_selection_feedback": "Лёгкая вибрация",
                 "settings.time_selection_feedback_help":
-                    "iPhone слегка вибрирует при изменении часов или минут."
+                    "Лёгкий отклик при выборе часов, минут или числа изучений Библии."
             ],
             "uk": [
-                "settings.time_selection_feedback": "Вібрація під час вибору часу",
+                "settings.time_selection_feedback": "Легка вібрація",
                 "settings.time_selection_feedback_help":
-                    "iPhone легко вібрує під час зміни годин або хвилин."
+                    "Легкий відгук під час вибору годин, хвилин або кількості вивчень Біблії."
             ]
         ]
 

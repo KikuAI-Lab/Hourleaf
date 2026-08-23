@@ -2,70 +2,85 @@
 
 ## Final verdict
 
-All acceptance criteria have current PASS evidence. The fresh read-only cold
-review found no actionable correctness, privacy, accessibility, or scope
-issues; see `verdict.json`.
+PASS. Hourleaf uses the owner's accepted restrained behavior: one light
+confirmation when an Add-screen time wheel commits after settling, plus one
+confirmation after a successful Bible-study count change. Per-numeral scrolling
+feedback and its experimental picker wrapper are absent.
 
-## AC1 — PASS
+## AC1 — PASS: settled-time confirmation
 
-- The Add screen's hour and minute wheel bindings request SwiftUI's native
-  `sensoryFeedback(.selection)` only after a changed manual selection.
-- Focused feedback-policy tests passed 3/3.
-- The native platform primitive adds no custom pattern, permission, SDK, or
-  dependency.
+- `TimeWheelPicker` remains SwiftUI's native wheel and requests feedback only
+  from its Picker-facing binding after a changed manual value is committed.
+- The Core Haptics transient is the same platform path the owner felt on the
+  unplugged iPhone before the later per-numeral experiment. The owner explicitly
+  asked to restore this behavior and drop feedback for every passing numeral.
+- Focused policy tests passed 3/3; the relevant Add/edit UI flows passed 4/4.
 
-## AC2 — PASS
+## AC2 — PASS: user control
 
-- A single native Settings toggle, enabled by default, stores its value in
-  local `UserDefaults` through `@AppStorage`.
-- The focused UI flow proved default-on, disable, navigation retention,
-  relaunch persistence, re-enable, and a second relaunch: 1/1 PASS.
+- One native Settings toggle controls time and Bible-study feedback. It defaults
+  to enabled and persists locally through `@AppStorage`.
+- The complete UI suite includes the disable, navigation, relaunch, re-enable,
+  and second-relaunch persistence flow.
 
-## AC3 — PASS
+## AC3 — PASS: no false feedback
 
-- Feedback is triggered only in the Picker-facing binding setter. Parent
-  updates, including the post-save reset, write the source state directly and
-  bypass it; same-value reconciliation is ignored.
-- The pure policy test covers disabled, unchanged, and external-update cases.
+- Initial rendering, identical values, parent-driven binding changes, and the
+  post-save reset bypass the Picker-facing setter or fail the pure trigger
+  policy, so they remain quiet.
 
-## AC4 — PASS
+## AC4 — PASS: localization and accessibility
 
-- Settings uses an accessible native Toggle with a concise label, hint, and
-  footer.
+- The native Toggle has a plain-language title, hint, visible footer, and native
+  accessibility state.
 - EN/RU/UK plist lint and complete key parity passed with 378 keys per locale.
-- Focused tests verify the exact localized title and explanation in all three
-  supported languages.
+- Focused tests verify the exact copy in all three supported languages.
 
-## AC5 — PASS
+## AC5 — PASS: minimal platform implementation
 
-- Only Quick Entry opts into feedback; the shared picker defaults to off, so
-  history editing, timer review, and Apple Watch behavior are unchanged.
-- The final diff changes no Watch source, project, entitlement, privacy,
-  storage-schema, or version file.
-- The Release build validated the iPhone app, Quick Surfaces extension, and
-  embedded Watch app, all still reading 1.0.2 (13).
+- The implementation uses Core Haptics with a UIKit light-impact fallback and
+  adds no dependency, permission, analytics, backend, entitlement, or schema.
+- History editing, timer review, and Apple Watch do not opt into the feedback.
 
-## AC6 — PASS
+## AC6 — PASS: verification
 
-- Focused unit tests: 3/3 PASS.
-- Focused Settings UI test: 1/1 PASS.
-- Clean stable suite: 563/563 PASS, comprising 510 unit/integration tests and
-  53 app-owned UI tests.
-- Unsigned generic-simulator Release build: PASS for all three targets.
-- Release guard, guard self-test, `git diff --check`, localization lint, and
-  localization parity: PASS.
+- Focused tests: 3 unit + 4 relevant UI = 7/7 PASS.
+- Complete unit/integration suite: 510/510 PASS.
+- Complete stable app-owned UI suite: 53/53 PASS.
+- Total stable suite: 563/563 PASS.
+- Unsigned generic-simulator Release build: PASS for Hourleaf,
+  HourleafQuickSurfaces, and HourleafWatch; bundle readback remains 1.0.2 (13).
+- Release guard, guard self-test, localization lint/parity, experimental-code
+  absence check, and `git diff --check`: PASS.
 
-## Test-maintenance correction
+## AC7 — PASS: wheel interaction area and width
 
-The first full run exposed an unrelated iOS 26.5 test assumption: the system
-Share Sheet close button followed the simulator language and was labelled in
-Russian while Hourleaf launched in English. The two sharing tests now select
-Apple's `header.closeButton` accessibility identifier. Both targeted tests and
-the final full suite pass; application sharing behavior was not changed.
+- Each native wheel owns one half of the time row, clips within that half, and
+  exposes the surrounding rectangle as its interaction area. Unit labels do not
+  intercept touches.
+- The fresh iPhone simulator screenshot was visually inspected: both wheels fit
+  evenly within the card, without the experimental horizontal spread.
 
-## Residual acceptance boundary
+## AC8 — PASS: stable Add page
 
-Simulator testing cannot prove the subjective physical strength of the Taptic
-Engine response. A feel check can be done in a later signed next-version build;
-this task intentionally did not access a physical iPhone or Watch and did not
-change or upload the already-submitted 1.0.2 (13) build.
+- `.scrollBounceBehavior(.basedOnSize)` keeps the page fixed when its content
+  fits while preserving real scrolling for compact screens, accessibility text,
+  banners, and the keyboard.
+- The default-size UI check proves that the Bible-study controls are visible
+  without an initial scroll.
+
+## AC9 — PASS: Bible-study confirmation
+
+- The `+` and `−` controls prepare feedback before the repository request and
+  play it only after `updateBibleStudyCount` succeeds while the preference is
+  enabled.
+- The owner previously confirmed this Core Haptics path on the unplugged iPhone;
+  the focused UI test proves the count reaches the current-month report.
+
+## Device and data boundary
+
+- Physical verification used only the separately signed `Hourleaf Haptic Test`
+  app (`com.kikuai.hourleaf.hapticpreview`) with isolated database UUID
+  `B5EE266B-DA58-44DF-891A-65C8D713D450` on the owner's iPhone 15 Pro.
+- The App Store Hourleaf bundle and ledger were not uninstalled, overwritten,
+  migrated, or modified. No Store build was archived, uploaded, or submitted.

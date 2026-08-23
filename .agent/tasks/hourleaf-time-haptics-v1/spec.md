@@ -10,11 +10,28 @@ acceptance criterion passes; implementation truth remains in code and tests.
 Add a light vibration to the hour and minute counters for a more satisfying
 response, and let the user disable it in Settings.
 
+## Physical-device correction — 2026-08-23/24
+
+The owner tested the signed build on an iPhone 15 Pro and could not feel either
+SwiftUI `.sensoryFeedback(.selection)` or `.impact(weight: .light, intensity: 1)`
+while spinning the wheels. The task was reopened because an API request alone
+was not acceptance; the enabled interaction needed a restrained but clearly
+perceptible physical tap on the owner's device.
+
+Physical diagnosis later established that the earlier "no feedback" reports
+were made while the iPhone was charging, which suppressed the felt response in
+the owner's setup. Once unplugged, Core Haptics was perceptible after the wheel
+settled and on the Bible-study counter. After testing the per-numeral experiment,
+the owner explicitly removed it from scope. The accepted behavior is one light
+confirmation after a time wheel commits its value, plus the same confirmation
+when the Bible-study counter changes successfully.
+
 ## Acceptance criteria
 
-- **AC1 — Native light feedback:** A manual change made through either the
-  iPhone hour wheel or minute wheel requests one subtle native selection
-  feedback event when feedback is enabled.
+- **AC1 — Settled-time feedback:** A manual change made through either the
+  iPhone hour wheel or minute wheel produces one restrained, perceptible
+  confirmation after the wheel commits its selected value when feedback is
+  enabled. Per-numeral feedback during scrolling is explicitly out of scope.
 - **AC2 — User control:** A single ordinary-language Settings toggle controls
   this feedback. It is enabled by default and persists locally between app
   launches.
@@ -29,19 +46,32 @@ response, and let the user disable it in Settings.
 - **AC6 — Verification:** Focused policy/settings tests, relevant UI tests, the
   complete unit suite, the stable app-owned UI suite, Release build, release
   guard, localization validation, and `git diff --check` pass.
+- **AC7 — Wheel interaction area:** The visual design stays native while the
+  wheel owns the surrounding half-row hit area, including the noninteractive
+  unit-label overlay.
+- **AC8 — No unnecessary page drag:** The Add screen does not rubber-band when
+  its content fits, while retaining scrolling when content truly exceeds the
+  viewport for small screens, accessibility sizes, banners, or the keyboard.
+- **AC9 — Bible-study counter feedback:** A successful increase or decrease of
+  the monthly Bible-study counter produces one light selection tick when the
+  same feedback setting is enabled. Rejected, disabled, or failed updates do
+  not request feedback.
 
 ## Constraints
 
-- Hourleaf 1.0.2 (13) is already Waiting for Review and must not be replaced,
-  withdrawn, rebuilt, bumped, or uploaded as part of this task.
+- Do not change the App Store version/build, archive, upload, submit, withdraw,
+  or replace a Store build as part of this source correction.
 - Preserve the local ledger and all existing defaults.
 - Keep Settings calm: one toggle and one short consequence-focused sentence.
-- Do not install on, mirror, or control a physical iPhone or Apple Watch.
+- Physical verification must use the separate signed `Hourleaf Haptic Test` bundle
+  (`com.kikuai.hourleaf.hapticpreview`). Never overwrite, uninstall, or mutate
+  the App Store Hourleaf bundle or its ledger. Apple Watch remains out of scope.
 
 ## Non-goals
 
 - Apple Watch crown haptics.
-- Success, error, notification, navigation, or button haptics.
+- Success, error, notification, navigation, save-button, or unrelated button
+  haptics.
 - Custom vibration patterns or intensity controls.
 - A new onboarding step, animation, telemetry event, or release submission.
 
@@ -51,18 +81,21 @@ response, and let the user disable it in Settings.
   Add screen.
 - The preference belongs in local UserDefaults/AppStorage alongside existing
   lightweight presentation preferences, not in the ministry ledger or backup.
-- Native selection feedback is the appropriate strength; stronger impact or
-  success feedback would conflict with Hourleaf's calm interaction style.
+- Use the physically proven lightweight Core Haptics transient at the committed
+  wheel selection; custom wheel wrappers, scroll introspection, stronger
+  patterns, and success feedback remain out of scope.
 
 ## Verification plan
 
-1. Unit-test the default-on preference value and the user-vs-programmatic
-   feedback trigger policy as pure Swift.
-2. UI-test Settings discoverability, default-on state, off/on changes, and
-   relaunch persistence without claiming that Simulator proves vibration.
+1. Unit-test the default-on preference value, localized copy, and the
+   user-vs-programmatic feedback trigger policy as pure Swift.
+2. UI-test Settings discoverability and persistence plus the successful
+   Bible-study count/report flow without claiming that Simulator proves feel.
 3. Run the relevant focused tests, then the complete stable CI-equivalent unit
    and app-owned UI suites on the one canonical iPhone simulator.
 4. Run unsigned Release build, release guard, localization/key checks, and
    `git diff --check`.
-5. Record exact commands and results in the task evidence bundle; a physical
-   feel check remains optional owner acceptance for a later signed build.
+5. Install only the isolated Haptic Test bundle on the connected iPhone 15 Pro and
+   confirm settled-time feedback, Bible-study counter feedback, wheel area, and
+   page stability using the owner's accepted physical observations.
+6. Record exact commands and results in the task evidence bundle.

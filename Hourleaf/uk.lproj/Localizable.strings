@@ -176,8 +176,8 @@
 "settings.appearance.system" = "Як на iPhone";
 "settings.appearance.light" = "Світла";
 "settings.appearance.dark" = "Темна";
-"settings.time_selection_feedback" = "Вібрація під час вибору часу";
-"settings.time_selection_feedback_help" = "iPhone легко вібрує під час зміни годин або хвилин.";
+"settings.time_selection_feedback" = "Легка вібрація";
+"settings.time_selection_feedback_help" = "Легкий відгук під час вибору годин, хвилин або кількості вивчень Біблії.";
 "settings.reporting" = "Звітність";
 "settings.report_language" = "Мова звіту";
 "settings.credit_label" = "Підпис кредиту";

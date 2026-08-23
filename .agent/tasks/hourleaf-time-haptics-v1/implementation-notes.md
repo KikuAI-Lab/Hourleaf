@@ -1,30 +1,29 @@
 # Implementation notes
 
-- The interaction uses SwiftUI's native iOS 17 `sensoryFeedback(.selection)`
-  instead of a UIKit generator, custom pattern, dependency, or permission.
-- `TimeWheelPicker` keeps feedback disabled by default because it is shared by
-  Add, history editing, and timer review. Only `QuickEntryView` opts into the
-  preference, which preserves the frozen Add-screen scope.
-- The feedback trigger changes only inside the Picker-facing binding setter.
-  Parent updates bypass that setter, and identical values are ignored, so
-  opening the screen and resetting the form after save request no feedback.
-- The enabled-by-default preference is local `UserDefaults`/`@AppStorage`
-  presentation state. It does not alter Core Data, ledger backups, reports,
-  Watch state, permissions, or synchronization.
-- Settings uses one native Toggle under Appearance with consequence-focused
-  copy. The title avoids the technical term “haptics,” and the explanation is
-  localized in English, Russian, and Ukrainian.
-- The UI persistence test resets only this preference behind the existing
-  `-uiTesting` boundary. iOS 26 exposes the switch as a full-row accessibility
-  element, so the test taps the physical switch side deliberately, re-enters
-  Settings, then proves both disabled and restored states after relaunch.
-- Simulator verifies trigger policy, UI wiring, and persistence but cannot
-  prove Taptic Engine feel. A physical feel check belongs to a later signed
-  next-version build; no physical device is touched in this task.
-- A pre-existing share-sheet UI test exposed an iOS 26.5 localization issue:
-  the system close button was labelled in Russian even while Hourleaf launched
-  in English. The two share-sheet tests now use Apple's accessibility
-  identifier `header.closeButton` instead of localized text; both pass.
-- Lazy-senior result: the native SwiftUI feedback primitive is the lowest
-  honest rung. No custom haptic engine, dependency, wrapper, or GitHub prior-art
-  search is justified for this platform-local interaction.
+- The final scope follows the owner's physical-device decision: keep one light
+  confirmation after an hour or minute wheel settles, keep feedback for a
+  successful Bible-study count change, and remove per-numeral scrolling
+  feedback.
+- `TimeWheelPicker` remains SwiftUI's native wheel. The temporary
+  `UIPickerView`/scroll-observation experiment and all diagnostic hooks were
+  removed after it failed to improve the physical result and regressed width.
+- The wheel uses the existing Picker-facing binding to distinguish a committed
+  manual value from parent-driven updates. Initial rendering, identical values,
+  and the post-save form reset remain quiet.
+- A small Core Haptics helper provides the exact lightweight transient that was
+  perceptible on the owner's unplugged iPhone, with a UIKit light-impact
+  fallback. It adds no permission, dependency, analytics, or backend.
+- The Bible-study `+` and `−` controls prepare feedback before the repository
+  operation and play it only after a successful count change. Rejected and
+  disabled actions stay quiet.
+- One enabled-by-default local `@AppStorage` preference controls both behaviors.
+  It does not touch Core Data, backups, reports, synchronization, or Watch data.
+- The Settings label and short explanation are localized in English, Russian,
+  and Ukrainian. The native Toggle supplies its standard accessible state.
+- The Add screen keeps `.scrollBounceBehavior(.basedOnSize)`: it stays fixed
+  when content fits and still scrolls for compact screens, large text, banners,
+  and the keyboard. Each wheel owns its half-row hit area; unit labels do not
+  intercept touches.
+- Device verification used only the isolated `Hourleaf Haptic Test` bundle
+  (`com.kikuai.hourleaf.hapticpreview`) and its separate database UUID. The
+  App Store Hourleaf bundle and ledger were never uninstalled or modified.

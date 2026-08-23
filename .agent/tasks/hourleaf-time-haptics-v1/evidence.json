@@ -2,11 +2,14 @@
   "task": "hourleaf-time-haptics-v1",
   "status": "PASS",
   "acceptance": [
-    {"id": "AC1", "status": "PASS", "proof": ["raw/focused-unit-summary.json", "raw/verification-receipt.txt"]},
-    {"id": "AC2", "status": "PASS", "proof": ["raw/focused-ui-summary.json"]},
+    {"id": "AC1", "status": "PASS", "proof": ["raw/focused-unit-summary.json", "raw/focused-ui-summary.json", "raw/verification-receipt.txt"]},
+    {"id": "AC2", "status": "PASS", "proof": ["raw/full-tests-summary.json", "raw/verification-receipt.txt"]},
     {"id": "AC3", "status": "PASS", "proof": ["raw/focused-unit-summary.json", "raw/verification-receipt.txt"]},
     {"id": "AC4", "status": "PASS", "proof": ["raw/focused-unit-summary.json", "raw/localization-parity.log"]},
     {"id": "AC5", "status": "PASS", "proof": ["raw/verification-receipt.txt"]},
-    {"id": "AC6", "status": "PASS", "proof": ["raw/full-tests-summary.json", "raw/share-sheet-compat-summary.json", "raw/verification-receipt.txt"]}
+    {"id": "AC6", "status": "PASS", "proof": ["raw/full-tests-summary.json", "raw/verification-receipt.txt"]},
+    {"id": "AC7", "status": "PASS", "proof": ["raw/focused-ui-summary.json", "raw/verification-receipt.txt"]},
+    {"id": "AC8", "status": "PASS", "proof": ["raw/focused-ui-summary.json", "raw/full-tests-summary.json"]},
+    {"id": "AC9", "status": "PASS", "proof": ["raw/focused-ui-summary.json", "raw/verification-receipt.txt"]}
   ]
 }
