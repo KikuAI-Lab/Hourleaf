@@ -114,10 +114,11 @@ struct RecordTimeIntent: AppIntent {
 
     static var openAppWhenRun: Bool { false }
     static var authenticationPolicy: IntentAuthenticationPolicy {
-        // Ordinary authenticated execution is sufficient for the iPhone
-        // Shortcuts and Siri surfaces. Apple Watch requires a watchOS app of
-        // its own; a paired iPhone intent cannot execute on the Watch.
-        .requiresAuthentication
+        // Recording adds a validated entry but never reveals ledger contents.
+        // Allowing background execution keeps Siri and Shortcuts usable from
+        // the lock screen while Core Data still enforces the normal command
+        // validation and file-protection boundaries.
+        .alwaysAllowed
     }
 
     @Parameter(title: "intent.record.kind", default: .service)
@@ -251,7 +252,7 @@ struct RecordCreditTimeIntent: AppIntent {
 
     static var openAppWhenRun: Bool { false }
     static var authenticationPolicy: IntentAuthenticationPolicy {
-        .requiresAuthentication
+        .alwaysAllowed
     }
 
     @Parameter(

@@ -2,11 +2,11 @@
 
 ## Final verdict
 
-UNKNOWN. The source, localized metadata, current iPhone Shortcut cards, release
-build, automated tests, and public guidance are repaired and verified. The one
-remaining acceptance gate is a direct owner-voice Siri invocation on the
-unlocked physical iPhone; iPhone Mirroring cannot prove that authenticated
-path.
+UNKNOWN. The card-name/discovery repair is verified, and the newly observed
+execution failure has a bounded authentication-policy fix with green source,
+compiled-metadata, Release, and regression evidence. The production Store build
+still has the former policy. A disposable physical build must reach the
+duration prompt before the source fix can be called device-proven.
 
 ## AC1 — PASS: discoverable metadata
 
@@ -29,19 +29,27 @@ path.
   and the existing validated command/repository path.
 - The service card retains fixed kind `Служение`; credit remains a distinct
   fixed-kind action. No persistence or schema code changed.
-- Focused App Intent tests passed 18/18; the complete Hourleaf unit/integration
-  suite passed 511/511.
+- Focused iPhone App Intent plus Watch contract tests passed 26/26; the complete
+  Hourleaf unit/integration suite passed 511/511.
+- Compiled Release metadata declares background execution and authentication
+  policy `0` for the two iPhone and two Watch recording actions.
 
-## AC4 — UNKNOWN: direct Siri invocation
+## AC4 — UNKNOWN: fixed binary on a physical device
 
 - Read-only device inspection confirmed Hourleaf 1.0.2 (13) on an iPhone 15 Pro
   with iOS 26.6 and an Apple Watch Series 10 with watchOS 26.6.
 - The physical iPhone visibly contains enabled cards named exactly
   `Запиши служение` and `Запиши кредит`. The service action was refreshed from
   the currently installed Hourleaf action gallery.
-- Mirrored execution returned the iOS message `Это действие не разрешено` while
-  the mirrored session controlled an otherwise locked handset. That result is
-  not evidence about direct Siri execution on an unlocked device.
+- The owner then invoked the direct Siri path and reported `Что-то пошло не
+  так`; the currently installed 1.0.2 (13) binary therefore fails this
+  acceptance criterion.
+- Mirrored execution of the same production action returned the more specific
+  iOS message `Это действие не разрешено` before duration collection. Shortcut
+  privacy readback showed Hourleaf access and locked execution already enabled.
+- The replacement policy is compiled and automatically verified, but is not in
+  the installed Store build. A disposable physical build remains the decisive
+  no-save check.
 - No duration was supplied and no ledger entry was written. A direct spoken
   invocation remains the only missing physical result.
 
@@ -55,10 +63,11 @@ path.
 - No dependency, data model, entitlement, privacy manifest, account, analytics,
   bundle identifier, Store build, app container, or ledger changed.
 
-## Root cause and forward fix
+## Root causes and forward fixes
 
-The existing service Shortcut card was named `Записать время`, while the phrase
-shown to the owner was `Запиши служение`. Siri invokes a user-created Shortcut
-by its card name. The physical card is now renamed, and the localized service
-action title is aligned with that promoted name so future setup does not create
-the same mismatch.
+1. Discovery: the service card was named `Записать время`, while the promoted
+   phrase was `Запиши служение`. The card and localized action title now match.
+2. Execution: the recording intents explicitly required authentication even
+   though the Shortcuts flow is intended to work hands-free and while locked.
+   The four iPhone/Watch service and credit actions now use `.alwaysAllowed`
+   without exposing any ledger content or changing the validated write path.

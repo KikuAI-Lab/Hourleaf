@@ -219,11 +219,11 @@ final class AppIntentTests: XCTestCase {
         XCTAssertEqual(after.reportSnapshots.count, 1)
     }
 
-    func testIntentExecutionPoliciesStaySeparated() {
+    func testRecordIntentsAllowHandsFreeExecutionWithoutOpeningApp() {
         XCTAssertFalse(RecordTimeIntent.openAppWhenRun)
-        XCTAssertEqual(RecordTimeIntent.authenticationPolicy, .requiresAuthentication)
+        XCTAssertEqual(RecordTimeIntent.authenticationPolicy, .alwaysAllowed)
         XCTAssertFalse(RecordCreditTimeIntent.openAppWhenRun)
-        XCTAssertEqual(RecordCreditTimeIntent.authenticationPolicy, .requiresAuthentication)
+        XCTAssertEqual(RecordCreditTimeIntent.authenticationPolicy, .alwaysAllowed)
         XCTAssertTrue(OpenQuickEntryIntent.openAppWhenRun)
         XCTAssertEqual(OpenQuickEntryIntent.authenticationPolicy, .alwaysAllowed)
     }

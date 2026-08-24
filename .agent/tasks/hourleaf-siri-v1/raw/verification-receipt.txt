@@ -1,9 +1,14 @@
-Verified at 2026-08-24T11:51:13+03:00.
+Verified again at 2026-08-24T15:50:00+03:00 after the direct Siri execution
+failure was reported.
 
-- Focused AppIntentTests: 18/18 PASS.
+- Focused AppIntentTests + WatchTimeEntryTests: 26/26 PASS.
 - Complete HourleafTests: 511/511 PASS.
 - Generic iOS Release build with signing disabled: BUILD SUCCEEDED.
 - App Intents metadata processor and App Shortcut localization validation: PASS.
+- Compiled iPhone recording metadata: explicit authentication policy `0`,
+  `openAppWhenRun=false` for service and credit.
+- Compiled Watch recording metadata: explicit authentication policy `0` for
+  service and credit.
 - Compiled service action titles: EN `Record service`; RU `Запиши служение`; UK `Запиши служіння`.
 - Compiled built-in service phrases retain the required application-name token in EN/RU/UK.
 - Release-readiness guard: PASS.

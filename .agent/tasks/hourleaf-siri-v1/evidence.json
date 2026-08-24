@@ -20,12 +20,12 @@
     {
       "id": "AC4",
       "status": "UNKNOWN",
-      "proof": ["raw/device-shortcuts-receipt.txt"]
+      "proof": ["raw/device-shortcuts-receipt.txt", "raw/authentication-policy-receipt.txt"]
     },
     {
       "id": "AC5",
       "status": "PASS",
-      "proof": ["raw/verification-receipt.txt", "raw/site-verification.txt"]
+      "proof": ["raw/verification-receipt.txt", "raw/authentication-policy-receipt.txt", "raw/site-verification.txt"]
     }
   ]
 }

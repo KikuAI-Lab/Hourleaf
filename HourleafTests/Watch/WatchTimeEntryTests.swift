@@ -130,9 +130,9 @@ final class WatchTimeEntryTests: XCTestCase {
         XCTAssertTrue(source.contains("intent: WatchRecordServiceTimeIntent()"))
         XCTAssertTrue(source.contains("intent: WatchRecordCreditTimeIntent()"))
         XCTAssertFalse(source.contains("WatchRecordTimeIntent(kind:"))
-        XCTAssertFalse(source.contains(".alwaysAllowed"))
+        XCTAssertFalse(source.contains(".requiresAuthentication"))
         XCTAssertEqual(
-            source.components(separatedBy: ".requiresAuthentication").count - 1,
+            source.components(separatedBy: ".alwaysAllowed").count - 1,
             2
         )
     }

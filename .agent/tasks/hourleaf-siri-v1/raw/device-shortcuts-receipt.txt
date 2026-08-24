@@ -9,3 +9,12 @@ Physical-device readback at 2026-08-24T11:49:00+03:00.
 - Refreshed service action parameters: fixed kind `Служение`, duration `Ask Each Time`, optional date.
 - No duration was supplied and no ledger entry was written.
 - Mirrored execution returned `Это действие не разрешено`; an unlocked owner-voice Siri invocation remains the decisive physical gate.
+
+Follow-up owner result at 2026-08-24:
+
+- Direct Siri reached the configured Shortcut but returned `Что-то пошло не так`.
+- Shortcut Details > Privacy visibly had `Run While Locked` and Hourleaf access enabled.
+- A repeated mirrored run stopped with `Это действие не разрешено` before the
+  duration prompt, consistent with the installed binary's explicit
+  `.requiresAuthentication` policy.
+- The production Hourleaf 1.0.2 (13) app was not replaced, removed, or modified.
