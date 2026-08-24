@@ -1,0 +1,13 @@
+Verified at 2026-08-24T11:51:13+03:00.
+
+- Focused AppIntentTests: 18/18 PASS.
+- Complete HourleafTests: 511/511 PASS.
+- Generic iOS Release build with signing disabled: BUILD SUCCEEDED.
+- App Intents metadata processor and App Shortcut localization validation: PASS.
+- Compiled service action titles: EN `Record service`; RU `Запиши служение`; UK `Запиши служіння`.
+- Compiled built-in service phrases retain the required application-name token in EN/RU/UK.
+- Release-readiness guard: PASS.
+- Release-readiness guard self-test: PASS.
+- EN/RU/UK Localizable.strings plist lint: PASS.
+- git diff --check: PASS.
+- No dependency, model, entitlement, privacy manifest, or bundle identifier changed.

@@ -1,0 +1,8 @@
+kikuai.dev verification at 2026-08-24T11:51:13+03:00.
+
+- Focused Hourleaf public-page tests: 4/4 PASS.
+- Complete site gate: 279/279 PASS.
+- Production Nuxt/Cloudflare Pages build: PASS; 296 routes prerendered.
+- EN/RU/UK guides describe the legacy action title and exact Shortcut card names.
+- Support directs Apple Watch users to the native watch app instead of promising execution of an iPhone-created Shortcut.
+- The Hourleaf page test is now part of the standard `check:site` gate.

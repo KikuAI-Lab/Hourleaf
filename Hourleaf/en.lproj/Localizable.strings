@@ -233,7 +233,7 @@
 "report_reminder.open_settings" = "Open iPhone Settings";
 "report_reminder.notification.title" = "Hourleaf report";
 "report_reminder.notification.body" = "Last month’s report is ready to review.";
-"intent.record.title" = "Record time";
+"intent.record.title" = "Record service";
 "intent.record.description" = "Records service or credit time.";
 "intent.record.kind" = "Kind";
 "intent.record.hours" = "Hours";

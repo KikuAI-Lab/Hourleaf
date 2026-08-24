@@ -499,6 +499,29 @@ final class AppIntentTests: XCTestCase {
         XCTAssertEqual(HourleafShortcuts.appShortcuts.count, 3)
     }
 
+    func testServiceActionTitleMatchesPromotedShortcutInEveryLanguage() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+
+        for language in ["en", "ru", "uk"] {
+            let url = root.appendingPathComponent(
+                "Hourleaf/\(language).lproj/Localizable.strings"
+            )
+            let data = try Data(contentsOf: url)
+            let values = try XCTUnwrap(
+                PropertyListSerialization.propertyList(from: data, format: nil)
+                    as? [String: String]
+            )
+
+            XCTAssertEqual(
+                values["intent.record.title"],
+                values["intent.shortcut.add_service"],
+                "The service action and created shortcut must have one name in \(language)."
+            )
+        }
+    }
+
     private func makeRepository() async throws -> CoreDataLedgerRepository {
         try await makeRepository(
             ledgerStartMonth: MonthKey(Date.now, calendar: .hourleaf)

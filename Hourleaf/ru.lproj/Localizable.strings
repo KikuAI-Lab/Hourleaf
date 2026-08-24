@@ -233,7 +233,7 @@
 "report_reminder.open_settings" = "Открыть настройки iPhone";
 "report_reminder.notification.title" = "Отчёт Hourleaf";
 "report_reminder.notification.body" = "Отчёт за прошлый месяц готов к проверке.";
-"intent.record.title" = "Записать время";
+"intent.record.title" = "Запиши служение";
 "intent.record.description" = "Записывает время служения или кредита.";
 "intent.record.kind" = "Тип";
 "intent.record.hours" = "Часы";

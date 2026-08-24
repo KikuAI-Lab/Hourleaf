@@ -1,0 +1,11 @@
+Physical-device readback at 2026-08-24T11:49:00+03:00.
+
+- iPhone 15 Pro, iOS 26.6: Hourleaf 1.0.2 (13) installed.
+- Apple Watch Series 10, watchOS 26.6: Hourleaf 1.0.2 (13) installed.
+- iPhone Shortcuts cards visibly read `Запиши служение` and `Запиши кредит`.
+- Both Hourleaf cards are enabled for Siri/Search, available while locked, not deleted, and have synchronized hashes in the Mac Shortcuts database.
+- Service card action identifier: `com.kikuai.hourleaf.RecordTimeIntent`.
+- Credit card action identifier: `com.kikuai.hourleaf.RecordCreditTimeIntent`.
+- Refreshed service action parameters: fixed kind `Служение`, duration `Ask Each Time`, optional date.
+- No duration was supplied and no ledger entry was written.
+- Mirrored execution returned `Это действие не разрешено`; an unlocked owner-voice Siri invocation remains the decisive physical gate.

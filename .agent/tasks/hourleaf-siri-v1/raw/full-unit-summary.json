@@ -1,0 +1,10 @@
+{
+  "result": "Passed",
+  "totalTestCount": 511,
+  "passedTests": 511,
+  "failedTests": 0,
+  "skippedTests": 0,
+  "target": "HourleafTests",
+  "device": "iPhone 17 simulator",
+  "osVersion": "26.5"
+}

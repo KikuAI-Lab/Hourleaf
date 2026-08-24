@@ -233,7 +233,7 @@
 "report_reminder.open_settings" = "Відкрити налаштування iPhone";
 "report_reminder.notification.title" = "Звіт Hourleaf";
 "report_reminder.notification.body" = "Звіт за минулий місяць готовий до перевірки.";
-"intent.record.title" = "Записати час";
+"intent.record.title" = "Запиши служіння";
 "intent.record.description" = "Записує час служіння або кредиту.";
 "intent.record.kind" = "Тип";
 "intent.record.hours" = "Години";

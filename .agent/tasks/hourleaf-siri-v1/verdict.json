@@ -1,0 +1,14 @@
+{
+  "task": "hourleaf-siri-v1",
+  "verdict": "UNKNOWN",
+  "review_mode": "final-read-only-with-physical-owner-gate",
+  "findings": [],
+  "acceptance": {
+    "AC1": "PASS",
+    "AC2": "PASS",
+    "AC3": "PASS",
+    "AC4": "UNKNOWN",
+    "AC5": "PASS"
+  },
+  "residual_risk": "The exact Shortcut cards and current action metadata are verified, but a direct owner-voice Siri invocation on the unlocked physical iPhone has not yet been observed. Mirrored execution is not an equivalent authentication path."
+}

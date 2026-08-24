@@ -1,0 +1,31 @@
+{
+  "task": "hourleaf-siri-v1",
+  "status": "UNKNOWN",
+  "acceptance": [
+    {
+      "id": "AC1",
+      "status": "PASS",
+      "proof": ["raw/verification-receipt.txt"]
+    },
+    {
+      "id": "AC2",
+      "status": "PASS",
+      "proof": ["implementation-notes.md", "raw/site-verification.txt"]
+    },
+    {
+      "id": "AC3",
+      "status": "PASS",
+      "proof": ["raw/focused-tests-summary.json", "raw/full-unit-summary.json", "raw/verification-receipt.txt"]
+    },
+    {
+      "id": "AC4",
+      "status": "UNKNOWN",
+      "proof": ["raw/device-shortcuts-receipt.txt"]
+    },
+    {
+      "id": "AC5",
+      "status": "PASS",
+      "proof": ["raw/verification-receipt.txt", "raw/site-verification.txt"]
+    }
+  ]
+}
