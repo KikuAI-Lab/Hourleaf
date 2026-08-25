@@ -1,4 +1,4 @@
-# App Review notes for Hourleaf 1.0
+# App Review notes for Hourleaf
 
 This file is the maintained source for the App Review Information Notes field.
 Update it when the review path, shipped capabilities, or verified physical-device
@@ -16,33 +16,28 @@ unchanged core entry, history, report, sharing, and data-management flows.
 ## Paste-ready Notes field
 
 ```text
-Hourleaf 1.0 review information (Guideline 2.1)
+Hourleaf 1.0.3 (build 14) review information
 
-1. PHYSICAL-DEVICE RECORDING
-The attached file “Hourleaf-App-Review-iPhone-15-Pro-iOS-26.6.mov” was captured from build 11 on a physical iPhone 15 Pro running iOS 26.6. It begins with launch and shows service entry, the monthly Bible-study count, list/calendar history, service-year progress, monthly report preparation, the system share sheet, and local data tools. It contains no private user data.
+UPDATE SCOPE
+Build 14 fixes voice entry through Siri and Apple Shortcuts on iPhone and Apple Watch. The “Record service” and “Record credit” Shortcuts now ask for a duration when needed and save the entry without opening Hourleaf. This update adds no account, purchase, external service, sensitive-data permission, or new data category.
 
-2. TESTED DEVICES
-- iPhone 15 Pro — iOS 26.6 — build 11: launch, service/credit entry, Bible-study count, history, calendar, report preparation/share sheet, settings, backup/export access, and relaunch.
-- Apple Watch Series 10 — watchOS 26.6 — embedded companion launch and direct service/credit entry to the paired iPhone.
-Hourleaf is an iPhone app with an optional Apple Watch companion; iPad is not a supported target.
+ACCESS AND MAIN FEATURES
+No account, login, purchase, credentials, or sample file is required. Launch Hourleaf and use Add to choose Service or Credit, set hours/minutes, optionally add a note, and save. The Bible studies stepper records the current month's count. History switches between list and calendar. Progress prepares the monthly report and opens the system share sheet. Settings > Data Management provides local backup, restore, and CSV export/import. On a paired Apple Watch, choose Service or Credit, set time with the Digital Crown, and confirm; the paired iPhone commits the entry.
 
-3. FUNCTIONS, AUDIENCE, AND VALUE
-Hourleaf is a private, local-first ministry-time ledger for individual volunteers who keep their own records. Users record service or credit time, optionally add a note, review/edit/delete entries in list or calendar form, track service-year progress, store a monthly Bible-study count, prepare a monthly text report, and share it using the iOS share sheet. It also provides local reminders, backup/restore, CSV, optional Shortcuts/widgets, and Apple Watch entry. It replaces handwritten or spreadsheet calculations while keeping service and credit separate.
+VOICE ENTRY
+In Apple Shortcuts, run “Record service” or “Record credit” and answer the duration prompt. The intent saves through the same validated local entry path as the app. The action works offline and does not reveal history, notes, totals, or reports.
 
-4. ACCESS AND SETUP
-No account, login, purchase, credentials, or sample file is required. In Add, choose Service or Credit, select hours/minutes, optionally add a note, then Save. Use the Bible studies stepper for the current month. History switches between list/calendar. Progress shows totals and the report; review it, prepare it, then tap Share. Settings > Data Management provides local backup, restore, CSV export/import; import/restore opens Apple’s document picker only after its action is tapped. Notifications are requested only if a reviewer enables a reminder. On a paired Watch, choose Service or Credit, set hours/minutes with the Digital Crown, and confirm; the paired iPhone commits the entry.
+AUDIENCE AND VALUE
+Hourleaf is a private, local-first ministry-time ledger for individual volunteers keeping their own records. It replaces handwritten or spreadsheet calculations while keeping service and credit separate.
 
-5. EXTERNAL SERVICES OR PLATFORMS
-Hourleaf has no backend, account system, authentication provider, payment processor, ads, analytics, tracking, AI service, external data provider, or third-party SDK. It uses Apple on-device frameworks only: Core Data, App Intents/Shortcuts, WidgetKit/Control Center, WatchConnectivity, UserNotifications, the share sheet, and document picker. Records remain on-device unless explicitly exported or shared.
+EXTERNAL SERVICES AND PRIVACY
+Hourleaf has no backend, account provider, payment processor, ads, analytics, tracking, AI service, external data provider, or third-party SDK. It uses Apple on-device frameworks only. Records stay on-device unless the user explicitly exports or shares them. Notification permission is requested only after the user enables a reminder. No location, contacts, camera, microphone, photos, health, or tracking permission is requested.
 
-6. REGIONAL DIFFERENCES
-The same features and content are available in every region. There are no geographic restrictions or region-specific services. The interface and report month names are localized in English, Russian, and Ukrainian.
+REGIONS AND THIRD-PARTY MATERIAL
+Features are consistent across all regions and localized in English, Russian, and Ukrainian. Hourleaf is not a regulated service and contains no protected third-party database, media, or organization-owned content. It is an independent personal tool and is not affiliated with or endorsed by any religious organization.
 
-7. REGULATED INDUSTRY / PROTECTED MATERIAL
-Hourleaf provides no regulated service and contains no protected third-party database, media, or organization-owned content. Users enter only their own records. It is an independent personal tool, not affiliated with or endorsed by any religious organization; no authorization or professional credential is required.
-
-PRIVACY AND PERMISSIONS
-There is no user-generated public content or reporting/blocking system. Hourleaf requests no location, contacts, camera, microphone, photos, health, tracking, or other sensitive-data permission. Local notification permission is requested only after the user enables a reminder.
+TEST EVIDENCE
+Core flows were tested on an iPhone 15 Pro running iOS 26.6 and an Apple Watch Series 10 running watchOS 26.6. The unchanged core entry, history, report, sharing, and data-management flows remain demonstrated by the physical-device recording supplied during the version 1.0 review. The exact service Shortcut was also physically verified on iPhone and Apple Watch, and the duration prompt was verified on iPhone.
 ```
 
 ## Resolution Center reply

@@ -22,9 +22,10 @@
 ## App Store Connect
 
 - [x] Active Apple Developer Program membership.
-- [ ] Create version `1.0.3` on the existing iOS app record with bundle ID
+- [x] Create version `1.0.3` on the existing iOS app record with bundle ID
       `com.kikuai.hourleaf`. The release candidate is build `14`.
-- [ ] Copy metadata from `AppStore/metadata` and URLs from `AppStore/README.md`.
+- [x] Retain the existing localized metadata and URLs, and save the EN/RU/UK
+      version-specific release notes for `1.0.3`.
 - [x] Keep the existing private App Review contact details in App Store
       Connect. The provider accepted them without exposing them to Git or chat.
 - [x] Complete App Privacy using `AppStore/privacy-details.md`; the existing
@@ -35,17 +36,16 @@
       No new accessibility claim was added in this Mac-only pass.
 - [x] Confirm export compliance: only exempt Apple operating-system encryption;
       `ITSAppUsesNonExemptEncryption` is `NO` in each shipping bundle.
-- [x] Prepare reviewed iPhone and Apple Watch screenshots with no personal
-      data. Upload remains an owner action in App Store Connect.
+- [x] Retain the reviewed iPhone and Apple Watch screenshots with no personal
+      data from the existing App Store version.
 - [x] Availability and trader status are configured; 175 territories are
       selected and automatic release is enabled.
 - [x] Upload the signed archive and wait for processing before submission.
       For a command-line owner upload, use
       `AppStore/ExportOptions-AppStore.plist`; never add account credentials to
       that file or the repository.
-- [ ] Attach build `14`, save EN/RU/UK release notes, and submit iOS version
-      `1.0.3`. Review submission requires a separate owner confirmation after
-      upload and processing are verified.
+- [x] Attach build `14`, save EN/RU/UK release notes, and submit iOS version
+      `1.0.3` after the owner's explicit submission authorization.
 
 ## Physical acceptance (not performed in this Mac-only submission pass)
 
@@ -69,5 +69,23 @@
 - Xcode recorded a successful App Store upload with no errors or warnings.
   App Store Connect then completed processing and showed build `14` as
   `Ready to Submit` in version group `1.0.3`.
-- No App Store version draft was created, no metadata was copied into a new
-  version, and no App Review submission was made in this upload-only pass.
+- At the end of this upload-only pass, no App Store version draft or App Review
+  submission had yet been created. The later submission receipt below
+  supersedes that temporary state.
+
+## App Review submission receipt — 2026-08-25
+
+- App Store Connect version `1.0.3` was created and linked to processed build
+  `14`.
+- Localized release notes were saved in English, Russian, and Ukrainian; the
+  existing iPhone and Apple Watch screenshots and localized metadata were
+  retained.
+- The App Review notes were updated for build `14`, including the current voice
+  entry path, privacy posture, regional consistency, and physical-device test
+  matrix. Private reviewer contact details remain only in App Store Connect.
+- Submission `fadebc9c-324d-46bc-8eb6-5d00748432d5` was sent at 17:52 EEST.
+  App Store Connect confirmed one submitted item: iOS app `1.0.3 (14)`, status
+  `Waiting for Review` (`Ожидание проверки`).
+- Automatic release after approval and immediate rollout to all users remain
+  selected. At submission time, `1.0.2` was still the public version; this
+  receipt does not claim approval or storefront availability for `1.0.3`.
