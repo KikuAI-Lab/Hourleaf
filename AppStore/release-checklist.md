@@ -11,10 +11,10 @@
       the canonical iPhone 17 / iOS 26.5 simulator.
 - [x] The final standard `main` CI run passes with the portable report and
       backup fixtures enabled.
-- [ ] Signed release archive contains the iPhone app, Watch app, WidgetKit
+- [x] Signed release archive contains the iPhone app, Watch app, WidgetKit
       extension, app icons, all three localizations, and the required privacy
       manifests.
-- [ ] Signed distribution entitlements match the production App Group and
+- [x] Signed distribution entitlements match the production App Group and
       bundle identifiers.
 - [ ] Migration from the Personal Team build is verified using an exported
       Hourleaf backup before the old app is removed.
@@ -39,7 +39,7 @@
       data. Upload remains an owner action in App Store Connect.
 - [x] Availability and trader status are configured; 175 territories are
       selected and automatic release is enabled.
-- [ ] Upload the signed archive and wait for processing before submission.
+- [x] Upload the signed archive and wait for processing before submission.
       For a command-line owner upload, use
       `AppStore/ExportOptions-AppStore.plist`; never add account credentials to
       that file or the repository.
@@ -55,3 +55,19 @@
 - [ ] Apple Watch service and credit entry pass on a paired physical Watch.
 - [ ] Siri/Shortcuts claims are included in marketing only after the exact
       public-distribution phrases pass on iPhone and Watch.
+
+## Upload receipt — 2026-08-25
+
+- Source commit: `4e0ec83cfa08481a89bc1ced73c4dbc651f3deb2` on `main`.
+- GitHub CI run `32856152121` passed: release guard, self-test, 512 unit and
+  integration tests, and 53 UI tests.
+- Retained archive:
+  `~/Library/Developer/Xcode/Archives/2026-08-25/Hourleaf 1.0.3 (14).xcarchive`.
+- The archive contains production bundle IDs `com.kikuai.hourleaf`,
+  `com.kikuai.hourleaf.quick-surfaces`, and
+  `com.kikuai.hourleaf.watchkitapp`, all at version `1.0.3` build `14`.
+- Xcode recorded a successful App Store upload with no errors or warnings.
+  App Store Connect then completed processing and showed build `14` as
+  `Ready to Submit` in version group `1.0.3`.
+- No App Store version draft was created, no metadata was copied into a new
+  version, and no App Review submission was made in this upload-only pass.
