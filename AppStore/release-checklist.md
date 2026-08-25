@@ -1,20 +1,20 @@
-# Hourleaf 1.0.2 submission checklist
+# Hourleaf 1.0.3 delivery checklist
 
 ## Source and package
 
 - [x] Release guard and self-test pass.
-- [x] Full unit suite passes: 507 of 507 tests on isolated GitHub runners.
-- [x] Full app-owned UI suite passes 52 of 52 tests, including Light
-      appearance, compact Add layout, Settings guides, accessibility text, and
-      the existing ledger flows.
+- [x] Full unit suite passes: 512 of 512 tests on isolated GitHub runners.
+- [x] Full app-owned UI suite passes 53 of 53 tests, including voice-entry
+      setup, Light appearance, compact Add layout, accessibility text, and the
+      existing ledger flows.
 - [x] Manual Store capture lane passes 1 of 1 with 12 EN/RU/UK attachments on
       the canonical iPhone 17 / iOS 26.5 simulator.
 - [x] The final standard `main` CI run passes with the portable report and
       backup fixtures enabled.
-- [x] Signed release archive contains the iPhone app, Watch app, WidgetKit
+- [ ] Signed release archive contains the iPhone app, Watch app, WidgetKit
       extension, app icons, all three localizations, and the required privacy
       manifests.
-- [x] Signed distribution entitlements match the production App Group and
+- [ ] Signed distribution entitlements match the production App Group and
       bundle identifiers.
 - [ ] Migration from the Personal Team build is verified using an exported
       Hourleaf backup before the old app is removed.
@@ -22,9 +22,9 @@
 ## App Store Connect
 
 - [x] Active Apple Developer Program membership.
-- [x] Create version `1.0.2` on the existing iOS app record with bundle ID
-      `com.kikuai.hourleaf`. The release candidate is build `13`.
-- [x] Copy metadata from `AppStore/metadata` and URLs from `AppStore/README.md`.
+- [ ] Create version `1.0.3` on the existing iOS app record with bundle ID
+      `com.kikuai.hourleaf`. The release candidate is build `14`.
+- [ ] Copy metadata from `AppStore/metadata` and URLs from `AppStore/README.md`.
 - [x] Keep the existing private App Review contact details in App Store
       Connect. The provider accepted them without exposing them to Git or chat.
 - [x] Complete App Privacy using `AppStore/privacy-details.md`; the existing
@@ -39,13 +39,13 @@
       data. Upload remains an owner action in App Store Connect.
 - [x] Availability and trader status are configured; 175 territories are
       selected and automatic release is enabled.
-- [x] Upload the signed archive and wait for processing before submission.
+- [ ] Upload the signed archive and wait for processing before submission.
       For a command-line owner upload, use
       `AppStore/ExportOptions-AppStore.plist`; never add account credentials to
       that file or the repository.
-- [x] Attach build `13`, save EN/RU/UK release notes, and submit iOS version
-      `1.0.2`. App Store Connect displayed `1 Item Submitted` and
-      `Waiting for Review` on 2026-08-23 at 18:55 Europe/Uzhgorod.
+- [ ] Attach build `14`, save EN/RU/UK release notes, and submit iOS version
+      `1.0.3`. Review submission requires a separate owner confirmation after
+      upload and processing are verified.
 
 ## Physical acceptance (not performed in this Mac-only submission pass)
 

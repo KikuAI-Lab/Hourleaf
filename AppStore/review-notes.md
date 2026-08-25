@@ -4,14 +4,14 @@ This file is the maintained source for the App Review Information Notes field.
 Update it when the review path, shipped capabilities, or verified physical-device
 matrix changes. Keep private reviewer contact details only in App Store Connect.
 
-## Version 1.0.2 update
+## Version 1.0.3 update
 
-Build 13 adds Light, Dark, and Match iPhone appearance choices, makes the Add
-screen slightly more compact, and replaces the technical Shortcuts section with
-links to public Apple Watch and voice-entry guides. It adds no account,
-purchase, external service, sensitive-data permission, or new data category.
-The existing physical-device recording still demonstrates the unchanged core
-entry, history, report, sharing, and data-management flows.
+Build 14 fixes voice entry through Siri and Apple Shortcuts on iPhone and Apple
+Watch. The “Record service” and “Record credit” shortcuts now ask for a duration
+when needed and save the entry without opening Hourleaf. This update adds no
+account, purchase, external service, sensitive-data permission, or new data
+category. The existing physical-device recording still demonstrates the
+unchanged core entry, history, report, sharing, and data-management flows.
 
 ## Paste-ready Notes field
 

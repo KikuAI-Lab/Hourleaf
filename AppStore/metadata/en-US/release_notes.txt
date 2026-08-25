@@ -1,1 +1,1 @@
-Choose Light, Dark, or Match iPhone appearance. The Add screen now keeps Bible studies in view on smaller iPhones, and Settings links to clear Apple Watch and voice-entry guides.
+Voice entry is now more reliable. Run your “Record service” or “Record credit” Shortcut, answer how long, and Hourleaf saves the entry without opening the app.

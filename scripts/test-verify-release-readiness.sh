@@ -258,14 +258,14 @@ assert_failure_contains "extension privacy manifest has an unexpected NSPrivacyA
 reset_fixture
 replace_in_file \
     "$fixture_root/Hourleaf.xcodeproj/project.pbxproj" \
-    's/MARKETING_VERSION = 1.0.2;/MARKETING_VERSION = 0.9.0;/g'
-assert_failure_contains "all shipping targets must use marketing version 1.0.2"
+    's/MARKETING_VERSION = 1.0.3;/MARKETING_VERSION = 0.9.0;/g'
+assert_failure_contains "all shipping targets must use marketing version 1.0.3"
 
 reset_fixture
 replace_in_file \
     "$fixture_root/Hourleaf.xcodeproj/project.pbxproj" \
-    's/CURRENT_PROJECT_VERSION = 13;/CURRENT_PROJECT_VERSION = 12;/g'
-assert_failure_contains "all shipping targets must use build number 13"
+    's/CURRENT_PROJECT_VERSION = 14;/CURRENT_PROJECT_VERSION = 13;/g'
+assert_failure_contains "all shipping targets must use build number 14"
 
 reset_fixture
 replace_in_file \
