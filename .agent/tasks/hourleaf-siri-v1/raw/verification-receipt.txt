@@ -1,8 +1,8 @@
-Verified again at 2026-08-24T15:50:00+03:00 after the direct Siri execution
-failure was reported.
+Verified again at 2026-08-25T15:36:00+03:00 after eager App Intent dependency
+registration and physical iPhone/Watch Siri proof.
 
-- Focused AppIntentTests + WatchTimeEntryTests: 26/26 PASS.
-- Complete HourleafTests: 511/511 PASS.
+- Focused AppIntentTests + WatchTimeEntryTests: 27/27 PASS.
+- Complete HourleafTests: 512/512 PASS.
 - Generic iOS Release build with signing disabled: BUILD SUCCEEDED.
 - App Intents metadata processor and App Shortcut localization validation: PASS.
 - Compiled iPhone recording metadata: explicit authentication policy `0`,
@@ -15,4 +15,7 @@ failure was reported.
 - Release-readiness guard self-test: PASS.
 - EN/RU/UK Localizable.strings plist lint: PASS.
 - git diff --check: PASS.
+- Isolated physical iPhone Siri invocation: PASS, exactly one durable entry.
+- Isolated physical Apple Watch Siri invocation: PASS, exactly one durable
+  entry in the companion iPhone ledger.
 - No dependency, model, entitlement, privacy manifest, or bundle identifier changed.

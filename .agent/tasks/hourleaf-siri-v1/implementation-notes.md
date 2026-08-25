@@ -4,43 +4,53 @@
   instructed the owner to invoke a custom Shortcut named `Запиши служение`.
   Siri runs a user-created Shortcut by its exact card name, so the mismatch was
   sufficient to make the documented app-name-free phrase undiscoverable.
-- The first forward fix aligned the service action title with the promoted
-  Shortcut title in EN/RU/UK. The action identifier, parameters, persistence
-  path, Core Data model, and bundle identifiers remained unchanged.
+- The first repair aligned the service action title with the promoted Shortcut
+  title in EN/RU/UK. The action identifier, parameters, persistence path, Core
+  Data model, and bundle identifiers remained unchanged.
 - A regression test parses all three app localizations and requires
   `intent.record.title` to equal `intent.shortcut.add_service`.
 - The built-in App Shortcut phrases continue to include the application name,
   as required by the compiled App Intents grammar. The short app-name-free
-  phrase is supported by a user-created Shortcut whose card has that exact
-  name.
-- The iPhone Shortcut was renamed and its service action refreshed on the
-  physical iPhone. Both cards now read exactly `Запиши служение` and
-  `Запиши кредит`; the service action retains fixed kind `Служение`, asks for
-  one duration, and does not contain a preset date.
-- A direct owner test then reached the Shortcut but returned the generic Siri
-  failure `Что-то пошло не так`. Running the same installed action while
-  iPhone Mirroring controlled the handset returned `Это действие не разрешено`
-  before parameter collection. The card's privacy controls already allowed
-  Hourleaf and locked execution, isolating the explicit intent authentication
-  policy as the next executable boundary.
-- Service and credit recording now declare `.alwaysAllowed` in both the iPhone
-  and Watch binaries. These actions only add a validated record; they never
-  reveal notes, history, totals, or reports. `openAppWhenRun` stays false, Core
-  Data retains complete-until-first-authentication file protection, and the
-  normal command validation still rejects empty, invalid, or excessive time.
-- Fresh compiled iPhone and Watch App Intents metadata emits authentication
-  policy `0` for all four record actions, with the policy explicitly declared
-  and background execution preserved.
-- The public EN/RU/UK guide now explains the legacy action title, exact card
-  names, and one-time run. Support no longer implies that an iPhone-created
-  Shortcut is executable on Apple Watch; Watch users are directed to the native
-  Hourleaf watch app.
-- No test entry was saved and no Hourleaf ledger, production app container,
-  account, entitlement, dependency, schema, or Store build was changed.
+  phrase is supplied by a user-created Shortcut whose card has that exact name.
+- The first physical custom-Shortcut invocation reached the action but returned
+  `Это действие не разрешено`. Service and credit recording were changed to
+  `.alwaysAllowed` on iPhone and Watch because they only add a validated entry
+  and never reveal notes, history, totals, or reports.
+- A separately signed development build proved that `.alwaysAllowed` alone was
+  not sufficient: the same authorization failure remained on a cold App Intent
+  launch. This excluded Shortcut privacy and intent authentication policy as
+  the remaining boundary.
+- The actual execution defect was dependency registration timing.
+  `HourleafAppLauncher` registered the live repository/router dependencies, but
+  it was constructed inside an inline `@StateObject` wrapped-value expression.
+  That expression may remain lazy when App Intents starts the process in the
+  background without evaluating the SwiftUI scene body.
+- `HourleafApp.init()` now eagerly constructs the launcher and passes an
+  injected `AppDependencyManager` through to the existing registration call.
+  The iPhone App Intent can therefore resolve the exact live repository before
+  any UI is built. There is still no fallback repository or second store.
+- A regression test constructs `HourleafApp` with an isolated dependency
+  manager and proves the repository is resolvable immediately, before the UI
+  body is evaluated.
+- Physical proof used `com.kikuai.hourleaf.local` and
+  `com.kikuai.hourleaf.local.watchkitapp`. The production iPhone and Watch apps
+  remained installed and untouched.
+- One exact Siri invocation on iPhone produced exactly one durable
+  `shortcut` entry. A second controlled invocation from Apple Watch produced
+  exactly one more durable `shortcut` entry after Siri replied `Хорошо`.
+  The source value proves the Watch ran the synced user-created Shortcut and
+  then the repaired iPhone intent, rather than the native Watch app's direct
+  WatchConnectivity writer.
+- Spoken compound duration conversion and the unresolved runtime duration
+  parameter remain covered by focused tests. No dependency, schema,
+  entitlement, privacy manifest, or production Store build changed.
+- GitHub CI previously completed all 53 UI tests with zero failures but was
+  cancelled while `xcodebuild` was finishing at the job's 45-minute boundary.
+  The job timeout is raised to 60 minutes; the test set itself is unchanged.
 
 ## Primary references
 
 - https://support.apple.com/guide/shortcuts/run-shortcuts-with-siri-apd07c25bb38/ios
 - https://support.apple.com/guide/shortcuts/run-shortcuts-from-apple-watch-apd5888b0858/ios
-- https://developer.apple.com/documentation/appintents/intentauthenticationpolicy/requiresauthentication
 - https://developer.apple.com/documentation/appintents/intentauthenticationpolicy/alwaysallowed
+- https://developer.apple.com/documentation/AppIntents/ActionButtonArticle

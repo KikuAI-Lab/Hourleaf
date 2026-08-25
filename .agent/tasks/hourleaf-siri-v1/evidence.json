@@ -1,6 +1,6 @@
 {
   "task": "hourleaf-siri-v1",
-  "status": "UNKNOWN",
+  "status": "PASS",
   "acceptance": [
     {
       "id": "AC1",
@@ -15,12 +15,12 @@
     {
       "id": "AC3",
       "status": "PASS",
-      "proof": ["raw/focused-tests-summary.json", "raw/full-unit-summary.json", "raw/verification-receipt.txt"]
+      "proof": ["raw/focused-tests-summary.json", "raw/full-unit-summary.json", "raw/eager-dependency-registration-receipt.txt", "raw/verification-receipt.txt"]
     },
     {
       "id": "AC4",
-      "status": "UNKNOWN",
-      "proof": ["raw/device-shortcuts-receipt.txt", "raw/authentication-policy-receipt.txt"]
+      "status": "PASS",
+      "proof": ["raw/device-shortcuts-receipt.txt", "raw/authentication-policy-receipt.txt", "raw/eager-dependency-registration-receipt.txt", "raw/physical-siri-receipt.txt"]
     },
     {
       "id": "AC5",

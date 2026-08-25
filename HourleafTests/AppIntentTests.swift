@@ -495,6 +495,19 @@ final class AppIntentTests: XCTestCase {
         XCTAssertEqual(resolvedSecond, expectedIdentity)
     }
 
+    func testAppInitializationRegistersIntentDependenciesBeforeBuildingTheUI() async throws {
+        let manager = AppDependencyManager()
+
+        _ = HourleafApp(
+            arguments: ["Hourleaf", "-uiTesting"],
+            appIntentDependencyManager: manager
+        )
+
+        let resolvedIdentity = try await RepositoryIdentityProbeIntent(manager: manager)
+            .callAsFunction(donate: false)
+        XCTAssertFalse(resolvedIdentity.isEmpty)
+    }
+
     func testExactlyThreeShortcutsArePromoted() {
         XCTAssertEqual(HourleafShortcuts.appShortcuts.count, 3)
     }

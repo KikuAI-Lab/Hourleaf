@@ -1,14 +1,14 @@
 {
   "task": "hourleaf-siri-v1",
-  "verdict": "UNKNOWN",
-  "review_mode": "fix-verified-locally-with-physical-binary-gate",
+  "verdict": "PASS",
+  "review_mode": "fix-verified-with-isolated-physical-iphone-and-watch-proof",
   "findings": [],
   "acceptance": {
     "AC1": "PASS",
     "AC2": "PASS",
     "AC3": "PASS",
-    "AC4": "UNKNOWN",
+    "AC4": "PASS",
     "AC5": "PASS"
   },
-  "residual_risk": "The installed Store binary fails before duration collection and still contains the former authentication policy. The replacement policy is source-, metadata-, Release-, and regression-verified but remains unproven on a physical device until a disposable signed build reaches the duration prompt without saving an entry."
+  "residual_risk": "The currently public Store binary predates the cold dependency-registration repair. The repaired source is automated-, Release-, iPhone-, and Apple-Watch-proven, but users receive it only after an owner-approved App Store upload and release."
 }

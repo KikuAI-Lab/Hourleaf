@@ -1,7 +1,7 @@
 {
   "result": "Passed",
-  "totalTestCount": 26,
-  "passedTests": 26,
+  "totalTestCount": 27,
+  "passedTests": 27,
   "failedTests": 0,
   "skippedTests": 0,
   "target": "HourleafTests/AppIntentTests + HourleafTests/WatchTimeEntryTests",

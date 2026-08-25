@@ -1,7 +1,7 @@
 {
   "result": "Passed",
-  "totalTestCount": 511,
-  "passedTests": 511,
+  "totalTestCount": 512,
+  "passedTests": 512,
   "failedTests": 0,
   "skippedTests": 0,
   "target": "HourleafTests",
