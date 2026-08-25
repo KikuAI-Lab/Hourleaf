@@ -1,0 +1,41 @@
+Physical Siri execution receipt — 2026-08-25, Europe/Uzhhorod
+
+Isolation and installation:
+
+- Production iPhone bundle `com.kikuai.hourleaf` 1.0.2 (13) remained installed
+  and was never replaced or uninstalled.
+- The repaired binary was installed as the separate development bundle
+  `com.kikuai.hourleaf.local`.
+- Production Watch bundle `com.kikuai.hourleaf.watchkitapp` 1.0.2 (13)
+  remained installed. The repaired Watch binary was installed separately as
+  `com.kikuai.hourleaf.local.watchkitapp` and launched successfully.
+
+Controlled iPhone Siri invocation:
+
+- Baseline active-entry count in the isolated local ledger: 4.
+- The owner said the exact custom Shortcut name `Запиши служение` once and
+  waited 15 seconds.
+- Siri replied `Готово`.
+- A fresh device-container copy contained exactly one new active entry:
+  service, 1 minute, local day 2026-08-25, source `shortcut`, created at
+  2026-08-25 13:54:11 local time. Active-entry count became 5.
+
+Controlled Apple Watch Siri invocation:
+
+- Baseline active-entry count in the same isolated iPhone ledger: 5.
+- With the local Watch app installed, the owner held the Digital Crown and
+  said the exact custom Shortcut name `Запиши служение` once.
+- Siri replied `Хорошо`.
+- A fresh device-container copy contained exactly one new active entry:
+  service, 1 minute, local day 2026-08-25, source `shortcut`, created at
+  2026-08-25 15:23:01 local time. Active-entry count became 6.
+- The `shortcut` source distinguishes this result from the native Watch app's
+  direct WatchConnectivity mutation source: Apple Watch invoked the synced
+  user-created Shortcut, which executed the repaired iPhone App Intent.
+
+Result:
+
+- iPhone Siri path: PASS, one invocation produced exactly one durable entry.
+- Apple Watch Siri path: PASS, one invocation produced exactly one durable
+  entry in the companion iPhone ledger.
+- No production Hourleaf ledger was read, mutated, migrated, or deleted.

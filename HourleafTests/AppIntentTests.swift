@@ -219,11 +219,11 @@ final class AppIntentTests: XCTestCase {
         XCTAssertEqual(after.reportSnapshots.count, 1)
     }
 
-    func testIntentExecutionPoliciesStaySeparated() {
+    func testRecordIntentsAllowHandsFreeExecutionWithoutOpeningApp() {
         XCTAssertFalse(RecordTimeIntent.openAppWhenRun)
-        XCTAssertEqual(RecordTimeIntent.authenticationPolicy, .requiresAuthentication)
+        XCTAssertEqual(RecordTimeIntent.authenticationPolicy, .alwaysAllowed)
         XCTAssertFalse(RecordCreditTimeIntent.openAppWhenRun)
-        XCTAssertEqual(RecordCreditTimeIntent.authenticationPolicy, .requiresAuthentication)
+        XCTAssertEqual(RecordCreditTimeIntent.authenticationPolicy, .alwaysAllowed)
         XCTAssertTrue(OpenQuickEntryIntent.openAppWhenRun)
         XCTAssertEqual(OpenQuickEntryIntent.authenticationPolicy, .alwaysAllowed)
     }
@@ -493,6 +493,19 @@ final class AppIntentTests: XCTestCase {
             .callAsFunction(donate: false)
         XCTAssertEqual(resolvedFirst, expectedIdentity)
         XCTAssertEqual(resolvedSecond, expectedIdentity)
+    }
+
+    func testAppInitializationRegistersIntentDependenciesBeforeBuildingTheUI() async throws {
+        let manager = AppDependencyManager()
+
+        _ = HourleafApp(
+            arguments: ["Hourleaf", "-uiTesting"],
+            appIntentDependencyManager: manager
+        )
+
+        let resolvedIdentity = try await RepositoryIdentityProbeIntent(manager: manager)
+            .callAsFunction(donate: false)
+        XCTAssertFalse(resolvedIdentity.isEmpty)
     }
 
     func testExactlyThreeShortcutsArePromoted() {

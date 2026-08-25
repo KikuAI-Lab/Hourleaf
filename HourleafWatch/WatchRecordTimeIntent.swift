@@ -15,7 +15,7 @@ struct WatchRecordServiceTimeIntent: AppIntent {
         IntentDescription("watch.intent.record.description")
     }
     static var openAppWhenRun: Bool { false }
-    static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
+    static var authenticationPolicy: IntentAuthenticationPolicy { .alwaysAllowed }
 
     @Parameter(
         title: "watch.intent.duration",
@@ -65,7 +65,7 @@ struct WatchRecordCreditTimeIntent: AppIntent {
         IntentDescription("watch.intent.record.description")
     }
     static var openAppWhenRun: Bool { false }
-    static var authenticationPolicy: IntentAuthenticationPolicy { .requiresAuthentication }
+    static var authenticationPolicy: IntentAuthenticationPolicy { .alwaysAllowed }
 
     @Parameter(
         title: "watch.intent.duration",

@@ -1,13 +1,35 @@
+import AppIntents
 import Foundation
 import SwiftUI
 
 @main
 @MainActor
 struct HourleafApp: App {
-    @StateObject private var launcher = HourleafAppLauncher(
-        arguments: ProcessInfo.processInfo.arguments
-    )
+    @StateObject private var launcher: HourleafAppLauncher
     @AppStorage(AppAppearance.storageKey) private var appearanceRawValue = AppAppearance.system.rawValue
+
+    init() {
+        self.init(
+            arguments: ProcessInfo.processInfo.arguments,
+            appIntentDependencyManager: .shared
+        )
+    }
+
+    /// Build the launcher eagerly inside `App.init()`. App Intents may start
+    /// the process in the background without ever evaluating `body`, while a
+    /// StateObject's wrapped-value expression is otherwise allowed to remain
+    /// lazy. Apple requires App Intent dependencies to be registered as early
+    /// as possible during launch.
+    init(
+        arguments: [String],
+        appIntentDependencyManager: AppDependencyManager = .shared
+    ) {
+        let launcher = HourleafAppLauncher(
+            arguments: arguments,
+            appIntentDependencyManager: appIntentDependencyManager
+        )
+        _launcher = StateObject(wrappedValue: launcher)
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -68,11 +90,15 @@ final class HourleafAppLauncher: ObservableObject {
     private let isUITesting: Bool
     private let usesTestStore: Bool
     private let clock: @Sendable () -> Date
+    private let appIntentDependencyManager: AppDependencyManager
     private var pendingRecovery: PendingRecovery?
     private var pendingQuickEntryRoute = false
     private var didStart = false
 
-    init(arguments: [String]) {
+    init(
+        arguments: [String],
+        appIntentDependencyManager: AppDependencyManager = .shared
+    ) {
         let uiTesting = arguments.contains("-uiTesting")
         if uiTesting, arguments.contains("-resetTimeSelectionFeedbackUITest") {
             UserDefaults.standard.removeObject(
@@ -91,6 +117,7 @@ final class HourleafAppLauncher: ObservableObject {
         isUITesting = uiTesting
         usesTestStore = uiTesting || arguments.contains("-freshInstallUITest")
         self.clock = clock
+        self.appIntentDependencyManager = appIntentDependencyManager
 
         if usesTestStore {
             let router = AppRouter()
@@ -266,7 +293,8 @@ final class HourleafAppLauncher: ObservableObject {
                 repository: runtime.repository,
                 quickSurfaceHost: quickSurfaceHost,
                 systemReloader: quickSurfaceSystemReloader
-            )
+            ),
+            manager: appIntentDependencyManager
         )
         if !usesTestStore {
             let watchReceiver = WatchTimeEntryReceiver(

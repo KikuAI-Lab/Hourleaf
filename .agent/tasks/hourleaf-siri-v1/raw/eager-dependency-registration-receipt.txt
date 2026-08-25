@@ -1,0 +1,48 @@
+Cold App Intent dependency receipt — 2026-08-25, Europe/Uzhhorod
+
+Observed physical behavior before this repair:
+
+- The fixed development binary already emitted authentication policy `0`
+  (`.alwaysAllowed`) for service and credit.
+- Invoking the action still returned `Это действие не разрешено` before a
+  durable write. Authentication policy alone was therefore not the complete
+  root cause.
+
+Root cause:
+
+- `HourleafApp` previously constructed `HourleafAppLauncher` inside the
+  wrapped-value expression of an inline `@StateObject` declaration.
+- App Intent background launches may execute without evaluating the SwiftUI
+  scene body. The wrapped object could therefore remain lazy while
+  `RecordTimeIntent.perform()` tried to resolve its `@AppDependency` values.
+- The repository, router, and projection refresher were registered only while
+  constructing the launcher, too late for that cold execution path.
+
+Repair:
+
+- `HourleafApp.init()` now constructs `HourleafAppLauncher` eagerly and then
+  installs it into `StateObject`.
+- An injected `AppDependencyManager` is passed through the launcher to the
+  existing dependency registration call. Production still defaults to
+  `.shared`; tests use an isolated manager.
+- No repository factory, fallback store, schema, entitlement, identifier, or
+  persistence path was added.
+
+Fresh verification:
+
+- Regression test proves constructing `HourleafApp` resolves the exact
+  repository dependency before the UI body is built.
+- Focused AppIntent + Watch contract tests: 27/27 PASS.
+- Complete HourleafTests: 512/512 PASS.
+- Generic unsigned iOS Release build: PASS, including App Intents metadata and
+  App Shortcut localization processing.
+- Release-readiness guard and self-test: PASS.
+- EN/RU/UK app and Watch localization plist lint: PASS.
+- Physical iPhone and Apple Watch Siri execution: PASS; see
+  `physical-siri-receipt.txt`.
+
+Primary Apple reference:
+
+- https://developer.apple.com/documentation/AppIntents/ActionButtonArticle
+  (register App Intent dependencies as early as possible in the SwiftUI app's
+  initializer).

@@ -1,0 +1,30 @@
+Authentication-policy verification at 2026-08-24T15:50:00+03:00.
+
+Source contract:
+
+- iPhone service: `.alwaysAllowed`, `openAppWhenRun=false`.
+- iPhone credit: `.alwaysAllowed`, `openAppWhenRun=false`.
+- Watch service: `.alwaysAllowed`, `openAppWhenRun=false`.
+- Watch credit: `.alwaysAllowed`, `openAppWhenRun=false`.
+
+Compiled generic iOS Release product:
+
+- `Hourleaf.app/Metadata.appintents/extract.actionsdata` contains explicit
+  authentication policy `0` for `RecordTimeIntent` and
+  `RecordCreditTimeIntent`.
+- Embedded `HourleafWatch.app/Metadata.appintents/extract.actionsdata` contains
+  explicit authentication policy `0` for `WatchRecordServiceTimeIntent` and
+  `WatchRecordCreditTimeIntent`.
+- iPhone and Watch metadata extraction completed without processor errors.
+
+Verification:
+
+- Focused tests: 26/26 PASS.
+- Complete HourleafTests: 511/511 PASS.
+- Generic iOS Release build: PASS.
+- Release-readiness guard: PASS.
+- Release-readiness guard self-test: PASS.
+- App/extension/Watch privacy and Info plist lint: PASS.
+
+No production install, Store upload, ledger mutation, schema change, or
+entitlement change occurred during this receipt.
