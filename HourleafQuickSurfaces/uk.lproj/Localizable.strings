@@ -3,6 +3,12 @@
 "quick_surface.widget.service" = "Служіння";
 "quick_surface.widget.credit" = "Кредит";
 "quick_surface.widget.minutes_format" = "%d хв";
+"quick_surface.widget.hours_format" = "%d год";
+"quick_surface.widget.hours_minutes_format" = "%d год %d хв";
+"quick_surface.widget.bible_studies" = "Вивчення Біблії";
+"quick_surface.widget.bible_studies_compact" = "Вивчення";
+"quick_surface.widget.service_year" = "Службовий рік";
+"quick_surface.widget.description" = "Час за місяць і прогрес за службовий рік";
 "quick_surface.widget.timer_running" = "Таймер працює";
 "quick_surface.widget.timer_ready" = "Таймер готовий";
 "quick_surface.widget.timer_off" = "Таймер вимкнено";

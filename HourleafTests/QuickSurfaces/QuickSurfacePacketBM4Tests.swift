@@ -154,7 +154,14 @@ final class QuickSurfacePacketBM4Tests: XCTestCase {
             QuickSurfaceDisplayReducerV1.reduce(state: shown),
             QuickSurfaceDisplayStateV1(
                 availability: .ready,
-                totals: .shown(monthKey: "2026-08", serviceMinutes: 125, creditMinutes: 7),
+                totals: .shown(
+                    monthKey: "2026-08",
+                    serviceMinutes: 125,
+                    creditMinutes: 7,
+                    bibleStudyCount: nil,
+                    serviceYearMinutes: nil,
+                    serviceYearTargetMinutes: nil
+                ),
                 timer: .running(startedAtEpochSeconds: 90)
             )
         )

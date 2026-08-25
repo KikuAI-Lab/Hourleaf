@@ -9,7 +9,14 @@ enum QuickSurfaceDisplayAvailabilityV1: Equatable, Sendable {
 
 enum QuickSurfaceDisplayTotalsV1: Equatable, Sendable {
     case absent
-    case shown(monthKey: String, serviceMinutes: Int, creditMinutes: Int)
+    case shown(
+        monthKey: String,
+        serviceMinutes: Int,
+        creditMinutes: Int,
+        bibleStudyCount: Int?,
+        serviceYearMinutes: Int?,
+        serviceYearTargetMinutes: Int?
+    )
 }
 
 enum QuickSurfaceDisplayTimerV1: Equatable, Sendable {
@@ -72,11 +79,33 @@ enum QuickSurfaceDisplayReducerV1 {
             else {
                 return .fallback(.needsReset)
             }
+            let extendedMetrics = [
+                state.projection.bibleStudyCount != nil,
+                state.projection.serviceYearMinutes != nil,
+                state.projection.serviceYearTargetMinutes != nil
+            ]
+            guard extendedMetrics.allSatisfy({ $0 }) || extendedMetrics.allSatisfy({ !$0 }) else {
+                return .fallback(.needsReset)
+            }
+            if let bibleStudyCount = state.projection.bibleStudyCount,
+               let serviceYearMinutes = state.projection.serviceYearMinutes,
+               let serviceYearTargetMinutes = state.projection.serviceYearTargetMinutes {
+                guard
+                    (0...999).contains(bibleStudyCount),
+                    (0...Int(Int32.max)).contains(serviceYearMinutes),
+                    (1...Int(Int32.max)).contains(serviceYearTargetMinutes)
+                else {
+                    return .fallback(.needsReset)
+                }
+            }
             if isCurrentMonth(monthKey, asOf: asOf, timeZone: timeZone) {
                 totals = .shown(
                     monthKey: monthKey,
                     serviceMinutes: serviceMinutes,
-                    creditMinutes: creditMinutes
+                    creditMinutes: creditMinutes,
+                    bibleStudyCount: state.projection.bibleStudyCount,
+                    serviceYearMinutes: state.projection.serviceYearMinutes,
+                    serviceYearTargetMinutes: state.projection.serviceYearTargetMinutes
                 )
             } else {
                 // The projection is valid but belongs to a previous civil

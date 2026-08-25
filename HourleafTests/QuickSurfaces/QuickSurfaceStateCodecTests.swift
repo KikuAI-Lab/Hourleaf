@@ -17,6 +17,34 @@ final class QuickSurfaceStateCodecTests: XCTestCase {
         XCTAssertEqual(try QuickSurfaceStateV1.decodeStrict(QuickSurfaceStateV1.encodeCanonical(state)), state)
     }
 
+    func testLegacyCanonicalProjectionStillDecodesAndReencodesWithExtendedKeys() throws {
+        let legacyJSON = #"{"projection":{"creditMinutes":null,"generatedAtEpochSeconds":100,"monthKey":null,"privacyMode":"hideTotals","serviceMinutes":null,"timeZoneIdentifier":null},"revision":1,"schemaVersion":1,"timer":{"phase":"idle"},"timerEnabled":false}"#
+        let state = try QuickSurfaceStateV1.decodeStrict(Data(legacyJSON.utf8))
+
+        XCTAssertNil(state.projection.bibleStudyCount)
+        XCTAssertNil(state.projection.serviceYearMinutes)
+        XCTAssertNil(state.projection.serviceYearTargetMinutes)
+
+        let upgraded = try XCTUnwrap(
+            String(data: QuickSurfaceStateV1.encodeCanonical(state), encoding: .utf8)
+        )
+        XCTAssertTrue(upgraded.contains("\"bibleStudyCount\":null"))
+        XCTAssertTrue(upgraded.contains("\"serviceYearMinutes\":null"))
+        XCTAssertTrue(upgraded.contains("\"serviceYearTargetMinutes\":null"))
+    }
+
+    func testLegacyCanonicalShownProjectionPreservesExistingTotals() throws {
+        let legacyJSON = #"{"projection":{"creditMinutes":7,"generatedAtEpochSeconds":100,"monthKey":"2026-08","privacyMode":"showTotals","serviceMinutes":125,"timeZoneIdentifier":"Europe/Uzhgorod"},"revision":2,"schemaVersion":1,"timer":{"phase":"idle"},"timerEnabled":true}"#
+        let state = try QuickSurfaceStateV1.decodeStrict(Data(legacyJSON.utf8))
+
+        XCTAssertEqual(state.projection.monthKey, "2026-08")
+        XCTAssertEqual(state.projection.serviceMinutes, 125)
+        XCTAssertEqual(state.projection.creditMinutes, 7)
+        XCTAssertNil(state.projection.bibleStudyCount)
+        XCTAssertNil(state.projection.serviceYearMinutes)
+        XCTAssertNil(state.projection.serviceYearTargetMinutes)
+    }
+
     func testReviewPendingStateRoundTripsWithSuggestion() throws {
         let state = try makeReviewPendingState(suggestedMinutes: 42)
         XCTAssertEqual(try QuickSurfaceStateV1.decodeStrict(QuickSurfaceStateV1.encodeCanonical(state)), state)
@@ -98,6 +126,14 @@ final class QuickSurfaceStateCodecTests: XCTestCase {
         assertDecodeFails(
             Data(shown.replacingOccurrences(of: "\"serviceMinutes\":125", with: "\"serviceMinutes\":2147483648").utf8),
             expecting: .invalidValue("projection.serviceMinutes must be in 0...Int32.max")
+        )
+        assertDecodeFails(
+            Data(shown.replacingOccurrences(of: "\"serviceYearMinutes\":24750", with: "\"serviceYearMinutes\":null").utf8),
+            expecting: .invalidValue("showTotals requires either all extended metrics or none")
+        )
+        assertDecodeFails(
+            Data(shown.replacingOccurrences(of: "\"bibleStudyCount\":4", with: "\"bibleStudyCount\":1000").utf8),
+            expecting: .invalidValue("projection.bibleStudyCount must be in 0...999")
         )
     }
 
@@ -274,6 +310,9 @@ final class QuickSurfaceStateCodecTests: XCTestCase {
             timeZoneIdentifier: "Europe/Uzhgorod",
             serviceMinutes: 125,
             creditMinutes: 7,
+            bibleStudyCount: 4,
+            serviceYearMinutes: 24_750,
+            serviceYearTargetMinutes: 36_000,
             generatedAtEpochSeconds: 123.25
         )
     }

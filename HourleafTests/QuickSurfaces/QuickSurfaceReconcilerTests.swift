@@ -16,6 +16,7 @@ final class QuickSurfaceReconcilerTests: XCTestCase {
                 entry(kind: .service, day: .init(year: 2026, month: 8, day: 2), minutes: 40, deleted: true),
                 entry(kind: .service, day: .init(year: 2026, month: 7, day: 31), minutes: 90)
             ],
+            bibleStudyCount: 3,
             preferences: .init(timerVisible: true, privacyMode: .showTotals)
         )
 
@@ -29,6 +30,9 @@ final class QuickSurfaceReconcilerTests: XCTestCase {
         XCTAssertEqual(state.projection.timeZoneIdentifier, timeZone.identifier)
         XCTAssertEqual(state.projection.serviceMinutes, 75)
         XCTAssertEqual(state.projection.creditMinutes, 20)
+        XCTAssertEqual(state.projection.bibleStudyCount, 3)
+        XCTAssertEqual(state.projection.serviceYearMinutes, 165)
+        XCTAssertEqual(state.projection.serviceYearTargetMinutes, 36_000)
         XCTAssertEqual(state.projection.generatedAtEpochSeconds, now.timeIntervalSince1970)
     }
 
@@ -359,11 +363,37 @@ final class QuickSurfaceReconcilerTests: XCTestCase {
 
     private func makeSnapshot(
         entries: [LedgerEntryRecord] = [],
+        bibleStudyCount: Int = 0,
         preferences: QuickSurfacePreferences = .init()
     ) -> LedgerSnapshot {
-        LedgerSnapshot(
+        var settings = AppSettings()
+        settings.ledgerStartMonth = MonthKey(year: 2025, month: 9)
+        settings.baselineServiceYearStart = MonthKey(year: 2025, month: 9)
+        settings.baselineServiceYearMinutes = 0
+
+        let reportStates: [ReportStateRecord]
+        if bibleStudyCount == 0 {
+            reportStates = []
+        } else {
+            reportStates = [
+                ReportStateRecord(
+                    id: UUID(),
+                    month: MonthKey(year: 2026, month: 8),
+                    state: .draft,
+                    lastStableState: nil,
+                    currentSnapshotID: nil,
+                    reviewedCalculationFingerprint: nil,
+                    reviewedPresentationFingerprint: nil,
+                    bibleStudyCount: bibleStudyCount,
+                    updatedAt: date(year: 2026, month: 8, day: 3),
+                    changedAt: nil
+                )
+            ]
+        }
+
+        return LedgerSnapshot(
             entries: entries,
-            settings: .init(),
+            settings: settings,
             settingsMetadata: .init(
                 id: UUID(),
                 dataRevision: 2,
@@ -378,7 +408,7 @@ final class QuickSurfaceReconcilerTests: XCTestCase {
             policies: [],
             reminders: [],
             reportSnapshots: [],
-            reportStates: [],
+            reportStates: reportStates,
             entryRevisions: [],
             presets: [],
             dayAcknowledgements: [],
@@ -430,6 +460,9 @@ final class QuickSurfaceReconcilerTests: XCTestCase {
             timeZoneIdentifier: timeZone.identifier,
             serviceMinutes: service,
             creditMinutes: credit,
+            bibleStudyCount: 0,
+            serviceYearMinutes: service,
+            serviceYearTargetMinutes: 36_000,
             generatedAtEpochSeconds: generatedAt
         )
     }

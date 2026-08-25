@@ -64,7 +64,14 @@ final class QuickSurfacePacketCM4Tests: XCTestCase {
 
         XCTAssertEqual(
             QuickSurfaceDisplayReducerV1.reduce(state: state, asOf: current).totals,
-            .shown(monthKey: "2026-08", serviceMinutes: 125, creditMinutes: 7)
+            .shown(
+                monthKey: "2026-08",
+                serviceMinutes: 125,
+                creditMinutes: 7,
+                bibleStudyCount: 4,
+                serviceYearMinutes: 24_750,
+                serviceYearTargetMinutes: 36_000
+            )
         )
 
         let stale = QuickSurfaceDisplayReducerV1.reduce(state: state, asOf: nextMonth)
@@ -92,7 +99,14 @@ final class QuickSurfacePacketCM4Tests: XCTestCase {
 
         XCTAssertEqual(
             QuickSurfaceDisplayReducerV1.reduce(state: state, asOf: beforeMidnightUTC).totals,
-            .shown(monthKey: "2026-08", serviceMinutes: 125, creditMinutes: 7)
+            .shown(
+                monthKey: "2026-08",
+                serviceMinutes: 125,
+                creditMinutes: 7,
+                bibleStudyCount: 4,
+                serviceYearMinutes: 24_750,
+                serviceYearTargetMinutes: 36_000
+            )
         )
         XCTAssertEqual(
             QuickSurfaceDisplayReducerV1.reduce(state: state, asOf: afterMidnightUTC).totals,
@@ -130,6 +144,9 @@ final class QuickSurfacePacketCM4Tests: XCTestCase {
                 timeZoneIdentifier: timeZoneIdentifier,
                 serviceMinutes: 125,
                 creditMinutes: 7,
+                bibleStudyCount: 4,
+                serviceYearMinutes: 24_750,
+                serviceYearTargetMinutes: 36_000,
                 generatedAtEpochSeconds: 1
             ),
             timerEnabled: true,

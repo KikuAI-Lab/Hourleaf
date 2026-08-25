@@ -22,6 +22,9 @@ struct QuickSurfaceProjectionV1: Equatable, Sendable {
     let timeZoneIdentifier: String?
     let serviceMinutes: Int?
     let creditMinutes: Int?
+    let bibleStudyCount: Int?
+    let serviceYearMinutes: Int?
+    let serviceYearTargetMinutes: Int?
     let generatedAtEpochSeconds: Double
 
     init(
@@ -30,6 +33,9 @@ struct QuickSurfaceProjectionV1: Equatable, Sendable {
         timeZoneIdentifier: String?,
         serviceMinutes: Int?,
         creditMinutes: Int?,
+        bibleStudyCount: Int? = nil,
+        serviceYearMinutes: Int? = nil,
+        serviceYearTargetMinutes: Int? = nil,
         generatedAtEpochSeconds: Double
     ) throws {
         try Self.validateGeneratedAt(generatedAtEpochSeconds)
@@ -39,7 +45,10 @@ struct QuickSurfaceProjectionV1: Equatable, Sendable {
                 monthKey == nil,
                 timeZoneIdentifier == nil,
                 serviceMinutes == nil,
-                creditMinutes == nil
+                creditMinutes == nil,
+                bibleStudyCount == nil,
+                serviceYearMinutes == nil,
+                serviceYearTargetMinutes == nil
             else {
                 throw QuickSurfaceStateCodecError.invalidValue(
                     "hideTotals requires all projection totals to be nil"
@@ -60,6 +69,27 @@ struct QuickSurfaceProjectionV1: Equatable, Sendable {
             try Self.validateTimeZoneIdentifier(timeZoneIdentifier)
             try Self.validateMinutes(serviceMinutes, path: "projection.serviceMinutes")
             try Self.validateMinutes(creditMinutes, path: "projection.creditMinutes")
+
+            let extendedMetrics = [
+                bibleStudyCount != nil,
+                serviceYearMinutes != nil,
+                serviceYearTargetMinutes != nil
+            ]
+            guard extendedMetrics.allSatisfy({ $0 }) || extendedMetrics.allSatisfy({ !$0 }) else {
+                throw QuickSurfaceStateCodecError.invalidValue(
+                    "showTotals requires either all extended metrics or none"
+                )
+            }
+            if let bibleStudyCount,
+               let serviceYearMinutes,
+               let serviceYearTargetMinutes {
+                try Self.validateBibleStudyCount(bibleStudyCount)
+                try Self.validateMinutes(
+                    serviceYearMinutes,
+                    path: "projection.serviceYearMinutes"
+                )
+                try Self.validateServiceYearTarget(serviceYearTargetMinutes)
+            }
         }
 
         self.privacyMode = privacyMode
@@ -67,6 +97,9 @@ struct QuickSurfaceProjectionV1: Equatable, Sendable {
         self.timeZoneIdentifier = timeZoneIdentifier
         self.serviceMinutes = serviceMinutes
         self.creditMinutes = creditMinutes
+        self.bibleStudyCount = bibleStudyCount
+        self.serviceYearMinutes = serviceYearMinutes
+        self.serviceYearTargetMinutes = serviceYearTargetMinutes
         self.generatedAtEpochSeconds = generatedAtEpochSeconds
     }
 
@@ -109,6 +142,22 @@ struct QuickSurfaceProjectionV1: Equatable, Sendable {
             throw QuickSurfaceStateCodecError.invalidValue("\(path) must be in 0...Int32.max")
         }
     }
+
+    private static func validateBibleStudyCount(_ value: Int) throws {
+        guard (0...999).contains(value) else {
+            throw QuickSurfaceStateCodecError.invalidValue(
+                "projection.bibleStudyCount must be in 0...999"
+            )
+        }
+    }
+
+    private static func validateServiceYearTarget(_ value: Int) throws {
+        guard (1...Int(Int32.max)).contains(value) else {
+            throw QuickSurfaceStateCodecError.invalidValue(
+                "projection.serviceYearTargetMinutes must be in 1...Int32.max"
+            )
+        }
+    }
 }
 
 extension QuickSurfaceProjectionV1: Codable {
@@ -118,16 +167,34 @@ extension QuickSurfaceProjectionV1: Codable {
         case timeZoneIdentifier
         case serviceMinutes
         case creditMinutes
+        case bibleStudyCount
+        case serviceYearMinutes
+        case serviceYearTargetMinutes
         case generatedAtEpochSeconds
     }
 
+    private static let legacyCodingKeyNames = [
+        CodingKeys.privacyMode,
+        .monthKey,
+        .timeZoneIdentifier,
+        .serviceMinutes,
+        .creditMinutes,
+        .generatedAtEpochSeconds
+    ].map(\.stringValue)
+
     init(from decoder: any Decoder) throws {
         let rawContainer = try decoder.container(keyedBy: QuickSurfaceAnyCodingKey.self)
-        try QuickSurfaceStrictJSON.requireExactKeys(
-            actual: rawContainer.allKeys.map(\.stringValue),
-            expected: CodingKeys.allCases.map(\.stringValue),
-            path: "projection"
-        )
+        let actualKeys = rawContainer.allKeys.map(\.stringValue)
+        let legacyKeys = Set(Self.legacyCodingKeyNames)
+        let isLegacyProjection = Set(actualKeys) == legacyKeys
+            && actualKeys.count == legacyKeys.count
+        if !isLegacyProjection {
+            try QuickSurfaceStrictJSON.requireExactKeys(
+                actual: actualKeys,
+                expected: CodingKeys.allCases.map(\.stringValue),
+                path: "projection"
+            )
+        }
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
         let privacyMode = try container.decode(QuickSurfacePrivacyModeV1.self, forKey: .privacyMode)
@@ -135,6 +202,24 @@ extension QuickSurfaceProjectionV1: Codable {
         let timeZoneIdentifier = try container.decodeNil(forKey: .timeZoneIdentifier) ? nil : try container.decode(String.self, forKey: .timeZoneIdentifier)
         let serviceMinutes = try container.decodeNil(forKey: .serviceMinutes) ? nil : try container.decode(Int.self, forKey: .serviceMinutes)
         let creditMinutes = try container.decodeNil(forKey: .creditMinutes) ? nil : try container.decode(Int.self, forKey: .creditMinutes)
+        let bibleStudyCount: Int?
+        let serviceYearMinutes: Int?
+        let serviceYearTargetMinutes: Int?
+        if isLegacyProjection {
+            bibleStudyCount = nil
+            serviceYearMinutes = nil
+            serviceYearTargetMinutes = nil
+        } else {
+            bibleStudyCount = try container.decodeNil(forKey: .bibleStudyCount)
+                ? nil
+                : try container.decode(Int.self, forKey: .bibleStudyCount)
+            serviceYearMinutes = try container.decodeNil(forKey: .serviceYearMinutes)
+                ? nil
+                : try container.decode(Int.self, forKey: .serviceYearMinutes)
+            serviceYearTargetMinutes = try container.decodeNil(forKey: .serviceYearTargetMinutes)
+                ? nil
+                : try container.decode(Int.self, forKey: .serviceYearTargetMinutes)
+        }
         let generatedAtEpochSeconds = try container.decode(Double.self, forKey: .generatedAtEpochSeconds)
 
         if let monthKeyString {
@@ -147,6 +232,9 @@ extension QuickSurfaceProjectionV1: Codable {
             timeZoneIdentifier: timeZoneIdentifier,
             serviceMinutes: serviceMinutes,
             creditMinutes: creditMinutes,
+            bibleStudyCount: bibleStudyCount,
+            serviceYearMinutes: serviceYearMinutes,
+            serviceYearTargetMinutes: serviceYearTargetMinutes,
             generatedAtEpochSeconds: generatedAtEpochSeconds
         )
     }
@@ -178,6 +266,24 @@ extension QuickSurfaceProjectionV1: Codable {
             try container.encode(creditMinutes, forKey: .creditMinutes)
         } else {
             try container.encodeNil(forKey: .creditMinutes)
+        }
+        if let bibleStudyCount {
+            try Self.validateBibleStudyCount(bibleStudyCount)
+            try container.encode(bibleStudyCount, forKey: .bibleStudyCount)
+        } else {
+            try container.encodeNil(forKey: .bibleStudyCount)
+        }
+        if let serviceYearMinutes {
+            try Self.validateMinutes(serviceYearMinutes, path: "projection.serviceYearMinutes")
+            try container.encode(serviceYearMinutes, forKey: .serviceYearMinutes)
+        } else {
+            try container.encodeNil(forKey: .serviceYearMinutes)
+        }
+        if let serviceYearTargetMinutes {
+            try Self.validateServiceYearTarget(serviceYearTargetMinutes)
+            try container.encode(serviceYearTargetMinutes, forKey: .serviceYearTargetMinutes)
+        } else {
+            try container.encodeNil(forKey: .serviceYearTargetMinutes)
         }
         try container.encode(generatedAtEpochSeconds, forKey: .generatedAtEpochSeconds)
     }
@@ -566,11 +672,93 @@ struct QuickSurfaceStateV1: Equatable, Sendable {
             throw QuickSurfaceStateCodecError.invalidJSON(error.localizedDescription)
         }
 
-        guard try QuickSurfaceStrictJSON.canonicalData(state) == data else {
-            throw QuickSurfaceStateCodecError.nonCanonicalJSON
+        let currentCanonicalData = try QuickSurfaceStrictJSON.canonicalData(state)
+        if currentCanonicalData != data {
+            guard try legacyCanonicalDataIfRepresentable(state) == data else {
+                throw QuickSurfaceStateCodecError.nonCanonicalJSON
+            }
         }
 
         return state
+    }
+
+    private static func legacyCanonicalDataIfRepresentable(
+        _ state: QuickSurfaceStateV1
+    ) throws -> Data? {
+        guard
+            state.projection.bibleStudyCount == nil,
+            state.projection.serviceYearMinutes == nil,
+            state.projection.serviceYearTargetMinutes == nil
+        else { return nil }
+        return try QuickSurfaceStrictJSON.canonicalData(QuickSurfaceLegacyStateV1(state: state))
+    }
+}
+
+private struct QuickSurfaceLegacyProjectionV1: Encodable {
+    let privacyMode: QuickSurfacePrivacyModeV1
+    let monthKey: String?
+    let timeZoneIdentifier: String?
+    let serviceMinutes: Int?
+    let creditMinutes: Int?
+    let generatedAtEpochSeconds: Double
+
+    init(projection: QuickSurfaceProjectionV1) {
+        privacyMode = projection.privacyMode
+        monthKey = projection.monthKey
+        timeZoneIdentifier = projection.timeZoneIdentifier
+        serviceMinutes = projection.serviceMinutes
+        creditMinutes = projection.creditMinutes
+        generatedAtEpochSeconds = projection.generatedAtEpochSeconds
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case privacyMode
+        case monthKey
+        case timeZoneIdentifier
+        case serviceMinutes
+        case creditMinutes
+        case generatedAtEpochSeconds
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(privacyMode, forKey: .privacyMode)
+        if let monthKey {
+            try container.encode(monthKey, forKey: .monthKey)
+        } else {
+            try container.encodeNil(forKey: .monthKey)
+        }
+        if let timeZoneIdentifier {
+            try container.encode(timeZoneIdentifier, forKey: .timeZoneIdentifier)
+        } else {
+            try container.encodeNil(forKey: .timeZoneIdentifier)
+        }
+        if let serviceMinutes {
+            try container.encode(serviceMinutes, forKey: .serviceMinutes)
+        } else {
+            try container.encodeNil(forKey: .serviceMinutes)
+        }
+        if let creditMinutes {
+            try container.encode(creditMinutes, forKey: .creditMinutes)
+        } else {
+            try container.encodeNil(forKey: .creditMinutes)
+        }
+        try container.encode(generatedAtEpochSeconds, forKey: .generatedAtEpochSeconds)
+    }
+}
+
+private struct QuickSurfaceLegacyStateV1: Encodable {
+    let schemaVersion = QuickSurfaceStateV1.schemaVersion
+    let revision: UInt64
+    let projection: QuickSurfaceLegacyProjectionV1
+    let timerEnabled: Bool
+    let timer: TimerSessionV1
+
+    init(state: QuickSurfaceStateV1) {
+        revision = state.revision
+        projection = QuickSurfaceLegacyProjectionV1(projection: state.projection)
+        timerEnabled = state.timerEnabled
+        timer = state.timer
     }
 }
 

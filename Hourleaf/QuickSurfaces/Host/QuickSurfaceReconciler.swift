@@ -242,12 +242,32 @@ struct QuickSurfaceReconciler: @unchecked Sendable {
                 }
             }
 
+            let bibleStudyCount = snapshot.bibleStudyCount(for: currentMonth)
+            guard MonthlyBibleStudyCount.allowedRange.contains(bibleStudyCount) else {
+                throw QuickSurfaceReconcilerError.projectionTotalsUnavailable
+            }
+
+            let serviceYearPace: ServiceYearPace
+            do {
+                serviceYearPace = try ServiceYearPaceCalculator.calculate(
+                    records: snapshot.entries,
+                    settings: snapshot.settings,
+                    asOf: LocalDay(generatedAt, calendar: calendar),
+                    calendar: calendar
+                )
+            } catch {
+                throw QuickSurfaceReconcilerError.projectionTotalsUnavailable
+            }
+
             return try QuickSurfaceProjectionV1(
                 privacyMode: .showTotals,
                 monthKey: currentMonth.key,
                 timeZoneIdentifier: timeZone.identifier,
                 serviceMinutes: serviceMinutes,
                 creditMinutes: creditMinutes,
+                bibleStudyCount: bibleStudyCount,
+                serviceYearMinutes: serviceYearPace.actualMinutes,
+                serviceYearTargetMinutes: serviceYearPace.targetMinutes,
                 generatedAtEpochSeconds: generatedAtEpochSeconds
             )
         }
@@ -270,6 +290,9 @@ struct QuickSurfaceReconciler: @unchecked Sendable {
             && lhs.timeZoneIdentifier == rhs.timeZoneIdentifier
             && lhs.serviceMinutes == rhs.serviceMinutes
             && lhs.creditMinutes == rhs.creditMinutes
+            && lhs.bibleStudyCount == rhs.bibleStudyCount
+            && lhs.serviceYearMinutes == rhs.serviceYearMinutes
+            && lhs.serviceYearTargetMinutes == rhs.serviceYearTargetMinutes
             && lhs.generatedAtEpochSeconds <= rhs.generatedAtEpochSeconds
     }
 
