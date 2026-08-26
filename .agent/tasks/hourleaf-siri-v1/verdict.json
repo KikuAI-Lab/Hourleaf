@@ -1,14 +1,24 @@
 {
   "task": "hourleaf-siri-v1",
-  "verdict": "PASS",
-  "review_mode": "fix-verified-with-isolated-physical-iphone-and-watch-proof",
-  "findings": [],
+  "verdict": "UNKNOWN",
+  "review_mode": "fresh-source-and-device-routing-verification",
+  "findings": [
+    {
+      "acceptance": "AC9",
+      "severity": "blocking",
+      "summary": "A production voice invocation after the routing repair has not yet been observed."
+    }
+  ],
   "acceptance": {
     "AC1": "PASS",
     "AC2": "PASS",
     "AC3": "PASS",
     "AC4": "PASS",
-    "AC5": "PASS"
+    "AC5": "PASS",
+    "AC6": "PASS",
+    "AC7": "PASS",
+    "AC8": "PASS",
+    "AC9": "UNKNOWN"
   },
-  "residual_risk": "The currently public Store binary predates the cold dependency-registration repair. The repaired source is automated-, Release-, iPhone-, and Apple-Watch-proven, but users receive it only after an owner-approved App Store upload and release."
+  "residual_risk": "The code and synced production route are repaired, but build 16 is not installed and a durable production service write has not yet been compared before/after."
 }

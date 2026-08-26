@@ -1,84 +1,84 @@
 # Evidence
 
-## Final verdict
+## Current regression verdict
 
-PASS. Discovery, cold background execution, iPhone Siri, and Apple Watch Siri
-are all proven on separately signed development bundles without replacing the
-production app or touching its ledger. A controlled iPhone invocation and a
-controlled Watch invocation each produced exactly one durable service entry.
+UNKNOWN. The source repair, compiled Siri metadata, build 16 package, and
+synced Shortcut routing are proven. One final production-device voice
+invocation is still required for AC9; no completion claim is made before that
+durable before/after readback.
 
 ## AC1 — PASS: discoverable metadata
 
-- A fresh unsigned Release build completed without App Intents metadata or
-  localization errors for the iPhone and Watch targets.
-- Compiled service action titles are `Record service`, `Запиши служение`, and
-  `Запиши служіння`; the corresponding credit titles remain localized.
-- Built-in App Shortcut phrases retain Apple's required application-name token.
+- A fresh unsigned build 16 Release build completed with no App Intents or
+  localization error for iPhone, Watch, or WidgetKit.
+- RU/UK/EN SSU training completed for fixed service and credit actions.
+- Compiled metadata exposes `RecordServiceTimeIntent` and
+  `RecordCreditTimeIntent`, while the retained legacy `RecordTimeIntent` is
+  explicitly non-discoverable.
 
 ## AC2 — PASS: honest invocation contract
 
-- The app-name-free phrase is implemented as a user-created Shortcut whose card
-  has that exact name. The public EN/RU/UK guide says this explicitly.
-- The guide remains conservative about Apple Watch until the repaired Store
-  build ships. Physical evidence now additionally proves the synced custom
-  Shortcut can run from Apple Watch against the repaired iPhone intent.
+- Built-in App Shortcut phrases retain Apple's application-name token.
+- The short app-name-free phrases remain user-created Shortcut names; the
+  routing receipt proves which production actions those names invoke.
 
 ## AC3 — PASS: executable action contract
 
-- Service and credit remain separate intents, each using one spoken duration
-  and the existing validated command/repository path.
-- The service card retains fixed kind `Служение`; credit remains a distinct
-  fixed-kind action. No persistence or schema code changed.
-- Focused iPhone App Intent plus Watch contract tests passed 27/27; the complete
-  Hourleaf unit/integration suite passed 512/512.
-- Compiled Release metadata declares background execution and authentication
-  policy `0` for the two iPhone and two Watch recording actions.
-- A regression test proves `HourleafApp.init()` registers the live App Intent
-  dependencies before any SwiftUI body evaluation.
+- The fixed service intent delegates to the existing validated persistence
+  path with `.service`; credit remains its own fixed action.
+- Focused App Intent tests passed 22/22. The complete Hourleaf suite passed
+  517/517.
 
-## AC4 — PASS: fixed binary on physical iPhone and Apple Watch
+## AC4 — PASS: device diagnosis without ledger replacement
 
-- Read-only device inspection confirmed Hourleaf 1.0.2 (13) on an iPhone 15 Pro
-  with iOS 26.6 and an Apple Watch Series 10 with watchOS 26.6.
-- The repaired app was installed under isolated local bundle identifiers on
-  both devices. The production iPhone and Watch bundles remained present and
-  untouched.
-- Before eager dependency registration, the isolated binary still returned
-  `Это действие не разрешено` despite authentication policy `0`. This ruled out
-  policy alone and isolated the cold dependency boundary.
-- After the fix, one exact iPhone Siri invocation returned `Готово` and added
-  exactly one 1-minute `shortcut` entry to the isolated ledger.
-- One exact Apple Watch Siri invocation returned `Хорошо` and added exactly one
-  further 1-minute `shortcut` entry to the same isolated ledger.
-- The Watch result's `shortcut` source proves the synced custom Shortcut ran the
-  repaired iPhone intent. It is distinct from the native Watch app's direct
-  WatchConnectivity writer.
-- The production ledger was never read, migrated, mutated, or deleted.
+- Read-only inspection confirmed both production and isolated development
+  Hourleaf bundles remain installed.
+- The production ledger was copied only for private before/after verification;
+  it was not migrated, replaced, or deleted.
+- No private totals or notes are stored in this public task bundle.
 
 ## AC5 — PASS: regression safety
 
-- Generic iOS Release build: PASS.
-- Release-readiness guard and its self-test: PASS.
-- EN/RU/UK plist lint and App Intents metadata processing: PASS.
-- kikuai.dev focused Hourleaf pages: 4/4 PASS; complete site gate: 279/279 PASS;
-  production Nuxt build: PASS with 296 prerendered routes.
-- No dependency, data model, entitlement, privacy manifest, account, analytics,
-  production bundle identifier, Store build, or production app container
-  changed.
-- CI timeout was raised from 45 to 60 minutes because the previous run completed
-  all 53 UI tests with zero failures and was cancelled only while `xcodebuild`
-  was finishing at the job boundary.
+- Release guard and its mutation self-test pass.
+- EN/RU/UK app and Watch string files pass plist lint.
+- Build 16 contains the iPhone app, Watch app, and WidgetKit extension at the
+  same version/build number.
+- No dependency, schema, entitlement, account, analytics, or SDK was added.
 
-## Root causes and forward fixes
+## AC6 — PASS: explicit minute prompt
 
-1. Discovery: the service card was named `Записать время`, while the promoted
-   phrase was `Запиши служение`. The card and localized action title now match.
-2. Locked-use contract: the recording intents explicitly required
-   authentication even though they only write validated time and reveal no
-   ledger data. The four iPhone/Watch service and credit actions now use
-   `.alwaysAllowed` while preserving the same validation and write path.
-3. Cold execution: App Intent dependencies were registered while lazily
-   constructing an inline `StateObject`. Background App Intent launch can run
-   before that construction. `HourleafApp.init()` now eagerly creates the
-   launcher and registers the exact repository/router dependencies before the
-   SwiftUI scene body is needed.
+- App and Watch localizations now ask `How many minutes?`, `Сколько минут?`, or
+  `Скільки хвилин?` and label the parameter as minutes.
+- Tests parse all six localization files and enforce the prompt contract.
+
+## AC7 — PASS: fixed service identity
+
+- The promoted service App Shortcut uses `RecordServiceTimeIntent`.
+- Compiled metadata confirms that the fixed service action is discoverable and
+  always allowed, while the legacy generic action remains executable but is
+  hidden from new setup.
+
+## AC8 — PASS: unambiguous synced route
+
+- Before repair, `Запиши служение` targeted the isolated development bundle,
+  while the production action used a different name.
+- After a non-destructive Shortcuts rename, `Запиши служение` targets
+  `com.kikuai.hourleaf.RecordTimeIntent`, `Запиши кредит` targets
+  `com.kikuai.hourleaf.RecordCreditTimeIntent`, and the preserved development
+  card is named `Старое тестовое служение`.
+
+## AC9 — UNKNOWN: final production voice write
+
+- No owner voice invocation has yet been confirmed after the synced route was
+  repaired, and build 16 has not been installed.
+- Required proof: one spoken service invocation creates exactly one production
+  service entry with source `shortcut`; credit remains symmetric; build 16 asks
+  explicitly for minutes before saving.
+
+## Supporting artifacts
+
+- `raw/regression-automated-receipt.txt`
+- `raw/regression-device-routing-receipt.txt`
+- `raw/regression-physical-siri-receipt.txt`
+- `raw/focused-tests-summary.json`
+- `raw/full-unit-summary.json`

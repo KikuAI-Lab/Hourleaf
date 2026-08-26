@@ -1,0 +1,24 @@
+Hourleaf Siri regression automated receipt — 2026-08-26T19:13:08+03:00
+
+- Focused AppIntentTests: 22 passed, 0 failed, 0 skipped.
+- Complete HourleafTests: 517 passed, 0 failed, 0 skipped.
+- Release-readiness guard: PASS.
+- Release-readiness mutation self-test: PASS.
+- App and Watch EN/RU/UK Localizable.strings plist lint: PASS.
+- git diff --check: PASS.
+- Unsigned generic iOS Release build: BUILD SUCCEEDED.
+- Built products: Hourleaf iPhone app, embedded Hourleaf Watch app, and
+  HourleafQuickSurfaces WidgetKit extension.
+- All three shipping products report version 1.0.4 build 16.
+- App Intents metadata extraction, shortcut-string validation, and SSU training
+  completed for EN/RU/UK.
+- Compiled auto shortcut service action identifier:
+  RecordServiceTimeIntent.
+- Compiled credit action identifier: RecordCreditTimeIntent.
+- Compiled legacy RecordTimeIntent: isDiscoverable=false.
+- Compiled fixed service and credit intents: isDiscoverable=true,
+  openAppWhenRun=false, explicit authentication policy 0.
+- App and Watch prompt source tests require: EN "How many minutes?", RU
+  "Сколько минут?", UK "Скільки хвилин?".
+- No dependency, data model, entitlement, privacy manifest, account, analytics,
+  tracking, AI service, or third-party SDK changed.

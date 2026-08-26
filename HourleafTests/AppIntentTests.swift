@@ -55,6 +55,22 @@ final class AppIntentTests: XCTestCase {
         XCTAssertEqual(snapshot.entryRevisions.first?.source, EntryMutationSource.shortcut.rawValue)
     }
 
+    func testServiceShortcutIntentAlwaysWritesService() async throws {
+        let repository = try await makeRepository()
+        let manager = makeDependencyManager(repository: repository)
+
+        try await RecordServiceTimeIntent(
+            duration: Measurement(value: 25, unit: UnitDuration.minutes),
+            dependencyManager: manager
+        ).persist(using: repository)
+
+        let snapshot = try await repository.ledgerSnapshot()
+        XCTAssertEqual(snapshot.activeEntries.count, 1)
+        XCTAssertEqual(snapshot.activeEntries.first?.kind, .service)
+        XCTAssertEqual(snapshot.activeEntries.first?.minutes, 25)
+        XCTAssertEqual(snapshot.entryRevisions.first?.source, EntryMutationSource.shortcut.rawValue)
+    }
+
     func testPromotedRecordTilesLeaveDurationUnresolvedUntilShortcutsCollectsIt() throws {
         guard #available(iOS 18.2, *) else {
             throw XCTSkip("IntentParameter value state is unavailable before iOS 18.2.")
@@ -64,10 +80,9 @@ final class AppIntentTests: XCTestCase {
             persistence: PersistenceController(inMemory: true, cloudSyncEnabled: false)
         )
         let manager = makeDependencyManager(repository: repository)
-        let serviceTile = RecordTimeIntent(kind: .service, dependencyManager: manager)
+        let serviceTile = RecordServiceTimeIntent(dependencyManager: manager)
         let creditTile = RecordCreditTimeIntent(dependencyManager: manager)
 
-        XCTAssertEqual(serviceTile.kind, .service)
         assertUnset(serviceTile.$duration)
         assertUnset(creditTile.$duration)
     }
@@ -222,6 +237,10 @@ final class AppIntentTests: XCTestCase {
     func testRecordIntentsAllowHandsFreeExecutionWithoutOpeningApp() {
         XCTAssertFalse(RecordTimeIntent.openAppWhenRun)
         XCTAssertEqual(RecordTimeIntent.authenticationPolicy, .alwaysAllowed)
+        XCTAssertFalse(RecordTimeIntent.isDiscoverable)
+        XCTAssertFalse(RecordServiceTimeIntent.openAppWhenRun)
+        XCTAssertEqual(RecordServiceTimeIntent.authenticationPolicy, .alwaysAllowed)
+        XCTAssertTrue(RecordServiceTimeIntent.isDiscoverable)
         XCTAssertFalse(RecordCreditTimeIntent.openAppWhenRun)
         XCTAssertEqual(RecordCreditTimeIntent.authenticationPolicy, .alwaysAllowed)
         XCTAssertTrue(OpenQuickEntryIntent.openAppWhenRun)
@@ -510,6 +529,47 @@ final class AppIntentTests: XCTestCase {
 
     func testExactlyThreeShortcutsArePromoted() {
         XCTAssertEqual(HourleafShortcuts.appShortcuts.count, 3)
+    }
+
+    func testPromotedServiceShortcutUsesItsFixedKindAction() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appendingPathComponent("Hourleaf/AppIntents/HourleafShortcuts.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("intent: RecordServiceTimeIntent()"))
+        XCTAssertFalse(source.contains("intent: RecordTimeIntent(kind: .service)"))
+    }
+
+    func testSpokenDurationPromptExplicitlyRequestsMinutesInEveryLanguage() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let expected = [
+            "en": ("Minutes", "How many minutes?"),
+            "ru": ("Минуты", "Сколько минут?"),
+            "uk": ("Хвилини", "Скільки хвилин?")
+        ]
+
+        for (language, expectation) in expected {
+            for target in ["Hourleaf", "HourleafWatch"] {
+                let url = root.appendingPathComponent(
+                    "\(target)/\(language).lproj/Localizable.strings"
+                )
+                let data = try Data(contentsOf: url)
+                let values = try XCTUnwrap(
+                    PropertyListSerialization.propertyList(from: data, format: nil)
+                        as? [String: String]
+                )
+                let prefix = target == "Hourleaf" ? "intent.record" : "watch.intent"
+
+                XCTAssertEqual(values["\(prefix).duration"], expectation.0)
+                XCTAssertEqual(values["\(prefix).duration_prompt"], expectation.1)
+            }
+        }
     }
 
     func testServiceActionTitleMatchesPromotedShortcutInEveryLanguage() throws {

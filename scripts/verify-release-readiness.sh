@@ -278,9 +278,9 @@ watch_deployment_count="$(grep -F 'WATCHOS_DEPLOYMENT_TARGET = 10.0;' "$project_
 release_version_count="$(grep -Fo 'MARKETING_VERSION = 1.0.4;' "$project_file" | wc -l | tr -d '[:space:]' || true)"
 [[ "$release_version_count" == "6" ]] \
     || fail "all shipping targets must use marketing version 1.0.4"
-release_build_count="$(grep -Fo 'CURRENT_PROJECT_VERSION = 15;' "$project_file" | wc -l | tr -d '[:space:]' || true)"
+release_build_count="$(grep -Fo 'CURRENT_PROJECT_VERSION = 16;' "$project_file" | wc -l | tr -d '[:space:]' || true)"
 [[ "$release_build_count" == "6" ]] \
-    || fail "all shipping targets must use build number 15"
+    || fail "all shipping targets must use build number 16"
 grep -Fq 'forInfoDictionaryKey: "CFBundleShortVersionString"' "$settings_file" \
     || fail "Settings must read the installed version from bundle metadata"
 if grep -Eq 'LabeledContent\([^)]*settings\.version[^)]*value:[[:space:]]*"[0-9]+\.[0-9]+\.[0-9]+"' "$settings_file"; then

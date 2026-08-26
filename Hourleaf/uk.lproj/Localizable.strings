@@ -240,8 +240,8 @@
 "intent.record.hours_prompt" = "Скільки годин?";
 "intent.record.minutes" = "Хвилини";
 "intent.record.minutes_prompt" = "Скільки хвилин?";
-"intent.record.duration" = "Тривалість";
-"intent.record.duration_prompt" = "Скільки часу?";
+"intent.record.duration" = "Хвилини";
+"intent.record.duration_prompt" = "Скільки хвилин?";
 "intent.record.date" = "Дата";
 "intent.record.summary" = "Записати час";
 "intent.record.success" = "Збережено.";

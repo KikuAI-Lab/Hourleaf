@@ -240,8 +240,8 @@
 "intent.record.hours_prompt" = "How many hours?";
 "intent.record.minutes" = "Minutes";
 "intent.record.minutes_prompt" = "How many minutes?";
-"intent.record.duration" = "Duration";
-"intent.record.duration_prompt" = "How long?";
+"intent.record.duration" = "Minutes";
+"intent.record.duration_prompt" = "How many minutes?";
 "intent.record.date" = "Date";
 "intent.record.summary" = "Record time";
 "intent.record.success" = "Saved.";

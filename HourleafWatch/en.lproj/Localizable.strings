@@ -18,8 +18,8 @@
 "watch.intent.kind" = "Type";
 "watch.intent.record.title" = "Record time";
 "watch.intent.record.description" = "Records service or credit time in Hourleaf.";
-"watch.intent.duration" = "Duration";
-"watch.intent.duration_prompt" = "How long?";
+"watch.intent.duration" = "Minutes";
+"watch.intent.duration_prompt" = "How many minutes?";
 "watch.intent.date" = "Date";
 "watch.intent.summary" = "Record time";
 "watch.intent.saved" = "Saved in Hourleaf.";

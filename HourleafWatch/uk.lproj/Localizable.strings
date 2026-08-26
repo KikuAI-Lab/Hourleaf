@@ -18,8 +18,8 @@
 "watch.intent.kind" = "Тип";
 "watch.intent.record.title" = "Записати час";
 "watch.intent.record.description" = "Записує служіння або кредит у Hourleaf.";
-"watch.intent.duration" = "Тривалість";
-"watch.intent.duration_prompt" = "Скільки часу?";
+"watch.intent.duration" = "Хвилини";
+"watch.intent.duration_prompt" = "Скільки хвилин?";
 "watch.intent.date" = "Дата";
 "watch.intent.summary" = "Записати час";
 "watch.intent.saved" = "Збережено в Hourleaf.";

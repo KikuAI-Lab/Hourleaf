@@ -1,6 +1,6 @@
 # Hourleaf delivery checklist
 
-## Active release: 1.0.4 (15)
+## Active release: 1.0.4 (16)
 
 This active section is the maintained release contract. It is superseded when
 the next version becomes the source candidate; dated receipts below remain
@@ -9,33 +9,37 @@ immutable history.
 ### Source and package
 
 - [x] All iPhone, WidgetKit, and Watch shipping configurations use version
-      `1.0.4` build `15`.
+      `1.0.4` build `16`.
 - [x] Release guard and self-test pass.
-- [x] Full unit suite passes: 514 of 514 tests on the canonical iPhone 17 /
+- [x] Full unit suite passes: 517 of 517 tests on the canonical iPhone 17 /
       iOS 26.5 simulator.
 - [x] Unsigned Release build contains the iPhone app, small/medium WidgetKit
       extension, and embedded Watch app.
-- [x] Signed App Store archive is created and inspected only after the owner
+- [ ] Signed App Store archive is created and inspected only after the owner
       authorizes the next distribution step.
 
 ### Physical acceptance
 
-- [x] Install build `15` without losing the existing iPhone ledger.
-- [ ] Add the small and medium Hourleaf widgets on iPhone.
-- [ ] With the same Apple Account and a nearby iPhone, add both widgets on Mac.
-- [ ] Verify English plus one Russian/Ukrainian long-copy pass, opt-in totals,
+- [ ] Install build `16` without losing the existing iPhone ledger.
+- [x] Add the small and medium Hourleaf widgets on iPhone using the build 15
+      TestFlight baseline.
+- [ ] With the same Apple Account and a nearby iPhone, add the medium widget on
+      Mac. The small Continuity widget is already verified.
+- [x] Verify Russian copy, opt-in totals,
       privacy redaction, refresh after an entry, and the quick-entry deep link.
+- [ ] Verify that build 16 asks “Сколько минут?” and that both service and
+      credit voice actions create the correct production entry.
 
 ### Owner-controlled distribution
 
-- [x] Create the signed archive and inspect production entitlements.
-- [x] Upload build `15` to App Store Connect only after explicit owner approval.
-- [x] Wait for App Store Connect processing and verify the build is ready for
+- [ ] Create the signed archive and inspect production entitlements.
+- [ ] Upload build `16` to App Store Connect only after explicit owner approval.
+- [ ] Wait for App Store Connect processing and verify the build is ready for
       internal testing.
-- [ ] Attach build `15` to version `1.0.4`, save EN/RU/UK release notes, and
+- [ ] Attach build `16` to version `1.0.4`, save EN/RU/UK release notes, and
       submit only after explicit owner approval.
 
-### TestFlight receipt — 2026-08-26
+### Prior build 15 TestFlight baseline — 2026-08-26
 
 - Source commit: `0c496e5868157fcd0093fb0805af858cb1889f09` on
   `main`; GitHub CI run `32945038505` passed 514 unit/integration tests and

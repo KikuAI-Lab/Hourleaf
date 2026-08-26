@@ -1,0 +1,12 @@
+Hourleaf production Siri regression receipt — 2026-08-26, Europe/Uzhhorod
+
+- A fresh read-only copy of the production application-support container was
+  captured before any post-routing-repair owner voice invocation.
+- SQLite integrity/readback succeeded. The production container was not
+  migrated, replaced, restored, or deleted.
+- Private entry totals and notes are intentionally omitted from this public
+  receipt.
+- Post-repair production service invocation: UNKNOWN. The owner has not yet
+  confirmed saying `Запиши служение` after the synced route was repaired.
+- Build 16 explicit prompt smoke: UNKNOWN. Build 16 has not been archived,
+  uploaded, or installed.

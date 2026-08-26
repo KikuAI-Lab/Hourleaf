@@ -1,5 +1,44 @@
 # Implementation notes
 
+## 2026-08-26 regression decision receipt
+
+- lazy-senior lower rung: native App Intents plus one tiny fixed-service action
+  delegating the already tested persistence path.
+- GitHub prior art: skipped because this is a repo-local identity/routing bug.
+- New code is justified because a stored Shortcut must reference a fixed action
+  identity; an `AppShortcut` constructor's preconfigured enum value is not that
+  identity.
+
+## 2026-08-26 regression findings and repair
+
+- The synced Shortcut database proved the reported asymmetry was a routing
+  collision, not a silent Core Data failure. `Запиши кредит` targeted
+  `com.kikuai.hourleaf.RecordCreditTimeIntent`, while the canonical
+  `Запиши служение` still targeted
+  `com.kikuai.hourleaf.local.RecordTimeIntent`. The production service card was
+  separately named `Запиши служение App Store`.
+- The old local card was preserved and renamed `Старое тестовое служение`.
+  The production card was renamed `Запиши служение`. A fresh local database
+  readback confirmed the canonical service and credit names now both reference
+  `com.kikuai.hourleaf`.
+- The production source now promotes a distinct `RecordServiceTimeIntent`,
+  matching the fixed identity already used by credit and both Watch actions.
+  The generic `RecordTimeIntent` remains compiled with the same identifier for
+  existing cards, but is no longer discoverable when users add a new action.
+- iPhone and Watch prompts now explicitly say `How many minutes?`,
+  `Сколько минут?`, or `Скільки хвилин?`. The parameter remains a native
+  duration measured in minutes, so compound spoken durations are still valid
+  and a bare number keeps its existing minute interpretation.
+- The Store candidate was advanced from build 15 to build 16 because build 15
+  already exists in App Store Connect. All six iPhone, WidgetKit, and Watch
+  shipping configurations now share version `1.0.4` build `16`.
+- App Intent focused tests passed 22/22 and the full unit/integration suite
+  passed 517/517. The build 16 unsigned generic Release build passed Store
+  validation, generated RU/UK/EN Siri training assets, and embedded both the
+  Watch app and WidgetKit extension.
+- Distribution remains owner-gated. No build 16 archive, upload, TestFlight
+  install, App Store attachment, or submission has been performed.
+
 - The shipped iPhone action was titled `Записать время`, while the public guide
   instructed the owner to invoke a custom Shortcut named `Запиши служение`.
   Siri runs a user-created Shortcut by its exact card name, so the mismatch was

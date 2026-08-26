@@ -5,7 +5,7 @@ struct HourleafShortcuts: AppShortcutsProvider {
 
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
-            intent: RecordTimeIntent(kind: .service),
+            intent: RecordServiceTimeIntent(),
             phrases: [
                 "Record service time in \(.applicationName)",
                 "\(.applicationName), record service time"

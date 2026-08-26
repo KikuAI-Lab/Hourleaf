@@ -1,0 +1,26 @@
+Hourleaf synced Shortcut routing receipt — 2026-08-26, Europe/Uzhhorod
+
+Read-only source: the synced macOS Shortcuts database. Shortcut names and App
+Intent identifiers were decoded from each action's property-list payload.
+
+Before repair:
+
+- Запиши кредит -> com.kikuai.hourleaf.RecordCreditTimeIntent
+- Запиши служение App Store -> com.kikuai.hourleaf.RecordTimeIntent
+- Запиши служение -> com.kikuai.hourleaf.local.RecordTimeIntent
+
+Repair:
+
+- The old isolated-development card was preserved and renamed
+  `Старое тестовое служение`.
+- The production card was renamed `Запиши служение`.
+- No Shortcut was deleted and no app container was replaced.
+
+Fresh readback after repair:
+
+- Запиши кредит -> com.kikuai.hourleaf.RecordCreditTimeIntent
+- Запиши служение -> com.kikuai.hourleaf.RecordTimeIntent
+- Старое тестовое служение -> com.kikuai.hourleaf.local.RecordTimeIntent
+
+Result: the two canonical spoken names now resolve to the production Hourleaf
+bundle. No private ledger value, note, or report is included in this receipt.

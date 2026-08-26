@@ -240,8 +240,8 @@
 "intent.record.hours_prompt" = "Сколько часов?";
 "intent.record.minutes" = "Минуты";
 "intent.record.minutes_prompt" = "Сколько минут?";
-"intent.record.duration" = "Сколько времени";
-"intent.record.duration_prompt" = "Сколько времени?";
+"intent.record.duration" = "Минуты";
+"intent.record.duration_prompt" = "Сколько минут?";
 "intent.record.date" = "Дата";
 "intent.record.summary" = "Записать время";
 "intent.record.success" = "Сохранено.";

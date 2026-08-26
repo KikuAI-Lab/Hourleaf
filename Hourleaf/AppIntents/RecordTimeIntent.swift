@@ -113,6 +113,7 @@ struct RecordTimeIntent: AppIntent {
     }
 
     static var openAppWhenRun: Bool { false }
+    static var isDiscoverable: Bool { false }
     static var authenticationPolicy: IntentAuthenticationPolicy {
         // Recording adds a validated entry but never reveals ledger contents.
         // Allowing background execution keeps Siri and Shortcuts usable from
@@ -233,6 +234,94 @@ struct RecordTimeIntent: AppIntent {
         } catch {
             throw ShortcutIntentError.saveFailed
         }
+    }
+}
+
+/// The fixed service action promoted to Siri and the Shortcuts app.
+///
+/// A user-created Shortcut stores the action identity, not the preconfigured
+/// enum value supplied by an `AppShortcut`. Keep this action distinct from the
+/// legacy generic intent so service can never depend on a stored `kind` value.
+struct RecordServiceTimeIntent: AppIntent {
+    static var title: LocalizedStringResource {
+        "intent.shortcut.add_service"
+    }
+
+    static var description: IntentDescription {
+        IntentDescription("intent.record.description")
+    }
+
+    static var openAppWhenRun: Bool { false }
+    static var authenticationPolicy: IntentAuthenticationPolicy {
+        .alwaysAllowed
+    }
+
+    @Parameter(
+        title: "intent.record.duration",
+        defaultUnit: .minutes,
+        supportsNegativeNumbers: false,
+        requestValueDialog: "intent.record.duration_prompt"
+    )
+    var duration: Measurement<UnitDuration>
+
+    @Parameter(title: "intent.record.date", kind: .date)
+    var date: Date?
+
+    @AppDependency private var repository: CoreDataLedgerRepository
+    @AppDependency private var router: AppRouter
+    @AppDependency private var quickSurfaceRefresher: QuickSurfaceIntentProjectionRefresher
+
+    init() {
+        _repository = AppDependency()
+        _router = AppDependency()
+        _quickSurfaceRefresher = AppDependency()
+    }
+
+    init(
+        duration: Measurement<UnitDuration>? = nil,
+        date: Date? = nil,
+        dependencyManager: AppDependencyManager = .shared
+    ) {
+        if let duration {
+            self.duration = duration
+        }
+        self.date = date
+        _repository = AppDependency(manager: dependencyManager)
+        _router = AppDependency(manager: dependencyManager)
+        _quickSurfaceRefresher = AppDependency(manager: dependencyManager)
+    }
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("intent.record.summary") {
+            \.$duration
+            \.$date
+        }
+    }
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        try await persist(
+            using: repository,
+            notifying: router,
+            refreshing: quickSurfaceRefresher
+        )
+        return .result(dialog: IntentDialog("intent.record.success"))
+    }
+
+    func persist(
+        using repository: CoreDataLedgerRepository,
+        notifying router: AppRouter? = nil,
+        refreshing quickSurfaceRefresher: QuickSurfaceIntentProjectionRefresher? = nil
+    ) async throws {
+        let intent = RecordTimeIntent(
+            kind: .service,
+            duration: duration,
+            date: date
+        )
+        try await intent.persist(
+            using: repository,
+            notifying: router,
+            refreshing: quickSurfaceRefresher
+        )
     }
 }
 

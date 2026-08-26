@@ -6,11 +6,13 @@ matrix changes. Keep private reviewer contact details only in App Store Connect.
 
 ## Version 1.0.4 update
 
-Build 15 adds small and medium Hourleaf widgets. With monthly totals enabled in
-Hourleaf settings, the small widget shows service, credit, and Bible-study
-count; the medium widget also shows service-year progress. Totals remain opt-in
-and privacy-sensitive. The same iPhone widgets can appear on a nearby Mac signed
-in to the same Apple Account; there is no separate Mac account, backend, or data
+Build 16 adds small and medium Hourleaf widgets and makes Siri entry
+unambiguous. With monthly totals enabled in Hourleaf settings, the small widget
+shows service, credit, and Bible-study count; the medium widget also shows
+service-year progress. Siri asks specifically how many minutes to record, and
+service and credit use separate actions. Totals remain opt-in and
+privacy-sensitive. The same iPhone widgets can appear on a nearby Mac signed in
+to the same Apple Account; there is no separate Mac account, backend, or data
 store. This update adds no purchase, external service, sensitive-data
 permission, or new data category.
 
@@ -26,16 +28,16 @@ unchanged core entry, history, report, sharing, and data-management flows.
 ## Paste-ready Notes field
 
 ```text
-Hourleaf 1.0.4 (build 15) review information
+Hourleaf 1.0.4 (build 16) review information
 
 UPDATE SCOPE
-Build 15 adds small and medium Hourleaf widgets. With monthly totals enabled in Hourleaf settings, the small widget shows service, credit, and Bible-study count; the medium widget also shows service-year progress. Totals remain opt-in and privacy-sensitive. The same iPhone widgets can appear on a nearby Mac signed in to the same Apple Account; there is no separate Mac account, backend, or data store. This update adds no account, purchase, external service, sensitive-data permission, or new data category.
+Build 16 adds small and medium Hourleaf widgets and makes Siri entry unambiguous. With monthly totals enabled in Hourleaf settings, the small widget shows service, credit, and Bible-study count; the medium widget also shows service-year progress. Siri asks specifically how many minutes to record, and service and credit use separate actions. Totals remain opt-in and privacy-sensitive. The same iPhone widgets can appear on a nearby Mac signed in to the same Apple Account; there is no separate Mac account, backend, or data store. This update adds no account, purchase, external service, sensitive-data permission, or new data category.
 
 ACCESS AND MAIN FEATURES
 No account, login, purchase, credentials, or sample file is required. Launch Hourleaf and use Add to choose Service or Credit, set hours/minutes, optionally add a note, and save. The Bible studies stepper records the current month's count. History switches between list and calendar. Progress prepares the monthly report and opens the system share sheet. Settings > Data Management provides local backup, restore, and CSV export/import. Settings > Widgets & Control Center lets the user opt in to showing monthly totals outside Hourleaf. Add an Hourleaf small or medium widget from the iPhone widget gallery. On a paired Apple Watch, choose Service or Credit, set time with the Digital Crown, and confirm; the paired iPhone commits the entry.
 
 VOICE ENTRY
-In Apple Shortcuts, run “Record service” or “Record credit” and answer the duration prompt. The intent saves through the same validated local entry path as the app. The action works offline and does not reveal history, notes, totals, or reports.
+In Apple Shortcuts, run “Record service” or “Record credit”. Each action asks “How many minutes?” (localized in English, Russian, and Ukrainian) and saves through the same validated local entry path as the app. Service and credit have separate fixed actions; the retained legacy service action remains executable only for existing user shortcuts and is not offered for new setup. The actions work offline and do not reveal history, notes, totals, or reports.
 
 AUDIENCE AND VALUE
 Hourleaf is a private, local-first ministry-time ledger for individual volunteers keeping their own records. It replaces handwritten or spreadsheet calculations while keeping service and credit separate.
@@ -47,7 +49,7 @@ REGIONS AND THIRD-PARTY MATERIAL
 Features are consistent across all regions and localized in English, Russian, and Ukrainian. Hourleaf is not a regulated service and contains no protected third-party database, media, or organization-owned content. It is an independent personal tool and is not affiliated with or endorsed by any religious organization.
 
 TEST EVIDENCE
-Core flows were tested on an iPhone 15 Pro running iOS 26.6 and an Apple Watch Series 10 running watchOS 26.6. The unchanged core entry, history, report, sharing, and data-management flows remain demonstrated by the physical-device recording supplied during the version 1.0 review. The exact service Shortcut was also physically verified on iPhone and Apple Watch, and the duration prompt was verified on iPhone.
+Core flows were tested on an iPhone 15 Pro running iOS 26.6 and an Apple Watch Series 10 running watchOS 26.6. The unchanged core entry, history, report, sharing, and data-management flows remain demonstrated by the physical-device recording supplied during the version 1.0 review. Build 16 passed the full automated unit suite and an unsigned Release build containing the iPhone app, WidgetKit extension, and Watch app. The updated Siri wording and fixed service action require a final physical-device smoke after build 16 is installed.
 ```
 
 ## Resolution Center reply

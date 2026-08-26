@@ -1,31 +1,51 @@
 {
   "task": "hourleaf-siri-v1",
-  "status": "PASS",
+  "status": "UNKNOWN",
   "acceptance": [
     {
       "id": "AC1",
       "status": "PASS",
-      "proof": ["raw/verification-receipt.txt"]
+      "proof": ["raw/regression-automated-receipt.txt"]
     },
     {
       "id": "AC2",
       "status": "PASS",
-      "proof": ["implementation-notes.md", "raw/site-verification.txt"]
+      "proof": ["implementation-notes.md", "raw/regression-device-routing-receipt.txt"]
     },
     {
       "id": "AC3",
       "status": "PASS",
-      "proof": ["raw/focused-tests-summary.json", "raw/full-unit-summary.json", "raw/eager-dependency-registration-receipt.txt", "raw/verification-receipt.txt"]
+      "proof": ["raw/focused-tests-summary.json", "raw/full-unit-summary.json"]
     },
     {
       "id": "AC4",
       "status": "PASS",
-      "proof": ["raw/device-shortcuts-receipt.txt", "raw/authentication-policy-receipt.txt", "raw/eager-dependency-registration-receipt.txt", "raw/physical-siri-receipt.txt"]
+      "proof": ["raw/regression-device-routing-receipt.txt", "raw/regression-physical-siri-receipt.txt"]
     },
     {
       "id": "AC5",
       "status": "PASS",
-      "proof": ["raw/verification-receipt.txt", "raw/authentication-policy-receipt.txt", "raw/site-verification.txt"]
+      "proof": ["raw/regression-automated-receipt.txt"]
+    },
+    {
+      "id": "AC6",
+      "status": "PASS",
+      "proof": ["raw/regression-automated-receipt.txt"]
+    },
+    {
+      "id": "AC7",
+      "status": "PASS",
+      "proof": ["raw/regression-automated-receipt.txt"]
+    },
+    {
+      "id": "AC8",
+      "status": "PASS",
+      "proof": ["raw/regression-device-routing-receipt.txt"]
+    },
+    {
+      "id": "AC9",
+      "status": "UNKNOWN",
+      "proof": ["raw/regression-physical-siri-receipt.txt"]
     }
   ]
 }
