@@ -15,12 +15,12 @@ immutable history.
       iOS 26.5 simulator.
 - [x] Unsigned Release build contains the iPhone app, small/medium WidgetKit
       extension, and embedded Watch app.
-- [ ] Signed App Store archive is created and inspected only after the owner
+- [x] Signed App Store archive is created and inspected only after the owner
       authorizes the next distribution step.
 
 ### Physical acceptance
 
-- [ ] Install build `15` without losing the existing iPhone ledger.
+- [x] Install build `15` without losing the existing iPhone ledger.
 - [ ] Add the small and medium Hourleaf widgets on iPhone.
 - [ ] With the same Apple Account and a nearby iPhone, add both widgets on Mac.
 - [ ] Verify English plus one Russian/Ukrainian long-copy pass, opt-in totals,
@@ -28,10 +28,38 @@ immutable history.
 
 ### Owner-controlled distribution
 
-- [ ] Create the signed archive and inspect production entitlements.
-- [ ] Upload build `15` to App Store Connect only after explicit owner approval.
-- [ ] Wait for processing, attach it to version `1.0.4`, save EN/RU/UK release
-      notes, and submit only after explicit owner approval.
+- [x] Create the signed archive and inspect production entitlements.
+- [x] Upload build `15` to App Store Connect only after explicit owner approval.
+- [x] Wait for App Store Connect processing and verify the build is ready for
+      internal testing.
+- [ ] Attach build `15` to version `1.0.4`, save EN/RU/UK release notes, and
+      submit only after explicit owner approval.
+
+### TestFlight receipt — 2026-08-26
+
+- Source commit: `0c496e5868157fcd0093fb0805af858cb1889f09` on
+  `main`; GitHub CI run `32945038505` passed 514 unit/integration tests and
+  53 UI tests.
+- Retained archive:
+  `~/Library/Developer/Xcode/Archives/2026-08-26/Hourleaf 1.0.4 (15).xcarchive`.
+- The archive contains production bundle IDs `com.kikuai.hourleaf`,
+  `com.kikuai.hourleaf.quick-surfaces`, and
+  `com.kikuai.hourleaf.watchkitapp`, all at version `1.0.4` build `15`, with
+  matching localizations, privacy manifests, valid signatures, and dSYMs.
+- Xcode completed the App Store upload successfully. App Store Connect showed
+  processing as completed and build `15` as ready for testing in the
+  `Hourleaf Internal` group.
+- Before updating, a private local device-container backup and a consolidated
+  SQLite snapshot passed integrity checks. TestFlight then updated the existing
+  production bundle in place on the iPhone 15 Pro running iOS 26.6. The
+  separate local-development bundle remained installed and unchanged.
+- Post-update integrity and table-by-table comparison preserved every ledger,
+  settings, reminder, archive, receipt, preset, and revision row. The only
+  database change was the expected report-state revision timestamp written
+  when the updated app launched; the report's semantic state was unchanged.
+- This is an upload and internal-install receipt only. The widgets still need
+  physical iPhone/Mac gallery, privacy, refresh, localization, and deep-link
+  acceptance before build `15` is attached to a new App Store version.
 
 ## Historical release: 1.0.3 (14)
 
