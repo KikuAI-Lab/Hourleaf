@@ -1,1 +1,1 @@
-Voice entry is now more reliable. Run your “Record service” or “Record credit” Shortcut, answer how long, and Hourleaf saves the entry without opening the app.
+New small and medium widgets show this month's service, credit, and Bible studies. The medium widget also shows progress toward 600 hours. Add them on iPhone or show the iPhone widget on a nearby Mac.

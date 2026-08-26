@@ -1,6 +1,41 @@
-# Hourleaf 1.0.3 delivery checklist
+# Hourleaf delivery checklist
 
-## Source and package
+## Active release: 1.0.4 (15)
+
+This active section is the maintained release contract. It is superseded when
+the next version becomes the source candidate; dated receipts below remain
+immutable history.
+
+### Source and package
+
+- [x] All iPhone, WidgetKit, and Watch shipping configurations use version
+      `1.0.4` build `15`.
+- [x] Release guard and self-test pass.
+- [x] Full unit suite passes: 514 of 514 tests on the canonical iPhone 17 /
+      iOS 26.5 simulator.
+- [x] Unsigned Release build contains the iPhone app, small/medium WidgetKit
+      extension, and embedded Watch app.
+- [ ] Signed App Store archive is created and inspected only after the owner
+      authorizes the next distribution step.
+
+### Physical acceptance
+
+- [ ] Install build `15` without losing the existing iPhone ledger.
+- [ ] Add the small and medium Hourleaf widgets on iPhone.
+- [ ] With the same Apple Account and a nearby iPhone, add both widgets on Mac.
+- [ ] Verify English plus one Russian/Ukrainian long-copy pass, opt-in totals,
+      privacy redaction, refresh after an entry, and the quick-entry deep link.
+
+### Owner-controlled distribution
+
+- [ ] Create the signed archive and inspect production entitlements.
+- [ ] Upload build `15` to App Store Connect only after explicit owner approval.
+- [ ] Wait for processing, attach it to version `1.0.4`, save EN/RU/UK release
+      notes, and submit only after explicit owner approval.
+
+## Historical release: 1.0.3 (14)
+
+### Source and package
 
 - [x] Release guard and self-test pass.
 - [x] Full unit suite passes: 512 of 512 tests on isolated GitHub runners.
@@ -19,7 +54,7 @@
 - [ ] Migration from the Personal Team build is verified using an exported
       Hourleaf backup before the old app is removed.
 
-## App Store Connect
+### App Store Connect
 
 - [x] Active Apple Developer Program membership.
 - [x] Create version `1.0.3` on the existing iOS app record with bundle ID
@@ -47,7 +82,7 @@
 - [x] Attach build `14`, save EN/RU/UK release notes, and submit iOS version
       `1.0.3` after the owner's explicit submission authorization.
 
-## Physical acceptance (not performed in this Mac-only submission pass)
+### Physical acceptance (not performed in this Mac-only submission pass)
 
 - [ ] Fresh install and update both preserve the ledger.
 - [ ] Add, edit, delete, monthly report, backup, restore, CSV, reminders, and
@@ -56,7 +91,7 @@
 - [ ] Siri/Shortcuts claims are included in marketing only after the exact
       public-distribution phrases pass on iPhone and Watch.
 
-## Upload receipt — 2026-08-25
+### Upload receipt — 2026-08-25
 
 - Source commit: `4e0ec83cfa08481a89bc1ced73c4dbc651f3deb2` on `main`.
 - GitHub CI run `32856152121` passed: release guard, self-test, 512 unit and
@@ -73,7 +108,7 @@
   submission had yet been created. The later submission receipt below
   supersedes that temporary state.
 
-## App Review submission receipt — 2026-08-25
+### App Review submission receipt — 2026-08-25
 
 - App Store Connect version `1.0.3` was created and linked to processed build
   `14`.

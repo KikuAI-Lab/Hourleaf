@@ -20,6 +20,8 @@ prepares monthly reports without an account or remote backend.
 - List and calendar history with editing and reversible deletion
 - Monthly report preparation and system sharing
 - Service-year progress toward the 600-hour goal
+- Privacy-controlled small and medium iPhone widgets, also available on a
+  nearby Mac through Apple's iPhone widget support
 - Local reminders, portable backups, restore, and CSV import/export
 
 Hourleaf is independent and is not affiliated with or endorsed by any

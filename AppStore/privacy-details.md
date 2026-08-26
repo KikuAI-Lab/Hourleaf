@@ -15,5 +15,5 @@ collected by KikuAI.
 
 Notifications are local. Apple Watch sends an entry to the paired iPhone using
 Apple's Watch Connectivity framework. The WidgetKit extension reads a minimal
-App Group sidecar containing totals and timer state; it never reads notes or
-history.
+App Group sidecar containing the optional monthly totals, Bible-study count,
+service-year progress, and timer state; it never reads notes or history.

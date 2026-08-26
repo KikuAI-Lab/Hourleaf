@@ -4,7 +4,17 @@ This file is the maintained source for the App Review Information Notes field.
 Update it when the review path, shipped capabilities, or verified physical-device
 matrix changes. Keep private reviewer contact details only in App Store Connect.
 
-## Version 1.0.3 update
+## Version 1.0.4 update
+
+Build 15 adds small and medium Hourleaf widgets. With monthly totals enabled in
+Hourleaf settings, the small widget shows service, credit, and Bible-study
+count; the medium widget also shows service-year progress. Totals remain opt-in
+and privacy-sensitive. The same iPhone widgets can appear on a nearby Mac signed
+in to the same Apple Account; there is no separate Mac account, backend, or data
+store. This update adds no purchase, external service, sensitive-data
+permission, or new data category.
+
+## Previous 1.0.3 update
 
 Build 14 fixes voice entry through Siri and Apple Shortcuts on iPhone and Apple
 Watch. The “Record service” and “Record credit” shortcuts now ask for a duration
@@ -16,13 +26,13 @@ unchanged core entry, history, report, sharing, and data-management flows.
 ## Paste-ready Notes field
 
 ```text
-Hourleaf 1.0.3 (build 14) review information
+Hourleaf 1.0.4 (build 15) review information
 
 UPDATE SCOPE
-Build 14 fixes voice entry through Siri and Apple Shortcuts on iPhone and Apple Watch. The “Record service” and “Record credit” Shortcuts now ask for a duration when needed and save the entry without opening Hourleaf. This update adds no account, purchase, external service, sensitive-data permission, or new data category.
+Build 15 adds small and medium Hourleaf widgets. With monthly totals enabled in Hourleaf settings, the small widget shows service, credit, and Bible-study count; the medium widget also shows service-year progress. Totals remain opt-in and privacy-sensitive. The same iPhone widgets can appear on a nearby Mac signed in to the same Apple Account; there is no separate Mac account, backend, or data store. This update adds no account, purchase, external service, sensitive-data permission, or new data category.
 
 ACCESS AND MAIN FEATURES
-No account, login, purchase, credentials, or sample file is required. Launch Hourleaf and use Add to choose Service or Credit, set hours/minutes, optionally add a note, and save. The Bible studies stepper records the current month's count. History switches between list and calendar. Progress prepares the monthly report and opens the system share sheet. Settings > Data Management provides local backup, restore, and CSV export/import. On a paired Apple Watch, choose Service or Credit, set time with the Digital Crown, and confirm; the paired iPhone commits the entry.
+No account, login, purchase, credentials, or sample file is required. Launch Hourleaf and use Add to choose Service or Credit, set hours/minutes, optionally add a note, and save. The Bible studies stepper records the current month's count. History switches between list and calendar. Progress prepares the monthly report and opens the system share sheet. Settings > Data Management provides local backup, restore, and CSV export/import. Settings > Widgets & Control Center lets the user opt in to showing monthly totals outside Hourleaf. Add an Hourleaf small or medium widget from the iPhone widget gallery. On a paired Apple Watch, choose Service or Credit, set time with the Digital Crown, and confirm; the paired iPhone commits the entry.
 
 VOICE ENTRY
 In Apple Shortcuts, run “Record service” or “Record credit” and answer the duration prompt. The intent saves through the same validated local entry path as the app. The action works offline and does not reveal history, notes, totals, or reports.
@@ -31,7 +41,7 @@ AUDIENCE AND VALUE
 Hourleaf is a private, local-first ministry-time ledger for individual volunteers keeping their own records. It replaces handwritten or spreadsheet calculations while keeping service and credit separate.
 
 EXTERNAL SERVICES AND PRIVACY
-Hourleaf has no backend, account provider, payment processor, ads, analytics, tracking, AI service, external data provider, or third-party SDK. It uses Apple on-device frameworks only. Records stay on-device unless the user explicitly exports or shares them. Notification permission is requested only after the user enables a reminder. No location, contacts, camera, microphone, photos, health, or tracking permission is requested.
+Hourleaf has no backend, account provider, payment processor, ads, analytics, tracking, AI service, external data provider, or third-party SDK. It uses Apple on-device frameworks only. Records stay on-device unless the user explicitly exports or shares them. The WidgetKit extension reads only a minimal App Group sidecar with opt-in aggregate totals and never reads notes or history. Notification permission is requested only after the user enables a reminder. No location, contacts, camera, microphone, photos, health, or tracking permission is requested.
 
 REGIONS AND THIRD-PARTY MATERIAL
 Features are consistent across all regions and localized in English, Russian, and Ukrainian. Hourleaf is not a regulated service and contains no protected third-party database, media, or organization-owned content. It is an independent personal tool and is not affiliated with or endorsed by any religious organization.
