@@ -9,7 +9,7 @@ App Store Connect only after the matching archive is verified.
 - Platform record: iOS with an embedded watchOS companion app
 - App Store name: `Hourleaf: Ministry Hours`
 - Bundle identifier: `com.kikuai.hourleaf`
-- Source candidate: `1.0.4` (`15`)
+- Source candidate: `1.0.4` (`16`)
 - Primary language: English (U.S.)
 - Localizations: English (U.S.), Russian, Ukrainian
 - Primary category: Productivity
