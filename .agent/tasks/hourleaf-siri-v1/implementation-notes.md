@@ -38,6 +38,15 @@
   Watch app and WidgetKit extension.
 - Distribution remains owner-gated. No build 16 archive, upload, TestFlight
   install, App Store attachment, or submission has been performed.
+- Final production proof used two owner-confirmed invocations of the canonical
+  `Запиши служение` Shortcut. A fresh read-only container comparison found
+  exactly two new active one-minute service entries and exactly two matching
+  `create` revisions, all sourced from `shortcut`. The entries were created 19
+  seconds apart, matching the owner's confirmation that the phrase was spoken
+  twice; no duplicate write was observed.
+- GitHub CI run `32987802797` passed on commit `079bed9`: release guard,
+  mutation self-test, 517 unit/integration tests, and 53 UI tests all completed
+  with zero failures.
 
 - The shipped iPhone action was titled `Записать время`, while the public guide
   instructed the owner to invoke a custom Shortcut named `Запиши служение`.

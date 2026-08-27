@@ -22,3 +22,7 @@ Hourleaf Siri regression automated receipt — 2026-08-26T19:13:08+03:00
   "Сколько минут?", UK "Скільки хвилин?".
 - No dependency, data model, entitlement, privacy manifest, account, analytics,
   tracking, AI service, or third-party SDK changed.
+- GitHub CI run 32987802797 on commit 079bed9: PASS.
+- CI release guard and mutation self-test: PASS.
+- CI HourleafTests: 517 passed, 0 failed.
+- CI HourleafUITests: 53 passed, 0 failed.

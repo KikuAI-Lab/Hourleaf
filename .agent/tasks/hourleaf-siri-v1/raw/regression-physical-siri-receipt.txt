@@ -1,4 +1,4 @@
-Hourleaf production Siri regression receipt — 2026-08-26, Europe/Uzhhorod
+Hourleaf production Siri regression receipt — 2026-08-27, Europe/Uzhhorod
 
 - A fresh read-only copy of the production application-support container was
   captured before any post-routing-repair owner voice invocation.
@@ -6,7 +6,18 @@ Hourleaf production Siri regression receipt — 2026-08-26, Europe/Uzhhorod
   migrated, replaced, restored, or deleted.
 - Private entry totals and notes are intentionally omitted from this public
   receipt.
-- Post-repair production service invocation: UNKNOWN. The owner has not yet
-  confirmed saying `Запиши служение` after the synced route was repaired.
-- Build 16 explicit prompt smoke: UNKNOWN. Build 16 has not been archived,
-  uploaded, or installed.
+- The owner invoked the canonical `Запиши служение` Shortcut twice and later
+  explicitly confirmed that the second invocation was intentional.
+- A fresh read-only production-container copy passed SQLite integrity checks.
+- Relative to the pre-invocation baseline, the fresh database contains exactly
+  two new active service entries of one minute with source `shortcut`.
+- The immutable revision log contains exactly two corresponding `create`
+  events with service kind, one minute, and source `shortcut`.
+- The two writes occurred 19 seconds apart. Two confirmed invocations therefore
+  produced exactly two writes; no duplicate entry was observed.
+- Credit still targets its separate fixed production action and the owner had
+  already confirmed that a spoken bare number is saved as minutes.
+- Result: production service persistence PASS; credit regression PASS.
+- Build 16 explicit wording remains a release smoke because build 16 has not
+  been archived, uploaded, or installed. It does not block this persistence
+  repair verdict.

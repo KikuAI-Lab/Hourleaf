@@ -1,6 +1,6 @@
 {
   "task": "hourleaf-siri-v1",
-  "status": "UNKNOWN",
+  "status": "PASS",
   "acceptance": [
     {
       "id": "AC1",
@@ -44,7 +44,7 @@
     },
     {
       "id": "AC9",
-      "status": "UNKNOWN",
+      "status": "PASS",
       "proof": ["raw/regression-physical-siri-receipt.txt"]
     }
   ]

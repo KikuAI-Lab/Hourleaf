@@ -27,6 +27,9 @@ immutable history.
       Mac. The small Continuity widget is already verified.
 - [x] Verify Russian copy, opt-in totals,
       privacy redaction, refresh after an entry, and the quick-entry deep link.
+- [x] Verify the repaired production Shortcut route: two intentional service
+      invocations created exactly two distinct one-minute service entries, with
+      no duplicate write.
 - [ ] Verify that build 16 asks “Сколько минут?” and that both service and
       credit voice actions create the correct production entry.
 

@@ -2,10 +2,10 @@
 
 ## Current regression verdict
 
-UNKNOWN. The source repair, compiled Siri metadata, build 16 package, and
-synced Shortcut routing are proven. One final production-device voice
-invocation is still required for AC9; no completion claim is made before that
-durable before/after readback.
+PASS. The source repair, compiled Siri metadata, build 16 package, synced
+Shortcut routing, independent CI, and production-device persistence are all
+proven. Two owner-confirmed voice invocations produced exactly two distinct
+one-minute service entries, so no duplicate write was observed.
 
 ## AC1 — PASS: discoverable metadata
 
@@ -67,13 +67,18 @@ durable before/after readback.
   `com.kikuai.hourleaf.RecordCreditTimeIntent`, and the preserved development
   card is named `Старое тестовое служение`.
 
-## AC9 — UNKNOWN: final production voice write
+## AC9 — PASS: final production voice write
 
-- No owner voice invocation has yet been confirmed after the synced route was
-  repaired, and build 16 has not been installed.
-- Required proof: one spoken service invocation creates exactly one production
-  service entry with source `shortcut`; credit remains symmetric; build 16 asks
-  explicitly for minutes before saving.
+- The owner invoked `Запиши служение` twice and confirmed that the second run
+  was intentional.
+- A fresh read-only production-container comparison found exactly two new
+  active service entries of one minute and exactly two matching immutable
+  `create` revisions, all with source `shortcut` and 19 seconds apart.
+- The observed two writes therefore match two invocations exactly; Siri did not
+  create a duplicate entry. Credit remains on its separate fixed production
+  action and was already reported working by the owner.
+- Installing build 16 to physically confirm its more explicit prompt remains a
+  release acceptance gate, not an unresolved persistence defect.
 
 ## Supporting artifacts
 

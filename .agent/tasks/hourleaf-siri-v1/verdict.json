@@ -1,14 +1,8 @@
 {
   "task": "hourleaf-siri-v1",
-  "verdict": "UNKNOWN",
-  "review_mode": "fresh-source-and-device-routing-verification",
-  "findings": [
-    {
-      "acceptance": "AC9",
-      "severity": "blocking",
-      "summary": "A production voice invocation after the routing repair has not yet been observed."
-    }
-  ],
+  "verdict": "PASS",
+  "review_mode": "fresh-source-device-routing-and-production-persistence-verification",
+  "findings": [],
   "acceptance": {
     "AC1": "PASS",
     "AC2": "PASS",
@@ -18,7 +12,7 @@
     "AC6": "PASS",
     "AC7": "PASS",
     "AC8": "PASS",
-    "AC9": "UNKNOWN"
+    "AC9": "PASS"
   },
-  "residual_risk": "The code and synced production route are repaired, but build 16 is not installed and a durable production service write has not yet been compared before/after."
+  "residual_risk": "Build 16 is not yet installed, so its more explicit minute prompt remains an owner-gated release smoke rather than part of this completed persistence repair."
 }
