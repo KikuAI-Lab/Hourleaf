@@ -15,7 +15,7 @@ immutable history.
       iOS 26.5 simulator; 53 of 53 app-owned UI tests also pass.
 - [x] Unsigned Release build contains the iPhone app, small/medium WidgetKit
       extension, and embedded Watch app.
-- [ ] Signed App Store archive is created and inspected after owner
+- [x] Signed App Store archive is created and inspected after owner
       authorization.
 
 ### Physical acceptance
@@ -36,8 +36,8 @@ immutable history.
 
 ### Owner-controlled distribution
 
-- [ ] Create the signed archive and inspect production entitlements.
-- [ ] Upload build `17` to App Store Connect after explicit owner approval.
+- [x] Create the signed archive and inspect production entitlements.
+- [x] Upload build `17` to App Store Connect after explicit owner approval.
 - [ ] Wait for App Store Connect processing and verify the build is ready for
       internal testing.
 - [ ] Attach build `17` to version `1.0.4`, save EN/RU/UK release notes, and
@@ -55,7 +55,18 @@ immutable history.
 - Focused verification passed 38 of 38 tests. The complete source candidate
   passed 523 of 523 unit/integration tests and 53 of 53 app-owned UI tests.
 - Release guard, guard mutation self-test, and unsigned Release package
-  inspection passed for build `17`. Signed archive, TestFlight processing, and
+  inspection passed for build `17`.
+- Source commit `8453356ba01ab0442bc5bd4706610b7619728eb4` passed GitHub
+  Actions run `33161907471`. The retained archive is
+  `~/Library/Developer/Xcode/Archives/2026-08-28/Hourleaf 1.0.4 (17).xcarchive`.
+  Inspection confirmed matching `1.0.4 (17)` versions for the iPhone app,
+  WidgetKit extension, and Watch app; valid signatures; privacy manifests;
+  App Intents metadata; three dSYMs; and production entitlements matching the
+  inspected build `16` baseline.
+- Xcode completed the App Store Connect upload at 17:58 EEST on 2026-08-28.
+  The completion sheet identified `Hourleaf 1.0.4 (17)` as uploaded, Organizer
+  read back build `17` as `Uploaded to Apple`, and the distribution critical log
+  was empty. App Store Connect processing, TestFlight installation, and the
   physical crash-log acceptance remain pending their fresh receipts.
 
 ### Build 16 TestFlight receipt — 2026-08-28
