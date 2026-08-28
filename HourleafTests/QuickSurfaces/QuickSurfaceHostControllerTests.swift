@@ -220,6 +220,66 @@ final class QuickSurfaceHostControllerTests: XCTestCase {
         XCTAssertEqual(try store.read(), initial)
     }
 
+    func testReconciliationHoldsExecutionActivityAcrossSidecarPublishAndReadback() async throws {
+        let root = try QuickSurfaceStoreTestSupport.makeSandboxRoot()
+        defer { QuickSurfaceStoreTestSupport.cleanup(root) }
+        let attributes = QuickSurfaceStoreTestSupport.makeAttributeLedger()
+        let activity = QuickSurfaceHostExecutionActivitySpy()
+        let store = QuickSurfaceStateStoreV1(
+            rootDirectory: root,
+            faults: QuickSurfaceStateStoreFaults { point in
+                activity.observeStoreAccess(point)
+            },
+            attributeIO: QuickSurfaceStoreTestSupport.simulatedAttributeIO(ledger: attributes)
+        )
+        let repository = try await makeRepository()
+        let controller = makeController(
+            repository: repository,
+            capability: .available(store),
+            executionActivity: activity.executionActivity
+        )
+
+        let snapshot = try await repository.ledgerSnapshot()
+        let host = await controller.reconcile(snapshot)
+
+        XCTAssertEqual(host.availability, .ready)
+        XCTAssertEqual(activity.beginCount, 1)
+        XCTAssertEqual(activity.endCount, 1)
+        XCTAssertFalse(activity.isActive)
+        XCTAssertTrue(activity.observedStoreAccessWhileActive)
+    }
+
+    func testReconciliationEndsExecutionActivityAfterSidecarFailure() async throws {
+        let root = try QuickSurfaceStoreTestSupport.makeSandboxRoot()
+        defer { QuickSurfaceStoreTestSupport.cleanup(root) }
+        let attributes = QuickSurfaceStoreTestSupport.makeAttributeLedger()
+        let activity = QuickSurfaceHostExecutionActivitySpy()
+        let store = QuickSurfaceStateStoreV1(
+            rootDirectory: root,
+            faults: QuickSurfaceStateStoreFaults { point in
+                activity.observeStoreAccess(point)
+                guard case .beforePublish = point else { return }
+                throw QuickSurfaceStoreInjectedError.marker
+            },
+            attributeIO: QuickSurfaceStoreTestSupport.simulatedAttributeIO(ledger: attributes)
+        )
+        let repository = try await makeRepository()
+        let controller = makeController(
+            repository: repository,
+            capability: .available(store),
+            executionActivity: activity.executionActivity
+        )
+
+        let snapshot = try await repository.ledgerSnapshot()
+        let host = await controller.reconcile(snapshot)
+
+        XCTAssertNotEqual(host.availability, .ready)
+        XCTAssertEqual(activity.beginCount, 1)
+        XCTAssertEqual(activity.endCount, 1)
+        XCTAssertFalse(activity.isActive)
+        XCTAssertTrue(activity.observedStoreAccessWhileActive)
+    }
+
     func testExplicitRequestReconcilesAConservativeBootstrapWinner() async throws {
         let root = try QuickSurfaceStoreTestSupport.makeSandboxRoot()
         defer { QuickSurfaceStoreTestSupport.cleanup(root) }
@@ -294,7 +354,8 @@ final class QuickSurfaceHostControllerTests: XCTestCase {
 
     private func makeController(
         repository: any LedgerRepository,
-        capability: QuickSurfaceHostCapability
+        capability: QuickSurfaceHostCapability,
+        executionActivity: QuickSurfaceHostExecutionActivity = .immediate
     ) -> QuickSurfaceHostController {
         QuickSurfaceHostController(
             repository: repository,
@@ -302,7 +363,8 @@ final class QuickSurfaceHostControllerTests: XCTestCase {
             calendar: calendar(),
             timeZone: Self.timeZone,
             now: { Self.now },
-            systemUptime: { 1_000 }
+            systemUptime: { 1_000 },
+            executionActivity: executionActivity
         )
     }
 
@@ -393,6 +455,55 @@ final class QuickSurfaceHostControllerTests: XCTestCase {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = Self.timeZone
         return calendar
+    }
+}
+
+private final class QuickSurfaceHostExecutionActivitySpy: @unchecked Sendable {
+    private let lock = NSLock()
+    private var active = false
+    private var begins = 0
+    private var ends = 0
+    private var observedActiveAccess = false
+
+    var executionActivity: QuickSurfaceHostExecutionActivity {
+        QuickSurfaceHostExecutionActivity { [self] in
+            begin()
+            return QuickSurfaceHostExecutionLease { [self] in
+                end()
+            }
+        }
+    }
+
+    var beginCount: Int { withLock { begins } }
+    var endCount: Int { withLock { ends } }
+    var isActive: Bool { withLock { active } }
+    var observedStoreAccessWhileActive: Bool { withLock { observedActiveAccess } }
+
+    func observeStoreAccess(_ point: QuickSurfaceStateStoreFaultPoint) {
+        guard case .beforePublish = point else { return }
+        lock.lock()
+        observedActiveAccess = observedActiveAccess || active
+        lock.unlock()
+    }
+
+    private func begin() {
+        lock.lock()
+        begins += 1
+        active = true
+        lock.unlock()
+    }
+
+    private func end() {
+        lock.lock()
+        ends += 1
+        active = false
+        lock.unlock()
+    }
+
+    private func withLock<T>(_ operation: () -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return operation()
     }
 }
 

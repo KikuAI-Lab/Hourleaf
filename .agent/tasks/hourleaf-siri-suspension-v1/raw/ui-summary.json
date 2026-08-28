@@ -1,0 +1,7 @@
+{
+  "status": "PASS",
+  "tests": 53,
+  "failures": 0,
+  "excludedSuite": "HourleafAppStoreScreenshotTests",
+  "destination": "iPhone 17 simulator, iOS 26.5"
+}

@@ -265,7 +265,8 @@ final class HourleafAppLauncher: ObservableObject {
         let quickSurfaceHost = QuickSurfaceHostController(
             repository: runtime.repository,
             capability: makeQuickSurfaceCapability(),
-            now: clock
+            now: clock,
+            executionActivity: usesTestStore ? .immediate : .application
         )
         let model = AppModel(
             repository: runtime.repository,

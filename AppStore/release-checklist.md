@@ -1,6 +1,6 @@
 # Hourleaf delivery checklist
 
-## Active release: 1.0.4 (16)
+## Active release: 1.0.4 (17)
 
 This active section is the maintained release contract. It is superseded when
 the next version becomes the source candidate; dated receipts below remain
@@ -9,38 +9,54 @@ immutable history.
 ### Source and package
 
 - [x] All iPhone, WidgetKit, and Watch shipping configurations use version
-      `1.0.4` build `16`.
+      `1.0.4` build `17`.
 - [x] Release guard and self-test pass.
-- [x] Full unit suite passes: 517 of 517 tests on the canonical iPhone 17 /
-      iOS 26.5 simulator.
+- [x] Full unit suite passes: 523 of 523 tests on the canonical iPhone 17 /
+      iOS 26.5 simulator; 53 of 53 app-owned UI tests also pass.
 - [x] Unsigned Release build contains the iPhone app, small/medium WidgetKit
       extension, and embedded Watch app.
-- [x] Signed App Store archive is created and inspected after owner
+- [ ] Signed App Store archive is created and inspected after owner
       authorization.
 
 ### Physical acceptance
 
-- [x] Install build `16` without losing the existing iPhone ledger.
+- [ ] Install build `17` without losing the existing iPhone ledger.
 - [x] Add the small and medium Hourleaf widgets on iPhone using the build 15
       TestFlight baseline.
 - [ ] With the same Apple Account and a nearby iPhone, add the medium widget on
       Mac. The small Continuity widget is already verified.
 - [x] Verify Russian copy, opt-in totals,
       privacy redaction, refresh after an entry, and the quick-entry deep link.
-- [x] Verify the repaired production Shortcut route: two intentional service
-      invocations created exactly two distinct one-minute service entries, with
-      no duplicate write.
-- [ ] Verify that build 16 asks “Сколько минут?” and that both service and
-      credit voice actions create the correct production entry.
+- [ ] Verify that build `17` asks “Сколько минут?” and that service and credit
+      voice actions each create exactly one requested entry.
+- [ ] Compare fresh device crash logs after both actions and confirm no new
+      Hourleaf `0xdead10cc` termination.
+- [ ] Remove the build `16` diagnostic entries and build `17` canaries through
+      Hourleaf, then verify that no unrelated active entry changed.
 
 ### Owner-controlled distribution
 
-- [x] Create the signed archive and inspect production entitlements.
-- [x] Upload build `16` to App Store Connect after explicit owner approval.
-- [x] Wait for App Store Connect processing and verify the build is ready for
+- [ ] Create the signed archive and inspect production entitlements.
+- [ ] Upload build `17` to App Store Connect after explicit owner approval.
+- [ ] Wait for App Store Connect processing and verify the build is ready for
       internal testing.
-- [ ] Attach build `16` to version `1.0.4`, save EN/RU/UK release notes, and
+- [ ] Attach build `17` to version `1.0.4`, save EN/RU/UK release notes, and
       submit only after explicit owner approval.
+
+### Build 17 local candidate receipt — 2026-08-28
+
+- Build `16` persisted both requested Siri entries correctly, but physical
+  crash logs showed two separate `RUNNINGBOARD` `0xdead10cc` terminations after
+  the actions. Matching dSYM symbolication placed both in the shared
+  quick-surface file lock during host-app reconciliation.
+- Build `17` adds a balanced UIKit background assertion around only that short
+  host-app reconciliation. It does not change the ledger writer, Core Data
+  model, App Intent phrases, WidgetKit extension, or Watch app behavior.
+- Focused verification passed 38 of 38 tests. The complete source candidate
+  passed 523 of 523 unit/integration tests and 53 of 53 app-owned UI tests.
+- Release guard, guard mutation self-test, and unsigned Release package
+  inspection passed for build `17`. Signed archive, TestFlight processing, and
+  physical crash-log acceptance remain pending their fresh receipts.
 
 ### Build 16 TestFlight receipt — 2026-08-28
 

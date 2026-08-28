@@ -93,6 +93,7 @@ actor QuickSurfaceHostController {
     private let timeZone: TimeZone
     private let now: @Sendable () -> Date
     private let systemUptime: @Sendable () -> TimeInterval
+    private let executionActivity: QuickSurfaceHostExecutionActivity
 
     init(
         repository: any LedgerRepository,
@@ -102,7 +103,8 @@ actor QuickSurfaceHostController {
         now: @escaping @Sendable () -> Date = { .now },
         systemUptime: @escaping @Sendable () -> TimeInterval = {
             ProcessInfo.processInfo.systemUptime
-        }
+        },
+        executionActivity: QuickSurfaceHostExecutionActivity = .immediate
     ) {
         self.repository = repository
         self.capability = capability
@@ -118,6 +120,7 @@ actor QuickSurfaceHostController {
         self.stateStore = stateStore
         self.now = now
         self.systemUptime = systemUptime
+        self.executionActivity = executionActivity
         capabilityAvailable = stateStore != nil
         capabilityExpected = if case .notExpected = capability { false } else { true }
         reconciler = stateStore.map {
@@ -133,10 +136,12 @@ actor QuickSurfaceHostController {
         }
     }
 
-    func reconcile(_ snapshot: LedgerSnapshot) -> QuickSurfaceHostSnapshot {
+    func reconcile(_ snapshot: LedgerSnapshot) async -> QuickSurfaceHostSnapshot {
         guard let stateStore, let reconciler else { return .unavailable }
+        let executionLease = await executionActivity.begin()
         let corePreferences = snapshot.settingsMetadata.quickSurfacePreferences
 
+        let result: QuickSurfaceHostSnapshot
         do {
             let state = try reconcileAllowingBootstrap(
                 reconciler: reconciler,
@@ -144,18 +149,20 @@ actor QuickSurfaceHostController {
                 preferences: corePreferences,
                 permitElevation: false
             )
-            return hostSnapshot(
+            result = hostSnapshot(
                 ledgerPreferences: corePreferences,
                 state: state,
                 availability: .ready
             )
         } catch {
-            return failureSnapshot(
+            result = failureSnapshot(
                 error,
                 stateStore: stateStore,
                 ledgerPreferences: corePreferences
             )
         }
+        await executionLease.end()
+        return result
     }
 
     func readCurrent(using snapshot: LedgerSnapshot) -> QuickSurfaceHostSnapshot {
@@ -182,7 +189,7 @@ actor QuickSurfaceHostController {
     ) async throws -> QuickSurfaceHostUpdate {
         let current = snapshot.settingsMetadata.quickSurfacePreferences
         guard current.privacyMode != mode else {
-            return QuickSurfaceHostUpdate(ledger: snapshot, host: reconcile(snapshot))
+            return QuickSurfaceHostUpdate(ledger: snapshot, host: await reconcile(snapshot))
         }
         var requested = current
         requested.privacyMode = mode
@@ -233,7 +240,7 @@ actor QuickSurfaceHostController {
     ) async throws -> QuickSurfaceHostUpdate {
         let current = snapshot.settingsMetadata.quickSurfacePreferences
         guard current.timerVisible != isVisible else {
-            return QuickSurfaceHostUpdate(ledger: snapshot, host: reconcile(snapshot))
+            return QuickSurfaceHostUpdate(ledger: snapshot, host: await reconcile(snapshot))
         }
         var requested = current
         requested.timerVisible = isVisible

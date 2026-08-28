@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "tests": 38,
+  "failures": 0,
+  "suites": [
+    "AppIntentTests",
+    "QuickSurfaceApplicationBackgroundTaskTests",
+    "QuickSurfaceHostControllerTests"
+  ],
+  "destination": "iPhone 17 simulator, iOS 26.5"
+}

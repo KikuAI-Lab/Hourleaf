@@ -1,0 +1,12 @@
+{
+  "task": "hourleaf-siri-suspension-v1",
+  "status": "PARTIAL",
+  "acceptance": [
+    {"id": "AC1", "status": "PASS", "proof": ["raw/build16-diagnosis.md"]},
+    {"id": "AC2", "status": "PASS", "proof": ["raw/focused-tests-summary.json"]},
+    {"id": "AC3", "status": "PASS", "proof": ["raw/focused-tests-summary.json"]},
+    {"id": "AC4", "status": "PASS", "proof": ["raw/full-unit-summary.json", "raw/ui-summary.json", "raw/release17-package.md"]},
+    {"id": "AC5", "status": "PENDING", "proof": []},
+    {"id": "AC6", "status": "PENDING", "proof": []}
+  ]
+}
