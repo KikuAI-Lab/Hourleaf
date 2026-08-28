@@ -15,12 +15,12 @@ immutable history.
       iOS 26.5 simulator.
 - [x] Unsigned Release build contains the iPhone app, small/medium WidgetKit
       extension, and embedded Watch app.
-- [ ] Signed App Store archive is created and inspected only after the owner
-      authorizes the next distribution step.
+- [x] Signed App Store archive is created and inspected after owner
+      authorization.
 
 ### Physical acceptance
 
-- [ ] Install build `16` without losing the existing iPhone ledger.
+- [x] Install build `16` without losing the existing iPhone ledger.
 - [x] Add the small and medium Hourleaf widgets on iPhone using the build 15
       TestFlight baseline.
 - [ ] With the same Apple Account and a nearby iPhone, add the medium widget on
@@ -35,12 +35,41 @@ immutable history.
 
 ### Owner-controlled distribution
 
-- [ ] Create the signed archive and inspect production entitlements.
-- [ ] Upload build `16` to App Store Connect only after explicit owner approval.
-- [ ] Wait for App Store Connect processing and verify the build is ready for
+- [x] Create the signed archive and inspect production entitlements.
+- [x] Upload build `16` to App Store Connect after explicit owner approval.
+- [x] Wait for App Store Connect processing and verify the build is ready for
       internal testing.
 - [ ] Attach build `16` to version `1.0.4`, save EN/RU/UK release notes, and
       submit only after explicit owner approval.
+
+### Build 16 TestFlight receipt — 2026-08-28
+
+- Source candidate: `079bed9b2a6bcf0c6d4a46418cc543b19aaeb43a`;
+  evidence commit: `26684c2b8b9701131e06c8421f95d9aa6c65f9ec`;
+  GitHub CI run `32987802797` passed the release guard and mutation self-test,
+  517 unit/integration tests, and 53 UI tests.
+- Retained archive:
+  `~/Library/Developer/Xcode/Archives/2026-08-27/Hourleaf 1.0.4 (16).xcarchive`.
+  Inspection confirmed matching `1.0.4 (16)` versions for the iPhone app,
+  WidgetKit extension, and Watch app; production bundle IDs and App Group;
+  valid signatures, privacy manifests, App Intents metadata, and dSYMs.
+- Xcode completed the App Store Connect upload at 19:21 EEST on 2026-08-27.
+  Xcode Organizer read back build `16` as uploaded to Apple, and TestFlight on
+  the physical iPhone offered `1.0.4 (16)` for installation, proving processing
+  completed and the build was ready for internal testing.
+- TestFlight replaced the public `1.0.3 (14)` app in place on the physical
+  iPhone 15 Pro running iOS 26.6. `devicectl` read back the installed app as
+  `1.0.4 (16)`, and the paired Apple Watch Series 10 as
+  `com.kikuai.hourleaf.watchkitapp` `1.0.4 (16)`.
+- The App Store container is not downloadable through the developer container
+  service, so this update does not claim the table-by-table SQLite comparison
+  available for build 15. A private before/after UI comparison confirmed the
+  same current-month service total, credit total, and Bible-study count, with
+  no onboarding or reset after first launch or a subsequent relaunch.
+- This is an archive, upload, processing, and internal-install receipt only.
+  Build `16` has not been attached to an App Store version or submitted for
+  review. Its exact Siri prompt and both production voice actions remain the
+  final physical release smoke.
 
 ### Prior build 15 TestFlight baseline — 2026-08-26
 
