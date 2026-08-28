@@ -38,7 +38,7 @@ immutable history.
 
 - [x] Create the signed archive and inspect production entitlements.
 - [x] Upload build `17` to App Store Connect after explicit owner approval.
-- [ ] Wait for App Store Connect processing and verify the build is ready for
+- [x] Wait for App Store Connect processing and verify the build is ready for
       internal testing.
 - [ ] Attach build `17` to version `1.0.4`, save EN/RU/UK release notes, and
       submit only after explicit owner approval.
@@ -66,8 +66,9 @@ immutable history.
 - Xcode completed the App Store Connect upload at 17:58 EEST on 2026-08-28.
   The completion sheet identified `Hourleaf 1.0.4 (17)` as uploaded, Organizer
   read back build `17` as `Uploaded to Apple`, and the distribution critical log
-  was empty. App Store Connect processing, TestFlight installation, and the
-  physical crash-log acceptance remain pending their fresh receipts.
+  was empty. At 18:03 EEST App Store Connect listed build `17` as ready for
+  testing and assigned to the `Hourleaf Internal` group. TestFlight installation
+  and the physical crash-log acceptance remain pending their fresh receipts.
 
 ### Build 16 TestFlight receipt — 2026-08-28
 
