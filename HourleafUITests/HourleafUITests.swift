@@ -1141,6 +1141,30 @@ final class HourleafUITests: XCTestCase {
             }
 
             app.tabBars.buttons.element(boundBy: 3).tap()
+            let storeActions: [(String, String)] = switch language {
+            case "ru":
+                [
+                    ("shareHourleafButton", "Поделиться Hourleaf"),
+                    ("rateHourleafButton", "Оценить Hourleaf")
+                ]
+            case "uk":
+                [
+                    ("shareHourleafButton", "Поділитися Hourleaf"),
+                    ("rateHourleafButton", "Оцінити Hourleaf")
+                ]
+            default:
+                [
+                    ("shareHourleafButton", "Share Hourleaf"),
+                    ("rateHourleafButton", "Rate Hourleaf")
+                ]
+            }
+            for (identifier, expectedLabel) in storeActions {
+                let action = app.descendants(matching: .any)[identifier]
+                XCTAssertTrue(scrollUntilHittable(action, in: app), "Missing \(identifier) in \(language)")
+                XCTAssertEqual(action.label, expectedLabel, "Unexpected \(identifier) label in \(language)")
+                assertNonEmptyAccessibilityLabel(identifier, in: app)
+            }
+
             let dataManagement = app.buttons["dataManagementButton"]
             XCTAssertTrue(scrollUntilHittable(dataManagement, in: app))
             assertNonEmptyAccessibilityLabel("dataManagementButton", in: app)

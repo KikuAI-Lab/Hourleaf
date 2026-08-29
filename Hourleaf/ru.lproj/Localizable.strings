@@ -209,6 +209,8 @@
 "settings.developer_website" = "kikuai.dev";
 "settings.developer_telegram" = "t.me/kiku_ai";
 "settings.developer_github" = "github.com/kiku-jw";
+"settings.share_hourleaf" = "Поделиться Hourleaf";
+"settings.rate_hourleaf" = "Оценить Hourleaf";
 "policy.carry" = "Переносить остаток";
 "policy.round" = "Округлять до часа";
 "policy.discard" = "Списывать остаток";
@@ -252,6 +254,14 @@
 "intent.shortcut.add_service" = "Запиши служение";
 "intent.shortcut.add_credit" = "Запиши кредит";
 "intent.shortcut.open_quick_entry" = "Открыть добавление времени";
+"intent.shortcut.prepare_report" = "Подготовить месячный отчёт";
+"intent.report.description" = "Возвращает отчёт за выбранный месяц, не изменяя записи.";
+"intent.report.month" = "Месяц";
+"intent.report.summary" = "Подготовить месячный отчёт";
+"intent.report.success" = "Месячный отчёт готов.";
+"intent.report.no_draft" = "За этот месяц нет черновика отчёта.";
+"intent.report.changed" = "Записи изменились во время подготовки отчёта. Попробуйте ещё раз.";
+"intent.report.unavailable" = "Не удалось прочитать месячный отчёт. Попробуйте ещё раз.";
 "data_management.title" = "Резервные копии и экспорт";
 "data_management.local_migration.title" = "Переход на версию из TestFlight или App Store";
 "data_management.local_migration.create" = "Создайте резервную копию в этом приложении.";

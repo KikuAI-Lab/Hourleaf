@@ -31,5 +31,14 @@ struct HourleafShortcuts: AppShortcutsProvider {
             shortTitle: "intent.shortcut.open_quick_entry",
             systemImageName: "square.and.pencil"
         )
+        AppShortcut(
+            intent: PrepareMonthlyReportIntent(),
+            phrases: [
+                "Prepare monthly report in \(.applicationName)",
+                "\(.applicationName), prepare monthly report"
+            ],
+            shortTitle: "intent.shortcut.prepare_report",
+            systemImageName: "doc.text"
+        )
     }
 }

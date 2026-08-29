@@ -288,7 +288,7 @@ assert_failure_contains "Core Data model is not local-only"
 reset_fixture
 print 'AppShortcut(intent: OpenQuickEntryIntent())' \
     >> "$fixture_root/Hourleaf/AppIntents/HourleafShortcuts.swift"
-assert_failure_contains "expected exactly three AppShortcut declarations"
+assert_failure_contains "expected exactly four AppShortcut declarations"
 
 reset_fixture
 print 'AppShortcut(intent: WatchRecordServiceTimeIntent())' \

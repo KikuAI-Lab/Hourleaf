@@ -1,6 +1,33 @@
 import SwiftUI
 import UIKit
 
+enum HourleafGuideURL {
+    static func make(anchor: String, preferredLanguage: String) -> URL {
+        let languagePath: String
+        switch preferredLanguage.lowercased() {
+        case let language where language.hasPrefix("ru"):
+            languagePath = "ru/"
+        case let language where language.hasPrefix("uk"):
+            languagePath = "uk/"
+        default:
+            languagePath = ""
+        }
+        return URL(string: "https://kikuai.dev/hourleaf/guide/\(languagePath)#\(anchor)")!
+    }
+
+    static func make(anchor: String, bundle: Bundle = .main) -> URL {
+        make(
+            anchor: anchor,
+            preferredLanguage: bundle.preferredLocalizations.first ?? "en"
+        )
+    }
+}
+
+private enum HourleafStoreLinks {
+    static let app = URL(string: "https://apps.apple.com/app/id6801032003")!
+    static let review = URL(string: "https://apps.apple.com/app/id6801032003?action=write-review")!
+}
+
 struct SettingsScreen: View {
     let dataManagementActions: DataManagementActions
 
@@ -290,6 +317,14 @@ struct SettingsScreen: View {
                         Label("settings.developer_github", systemImage: "chevron.left.forwardslash.chevron.right")
                     }
                     .accessibilityIdentifier("developerGitHubLink")
+                    ShareLink(item: HourleafStoreLinks.app) {
+                        Label("settings.share_hourleaf", systemImage: "square.and.arrow.up")
+                    }
+                    .accessibilityIdentifier("shareHourleafButton")
+                    Link(destination: HourleafStoreLinks.review) {
+                        Label("settings.rate_hourleaf", systemImage: "star")
+                    }
+                    .accessibilityIdentifier("rateHourleafButton")
                 } header: { Text("settings.about") }
             }
             .navigationTitle("settings.title")
@@ -362,9 +397,7 @@ struct SettingsScreen: View {
     }
 
     private func hourleafGuideURL(anchor: String) -> URL {
-        let preferredLanguage = Bundle.main.preferredLocalizations.first ?? "en"
-        let languagePath = preferredLanguage.hasPrefix("ru") ? "ru/" : ""
-        return URL(string: "https://kikuai.dev/hourleaf/guide/\(languagePath)#\(anchor)")!
+        HourleafGuideURL.make(anchor: anchor)
     }
 
     private func reminderRow(_ reminder: ReminderSchedule) -> some View {

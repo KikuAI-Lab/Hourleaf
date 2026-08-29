@@ -209,6 +209,8 @@
 "settings.developer_website" = "kikuai.dev";
 "settings.developer_telegram" = "t.me/kiku_ai";
 "settings.developer_github" = "github.com/kiku-jw";
+"settings.share_hourleaf" = "Поділитися Hourleaf";
+"settings.rate_hourleaf" = "Оцінити Hourleaf";
 "policy.carry" = "Переносити залишок";
 "policy.round" = "Округляти до години";
 "policy.discard" = "Списувати залишок";
@@ -252,6 +254,14 @@
 "intent.shortcut.add_service" = "Запиши служіння";
 "intent.shortcut.add_credit" = "Запиши кредит";
 "intent.shortcut.open_quick_entry" = "Відкрити додавання часу";
+"intent.shortcut.prepare_report" = "Підготувати місячний звіт";
+"intent.report.description" = "Повертає звіт за вибраний місяць, не змінюючи записи.";
+"intent.report.month" = "Місяць";
+"intent.report.summary" = "Підготувати місячний звіт";
+"intent.report.success" = "Місячний звіт готовий.";
+"intent.report.no_draft" = "За цей місяць немає чернетки звіту.";
+"intent.report.changed" = "Записи змінилися під час підготовки звіту. Спробуйте ще раз.";
+"intent.report.unavailable" = "Не вдалося прочитати місячний звіт. Спробуйте ще раз.";
 "data_management.title" = "Резервні копії та експорт";
 "data_management.local_migration.title" = "Перехід на версію з TestFlight або App Store";
 "data_management.local_migration.create" = "Створіть резервну копію в цьому застосунку.";

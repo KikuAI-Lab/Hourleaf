@@ -93,6 +93,37 @@
           }
         }
       }
+    },
+    "Prepare monthly report in ${applicationName}" : {
+      "localizations" : {
+        "en" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "Prepare monthly report in ${applicationName}",
+              "${applicationName}, prepare monthly report"
+            ]
+          }
+        },
+        "ru" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "Подготовить месячный отчёт в ${applicationName}",
+              "${applicationName}, подготовь месячный отчёт"
+            ]
+          }
+        },
+        "uk" : {
+          "stringSet" : {
+            "state" : "translated",
+            "values" : [
+              "Підготувати місячний звіт у ${applicationName}",
+              "${applicationName}, підготуй місячний звіт"
+            ]
+          }
+        }
+      }
     }
   },
   "version" : "1.1"
