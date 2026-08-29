@@ -41,8 +41,28 @@ immutable history.
 - [x] Upload build `17` to App Store Connect after explicit owner approval.
 - [x] Wait for App Store Connect processing and verify the build is ready for
       internal testing.
-- [ ] Attach build `17` to version `1.0.4`, save EN/RU/UK release notes, and
-      submit only after explicit owner approval.
+- [x] Attach build `17` to version `1.0.4`, save EN/RU/UK release notes, and
+      submit after explicit owner approval.
+
+### Build 17 App Review submission receipt — 2026-08-29
+
+- App Store Connect version `1.0.4` was created on the existing Hourleaf iOS
+  record and processed build `17` was attached. The iPhone and Apple Watch
+  screenshot sets were retained.
+- EN/RU/UK promotional text, release notes, and search keywords were saved.
+  The English subtitle was updated to `Private log for iPhone & Watch` for the
+  next version; the app name remains `Hourleaf: Ministry Hours` in every
+  localization.
+- Current build-17 App Review information was saved. The existing private
+  reviewer contact details remained only in App Store Connect.
+- Automatic release after approval remains selected. The overview rating was
+  not reset.
+- At 18:40 EEST on 2026-08-29, App Store Connect confirmed one submitted item.
+  A fresh readback showed `iOS 1.0.4`, build `17`, with status
+  `Waiting for Review`; the review draft count returned to zero.
+- Submission metadata source commit:
+  `2c51f10221db2b785c6f308fd8b171fccb5aeafa`. Approval and public storefront
+  availability are separate future gates and are not claimed by this receipt.
 
 ### Build 17 local candidate receipt — 2026-08-28
 
