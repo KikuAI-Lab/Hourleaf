@@ -22,6 +22,7 @@ struct ProgressScreen: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.requestReview) private var requestReview
     @State private var sharePayload: ReportSharePayload?
+    @State private var reviewRequestToken: UUID?
 
     private var selectedMonth: MonthKey { model.selectedReportMonth }
     private var earliestMonth: MonthKey { model.settings.ledgerStartMonth }
@@ -97,6 +98,23 @@ struct ProgressScreen: View {
             .onAppear(perform: normalizeSelectedMonth)
             .onChange(of: model.settings.ledgerStartMonth) { _, _ in normalizeSelectedMonth() }
             .onChange(of: model.currentMonth) { _, _ in normalizeSelectedMonth() }
+        }
+        .task(id: reviewRequestToken) {
+            guard reviewRequestToken != nil else { return }
+            defer { reviewRequestToken = nil }
+
+            do {
+                try await Task.sleep(for: .seconds(2))
+            } catch {
+                return
+            }
+
+            _ = ReviewRequestGate.requestIfEligible {
+                requestReview()
+            }
+        }
+        .onDisappear {
+            reviewRequestToken = nil
         }
     }
 
@@ -428,9 +446,7 @@ struct ProgressScreen: View {
                         let snapshot = currentSnapshot
                         Task { @MainActor in
                             guard await model.markReportSent(snapshot) else { return }
-                            _ = ReviewRequestGate.requestIfEligible {
-                                requestReview()
-                            }
+                            reviewRequestToken = UUID()
                         }
                     } label: {
                         Group {
