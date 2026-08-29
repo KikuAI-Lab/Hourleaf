@@ -694,6 +694,20 @@ final class AppIntentTests: XCTestCase {
         )
     }
 
+    func testReviewRequestWaitsAndCancelsWhenProgressScreenDisappears() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: root.appendingPathComponent("Hourleaf/UI/ProgressScreen.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("Task.sleep(for: .seconds(2))"))
+        XCTAssertTrue(source.contains(".onDisappear"))
+        XCTAssertTrue(source.contains("reviewRequestToken = nil"))
+    }
+
     func testSettingsGuideURLRoutesEnglishRussianAndUkrainian() {
         XCTAssertEqual(
             HourleafGuideURL.make(anchor: "voice", preferredLanguage: "en").absoluteString,
