@@ -1,1 +1,1 @@
-Small and medium widgets show this month's service, credit, and Bible studies; the medium widget also shows progress toward 600 hours. Siri now asks exactly how many minutes to record, and service and credit use separate reliable actions.
+Prepare a monthly report with Shortcuts without changing your records. Settings now makes it easy to share Hourleaf, leave an App Store rating, and open the guide in English, Russian, or Ukrainian.

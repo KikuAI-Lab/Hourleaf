@@ -17,6 +17,7 @@ prepares monthly reports without an account or remote backend.
 
 - Fast service and credit entry on iPhone
 - Direct hours-and-minutes entry with the Digital Crown on Apple Watch
+- Siri and Shortcuts for spoken minute entry and read-only monthly report text
 - List and calendar history with editing and reversible deletion
 - Monthly report preparation and system sharing
 - Service-year progress toward the 600-hour goal
