@@ -19,6 +19,6 @@ Hourleaf includes:
 • Local backup, restore, and CSV export/import
 • English, Russian, and Ukrainian
 
-Your records stay on your devices unless you choose to export or share them. Hourleaf has no account, ads, tracking, or third-party analytics.
+Your records stay on your iPhone unless you choose to export or share them. Hourleaf has no account, ads, tracking, or third-party analytics.
 
 Hourleaf is an independent personal tool. It is not affiliated with or endorsed by any religious organization.
