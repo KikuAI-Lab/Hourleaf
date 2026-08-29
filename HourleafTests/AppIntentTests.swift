@@ -220,7 +220,7 @@ final class AppIntentTests: XCTestCase {
             })
         )
 
-        XCTAssertEqual(HourleafShortcuts.appShortcuts.count, 3)
+        XCTAssertEqual(HourleafShortcuts.appShortcuts.count, 4)
         XCTAssertEqual(shortcutRevision.source, EntryMutationSource.shortcut.rawValue)
         XCTAssertEqual(shortcutRevision.localDay, LocalDay(year: 2029, month: 12, day: 20).key)
         XCTAssertEqual(shortcutRevision.minutes, 30)
@@ -527,8 +527,8 @@ final class AppIntentTests: XCTestCase {
         XCTAssertFalse(resolvedIdentity.isEmpty)
     }
 
-    func testExactlyThreeShortcutsArePromoted() {
-        XCTAssertEqual(HourleafShortcuts.appShortcuts.count, 3)
+    func testExactlyFourShortcutsArePromoted() {
+        XCTAssertEqual(HourleafShortcuts.appShortcuts.count, 4)
     }
 
     func testPromotedServiceShortcutUsesItsFixedKindAction() throws {
@@ -541,7 +541,205 @@ final class AppIntentTests: XCTestCase {
         )
 
         XCTAssertTrue(source.contains("intent: RecordServiceTimeIntent()"))
+        XCTAssertTrue(source.contains("intent: PrepareMonthlyReportIntent()"))
         XCTAssertFalse(source.contains("intent: RecordTimeIntent(kind: .service)"))
+    }
+
+    func testPrepareMonthlyReportIntentReturnsLocalizedReadOnlyDraft() async throws {
+        let repositoryNow = makeDate(year: 2030, month: 1, day: 10, hour: 12, minute: 0)
+        let month = MonthKey(year: 2029, month: 12)
+        let repository = try await makeRepository(
+            ledgerStartMonth: MonthKey(year: 2029, month: 9),
+            reportLanguage: .english,
+            clock: { repositoryNow }
+        )
+        let note = "Private note that must stay out of the report"
+        let serviceID = UUID(uuidString: "20000000-0000-0000-0000-000000000001")!
+        let creditID = UUID(uuidString: "20000000-0000-0000-0000-000000000002")!
+
+        _ = try await repository.apply(
+            EntryMutationCommand(
+                mutationID: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!,
+                entryID: serviceID,
+                expectedRevision: nil,
+                operation: .create,
+                values: EntryMutationValues(
+                    kind: .service,
+                    day: LocalDay(year: 2029, month: 12, day: 3),
+                    minutes: 125,
+                    note: note
+                ),
+                occurredAt: makeDate(year: 2030, month: 1, day: 2, hour: 9, minute: 0),
+                source: .appQuickEntry
+            )
+        )
+        _ = try await repository.apply(
+            EntryMutationCommand(
+                mutationID: UUID(uuidString: "10000000-0000-0000-0000-000000000002")!,
+                entryID: creditID,
+                expectedRevision: nil,
+                operation: .create,
+                values: EntryMutationValues(
+                    kind: .credit,
+                    day: LocalDay(year: 2029, month: 12, day: 4),
+                    minutes: 75,
+                    note: nil
+                ),
+                occurredAt: makeDate(year: 2030, month: 1, day: 2, hour: 9, minute: 1),
+                source: .appQuickEntry
+            )
+        )
+        _ = try await repository.setBibleStudyCount(
+            2,
+            for: month,
+            at: makeDate(year: 2030, month: 1, day: 3, hour: 9, minute: 0)
+        )
+
+        let before = try await repository.ledgerSnapshot()
+        let intent = PrepareMonthlyReportIntent(month: month.date(calendar: .hourleaf))
+        let text = try await intent.prepare(using: repository, now: repositoryNow)
+        let after = try await repository.ledgerSnapshot()
+        let expected = try XCTUnwrap(ReportReadiness.draft(for: month, in: before))
+
+        XCTAssertEqual(text, expected.text)
+        XCTAssertTrue(text.contains("Hours: 2"), "Unexpected report text: \(text)")
+        XCTAssertTrue(text.contains("Credit hours: 1"), "Unexpected report text: \(text)")
+        XCTAssertTrue(text.contains("Bible studies: 2"), "Unexpected report text: \(text)")
+        XCTAssertFalse(text.contains(note))
+        XCTAssertFalse(text.contains(serviceID.uuidString))
+        XCTAssertFalse(text.contains(creditID.uuidString))
+        XCTAssertEqual(before, after)
+    }
+
+    func testPrepareMonthlyReportIntentUsesCurrentMonthWhenDateIsOmitted() async throws {
+        let repositoryNow = makeDate(year: 2030, month: 1, day: 10, hour: 12, minute: 0)
+        let currentMonth = MonthKey(repositoryNow, calendar: .hourleaf)
+        let repository = try await makeRepository(
+            ledgerStartMonth: MonthKey(year: 2029, month: 9),
+            clock: { repositoryNow }
+        )
+        let before = try await repository.ledgerSnapshot()
+        let intent = PrepareMonthlyReportIntent()
+
+        let text = try await intent.prepare(using: repository, now: repositoryNow)
+
+        XCTAssertEqual(
+            text,
+            try XCTUnwrap(ReportReadiness.draft(for: currentMonth, in: before)).text
+        )
+    }
+
+    func testPrepareMonthlyReportIntentReportsMissingDraftWithoutWriting() async throws {
+        let repositoryNow = makeDate(year: 2030, month: 1, day: 10, hour: 12, minute: 0)
+        let repository = try await makeRepository(
+            ledgerStartMonth: MonthKey(year: 2030, month: 1),
+            clock: { repositoryNow }
+        )
+        let before = try await repository.ledgerSnapshot()
+        let intent = PrepareMonthlyReportIntent(
+            month: MonthKey(year: 2029, month: 12).date(calendar: .hourleaf)
+        )
+
+        do {
+            _ = try await intent.prepare(using: repository, now: repositoryNow)
+            XCTFail("A month before the ledger start must not return a report.")
+        } catch let error as PrepareMonthlyReportIntentError {
+            XCTAssertEqual(error, .noDraft)
+            XCTAssertFalse(error.errorDescription?.isEmpty ?? true)
+        }
+
+        let after = try await repository.ledgerSnapshot()
+        XCTAssertEqual(before, after)
+    }
+
+    func testPrepareMonthlyReportIntentRequiresLocalAuthenticationAndIsDiscoverable() {
+        XCTAssertFalse(PrepareMonthlyReportIntent.openAppWhenRun)
+        XCTAssertTrue(PrepareMonthlyReportIntent.isDiscoverable)
+        XCTAssertEqual(
+            PrepareMonthlyReportIntent.authenticationPolicy,
+            .requiresLocalDeviceAuthentication
+        )
+    }
+
+    func testReviewRequestGateAllowsOneRequestPerAppVersionAndRecordsBeforeRequest() {
+        let suiteName = "ReviewRequestGateTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        var requestCount = 0
+        XCTAssertTrue(
+            ReviewRequestGate.requestIfEligible(version: "1.0", defaults: defaults) {
+                XCTAssertEqual(
+                    defaults.string(forKey: ReviewRequestGate.lastRequestedVersionKey),
+                    "1.0"
+                )
+                requestCount += 1
+            }
+        )
+        XCTAssertFalse(
+            ReviewRequestGate.requestIfEligible(version: "1.0", defaults: defaults) {
+                requestCount += 1
+            }
+        )
+        XCTAssertTrue(
+            ReviewRequestGate.requestIfEligible(version: "1.1", defaults: defaults) {
+                requestCount += 1
+            }
+        )
+
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(
+            defaults.string(forKey: ReviewRequestGate.lastRequestedVersionKey),
+            "1.1"
+        )
+    }
+
+    func testSettingsGuideURLRoutesEnglishRussianAndUkrainian() {
+        XCTAssertEqual(
+            HourleafGuideURL.make(anchor: "voice", preferredLanguage: "en").absoluteString,
+            "https://kikuai.dev/hourleaf/guide/#voice"
+        )
+        XCTAssertEqual(
+            HourleafGuideURL.make(anchor: "voice", preferredLanguage: "ru").absoluteString,
+            "https://kikuai.dev/hourleaf/guide/ru/#voice"
+        )
+        XCTAssertEqual(
+            HourleafGuideURL.make(anchor: "voice", preferredLanguage: "uk").absoluteString,
+            "https://kikuai.dev/hourleaf/guide/uk/#voice"
+        )
+    }
+
+    func testSettingsStoreActionsUseLocalizedLabelsAndRequiredURLs() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let expected = [
+            "en": ("Share Hourleaf", "Rate Hourleaf"),
+            "ru": ("Поделиться Hourleaf", "Оценить Hourleaf"),
+            "uk": ("Поділитися Hourleaf", "Оцінити Hourleaf")
+        ]
+
+        for (language, labels) in expected {
+            let url = root.appendingPathComponent(
+                "Hourleaf/\(language).lproj/Localizable.strings"
+            )
+            let data = try Data(contentsOf: url)
+            let values = try XCTUnwrap(
+                PropertyListSerialization.propertyList(from: data, format: nil)
+                    as? [String: String]
+            )
+            XCTAssertEqual(values["settings.share_hourleaf"], labels.0)
+            XCTAssertEqual(values["settings.rate_hourleaf"], labels.1)
+        }
+
+        let source = try String(
+            contentsOf: root.appendingPathComponent("Hourleaf/UI/SettingsScreen.swift"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(source.contains("https://apps.apple.com/app/id6801032003"))
+        XCTAssertTrue(source.contains("action=write-review"))
+        XCTAssertTrue(source.contains("shareHourleafButton"))
+        XCTAssertTrue(source.contains("rateHourleafButton"))
     }
 
     func testSpokenDurationPromptExplicitlyRequestsMinutesInEveryLanguage() throws {
@@ -603,6 +801,7 @@ final class AppIntentTests: XCTestCase {
 
     private func makeRepository(
         ledgerStartMonth: MonthKey,
+        reportLanguage: ReportLanguage? = nil,
         clock: @escaping @Sendable () -> Date = { .now }
     ) async throws -> CoreDataLedgerRepository {
         let repository = CoreDataLedgerRepository(
@@ -615,6 +814,9 @@ final class AppIntentTests: XCTestCase {
             year: ledgerStartMonth.month >= 9 ? ledgerStartMonth.year : ledgerStartMonth.year - 1,
             month: 9
         )
+        if let reportLanguage {
+            settings.reportLanguage = reportLanguage
+        }
         try await repository.saveSettings(settings)
         return repository
     }

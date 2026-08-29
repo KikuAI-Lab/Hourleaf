@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 
 private struct ReportSharePayload: Identifiable {
     let id = UUID()
@@ -19,6 +20,7 @@ enum ReportPreviewText {
 struct ProgressScreen: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.requestReview) private var requestReview
     @State private var sharePayload: ReportSharePayload?
 
     private var selectedMonth: MonthKey { model.selectedReportMonth }
@@ -424,7 +426,12 @@ struct ProgressScreen: View {
                     sharePreparedButton(currentSnapshot)
                     Button {
                         let snapshot = currentSnapshot
-                        Task { _ = await model.markReportSent(snapshot) }
+                        Task { @MainActor in
+                            guard await model.markReportSent(snapshot) else { return }
+                            _ = ReviewRequestGate.requestIfEligible {
+                                requestReview()
+                            }
+                        }
                     } label: {
                         Group {
                             if model.markingSentSnapshotIDs.contains(currentSnapshot.id) {

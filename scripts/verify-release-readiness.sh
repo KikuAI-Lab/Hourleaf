@@ -379,7 +379,7 @@ for watch_source_root in "$repo_root/HourleafWatch" "$repo_root/HourleafWatchSha
 done
 
 shortcut_count="$(find "$repo_root/Hourleaf" -type f -name '*.swift' -exec grep -Eho 'AppShortcut[[:space:]]*\(' {} + 2>/dev/null | wc -l | tr -d '[:space:]' || true)"
-[[ "$shortcut_count" == "3" ]] || fail "expected exactly three AppShortcut declarations; found $shortcut_count"
+[[ "$shortcut_count" == "4" ]] || fail "expected exactly four AppShortcut declarations; found $shortcut_count"
 watch_shortcut_count="$(find "$repo_root/HourleafWatch" -type f -name '*.swift' -exec grep -Eho 'AppShortcut[[:space:]]*\(' {} + 2>/dev/null | wc -l | tr -d '[:space:]' || true)"
 [[ "$watch_shortcut_count" == "2" ]] || fail "expected exactly two Watch AppShortcut declarations; found $watch_shortcut_count"
 
