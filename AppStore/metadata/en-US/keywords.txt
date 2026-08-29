@@ -1,1 +1,1 @@
-ministry,hours,service,report,credit,time,watch,ledger,volunteer
+service,field,pioneer,publisher,preaching,bible,study,report,credit,tracker,volunteer,ledger

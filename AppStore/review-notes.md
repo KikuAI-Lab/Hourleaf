@@ -6,15 +6,13 @@ matrix changes. Keep private reviewer contact details only in App Store Connect.
 
 ## Version 1.0.4 update
 
-Build 16 adds small and medium Hourleaf widgets and makes Siri entry
+Build 17 adds small and medium Hourleaf widgets and makes Siri entry
 unambiguous. With monthly totals enabled in Hourleaf settings, the small widget
 shows service, credit, and Bible-study count; the medium widget also shows
 service-year progress. Siri asks specifically how many minutes to record, and
 service and credit use separate actions. Totals remain opt-in and
-privacy-sensitive. The same iPhone widgets can appear on a nearby Mac signed in
-to the same Apple Account; there is no separate Mac account, backend, or data
-store. This update adds no purchase, external service, sensitive-data
-permission, or new data category.
+privacy-sensitive. This update adds no purchase, external service,
+sensitive-data permission, or new data category.
 
 ## Previous 1.0.3 update
 
@@ -28,10 +26,10 @@ unchanged core entry, history, report, sharing, and data-management flows.
 ## Paste-ready Notes field
 
 ```text
-Hourleaf 1.0.4 (build 16) review information
+Hourleaf 1.0.4 (build 17) review information
 
 UPDATE SCOPE
-Build 16 adds small and medium Hourleaf widgets and makes Siri entry unambiguous. With monthly totals enabled in Hourleaf settings, the small widget shows service, credit, and Bible-study count; the medium widget also shows service-year progress. Siri asks specifically how many minutes to record, and service and credit use separate actions. Totals remain opt-in and privacy-sensitive. The same iPhone widgets can appear on a nearby Mac signed in to the same Apple Account; there is no separate Mac account, backend, or data store. This update adds no account, purchase, external service, sensitive-data permission, or new data category.
+Build 17 adds small and medium Hourleaf widgets and makes Siri entry unambiguous. With monthly totals enabled in Hourleaf settings, the small widget shows service, credit, and Bible-study count; the medium widget also shows service-year progress. Siri asks specifically how many minutes to record, and service and credit use separate actions. Totals remain opt-in and privacy-sensitive. This update adds no account, purchase, external service, sensitive-data permission, or new data category.
 
 ACCESS AND MAIN FEATURES
 No account, login, purchase, credentials, or sample file is required. Launch Hourleaf and use Add to choose Service or Credit, set hours/minutes, optionally add a note, and save. The Bible studies stepper records the current month's count. History switches between list and calendar. Progress prepares the monthly report and opens the system share sheet. Settings > Data Management provides local backup, restore, and CSV export/import. Settings > Widgets & Control Center lets the user opt in to showing monthly totals outside Hourleaf. Add an Hourleaf small or medium widget from the iPhone widget gallery. On a paired Apple Watch, choose Service or Credit, set time with the Digital Crown, and confirm; the paired iPhone commits the entry.
@@ -49,7 +47,7 @@ REGIONS AND THIRD-PARTY MATERIAL
 Features are consistent across all regions and localized in English, Russian, and Ukrainian. Hourleaf is not a regulated service and contains no protected third-party database, media, or organization-owned content. It is an independent personal tool and is not affiliated with or endorsed by any religious organization.
 
 TEST EVIDENCE
-Core flows were tested on an iPhone 15 Pro running iOS 26.6 and an Apple Watch Series 10 running watchOS 26.6. The unchanged core entry, history, report, sharing, and data-management flows remain demonstrated by the physical-device recording supplied during the version 1.0 review. Build 16 passed the full automated unit suite and an unsigned Release build containing the iPhone app, WidgetKit extension, and Watch app. The updated Siri wording and fixed service action require a final physical-device smoke after build 16 is installed.
+Core flows were tested on an iPhone 15 Pro running iOS 26.6 and an Apple Watch Series 10 running watchOS 26.6. The unchanged core entry, history, report, sharing, and data-management flows remain demonstrated by the physical-device recording supplied during the version 1.0 review. Build 17 passed 523 unit and integration tests and 53 app-owned UI tests. On the physical iPhone, the Russian Siri service and credit actions each asked how many minutes to record and each saved exactly one requested entry. Fresh system crash logs after both actions contained no new Hourleaf crash or running-board suspension termination.
 ```
 
 ## Resolution Center reply
