@@ -75,6 +75,25 @@ Convert only concrete, reproducible work into the existing Hourleaf roadmap
 Issue. Never reply as the user, promise a date, or disclose reviewer information
 without a separate owner-approved response.
 
+## Acquisition measurement
+
+Use App Store Connect campaign links and aggregate storefront metrics only.
+Hourleaf does not add an attribution SDK, device identifier, account, tracking
+pixel, or per-user event log.
+
+- Keep one campaign token per owned surface: `web-en`, `web-ru`, `web-uk`, and
+  `github`.
+- Generate the provider token in App Store Connect; never invent it. Read back
+  each final URL before publishing it in the website or README.
+- Record the public version, observation window, product-page views, first-time
+  downloads, and conversion rate in the canonical Issue. A metric is unknown
+  when Apple withholds a small cohort; do not infer zero or identify a person.
+- Compare at least seven days of organic baseline with the same window after
+  campaign links go live. Do not claim adoption from GitHub clones, CI traffic,
+  an upload, an approval, or a single owner installation.
+- Paid ads, creator outreach, and community posting require their own bounded
+  owner decision; they are not part of the default release process.
+
 ## Release closeout
 
 A release is closed only when the canonical Issue contains provider readback

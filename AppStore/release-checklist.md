@@ -1,10 +1,60 @@
 # Hourleaf delivery checklist
 
-## Active release: 1.0.4 (17)
+## Active release: 1.0.5 (18)
 
-This active section is the maintained release contract. It is superseded when
-the next version becomes the source candidate; dated receipts below remain
-immutable history.
+This active section is the maintained release contract. Dated receipts below
+remain immutable history.
+
+### Scope and source
+
+- [x] All iPhone, WidgetKit, and Watch shipping configurations use version
+      `1.0.5` build `18`.
+- [x] The read-only monthly-report Shortcut, localized Share/Rate actions,
+      Ukrainian guide routing, and delayed once-per-version review request are
+      merged to `main`.
+- [x] English, Russian, and Ukrainian metadata describes only implemented
+      behavior and passes the repository character-limit guard.
+
+### Automated verification
+
+- [x] Focused App Intent suite passes: 30 of 30 tests.
+- [x] Focused localized settings accessibility test passes in English,
+      Russian, and Ukrainian.
+- [x] Full CI passes on the exact merged tree: 531 unit/integration tests and
+      53 app-owned UI tests, with zero failures (run `33264052461`).
+- [x] Release guard, guard self-test, local installer self-test, and diff checks
+      pass.
+
+### Physical acceptance
+
+- [ ] Install the separate local-development bundle on the physical iPhone;
+      do not replace the App Store/TestFlight bundle or touch its ledger.
+- [ ] Verify Share Hourleaf, Rate Hourleaf, and Ukrainian guide routing.
+- [ ] Prepare one synthetic monthly report through Shortcuts and confirm the
+      returned text is correct and the ledger is unchanged.
+- [ ] Mark a synthetic report sent and verify the review request path does not
+      interrupt the action or repeat in the same app version. StoreKit may
+      legitimately suppress the system prompt.
+- [ ] Verify the medium Continuity widget on Mac if the nearby-iPhone gallery
+      exposes the current Hourleaf widget.
+
+### Owner-controlled distribution
+
+- [ ] Wait for the submitted `1.0.4` (`17`) review to resolve; approval and
+      public availability are separate readbacks.
+- [ ] Create and inspect the signed `1.0.5` (`18`) App Store archive only after
+      physical acceptance.
+- [ ] Upload build `18`, wait for processing, and attach it to a new version
+      only after a fresh owner-controlled release gate.
+- [ ] Save EN/RU/UK metadata and reviewer notes, submit, and verify the displayed
+      review status.
+- [ ] Publish the matching EN/RU/UK website and campaign links only when the
+      advertised build is actually available.
+
+## Submitted release: 1.0.4 (17)
+
+This section is retained as the release record for the version currently in
+App Review. It does not claim approval or public availability.
 
 ### Source and package
 

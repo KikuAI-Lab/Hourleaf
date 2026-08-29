@@ -4,6 +4,8 @@ Record service or credit time in seconds, add an optional note, and review every
 
 On Apple Watch, choose service or credit, set hours and minutes with the Digital Crown, and save the entry to your iPhone.
 
+With Siri and Shortcuts, you can record a spoken number of minutes or prepare monthly report text without opening Hourleaf. The report action only reads the calculated report; it never changes entries or sends anything.
+
 Hourleaf includes:
 
 • Fast entry for service and credit time
@@ -13,6 +15,7 @@ Hourleaf includes:
 • Service-year progress toward a 600-hour goal
 • Monthly and inactivity reminders you control
 • Apple Watch entry
+• Siri and Shortcuts for voice entry and report text
 • Local backup, restore, and CSV export/import
 • English, Russian, and Ukrainian
 

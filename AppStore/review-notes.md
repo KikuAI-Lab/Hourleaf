@@ -4,6 +4,23 @@ This file is the maintained source for the App Review Information Notes field.
 Update it when the review path, shipped capabilities, or verified physical-device
 matrix changes. Keep private reviewer contact details only in App Store Connect.
 
+## Version 1.0.5 candidate update
+
+Build 18 adds a read-only monthly-report action for Apple Shortcuts, localized
+Share Hourleaf and Rate Hourleaf actions in Settings, and correct Ukrainian
+guide routing. The report action returns only the existing calculated report
+text, requires local device authentication, compares the ledger before and
+after reading, never changes an entry, and never sends anything. Hourleaf may
+ask for an App Store rating only after the user successfully marks a report as
+sent; the native StoreKit request waits two seconds, is cancelled if the user
+leaves the screen, and is attempted at most once per app version. This update
+adds no account, purchase, backend, third-party SDK, sensitive-data permission,
+or new data category.
+
+Physical-device acceptance and the final build-18 test matrix are still
+pending. Keep the paste-ready 1.0.4 notes below unchanged until those checks
+pass and build 18 is actually selected for submission.
+
 ## Version 1.0.4 update
 
 Build 17 adds small and medium Hourleaf widgets and makes Siri entry
