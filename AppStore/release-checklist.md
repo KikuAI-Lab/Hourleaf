@@ -20,19 +20,20 @@ immutable history.
 
 ### Physical acceptance
 
-- [ ] Install build `17` without losing the existing iPhone ledger.
+- [x] Install build `17` without losing the existing iPhone ledger.
 - [x] Add the small and medium Hourleaf widgets on iPhone using the build 15
       TestFlight baseline.
 - [ ] With the same Apple Account and a nearby iPhone, add the medium widget on
       Mac. The small Continuity widget is already verified.
 - [x] Verify Russian copy, opt-in totals,
       privacy redaction, refresh after an entry, and the quick-entry deep link.
-- [ ] Verify that build `17` asks “Сколько минут?” and that service and credit
+- [x] Verify that build `17` asks “Сколько минут?” and that service and credit
       voice actions each create exactly one requested entry.
-- [ ] Compare fresh device crash logs after both actions and confirm no new
+- [x] Compare fresh device crash logs after both actions and confirm no new
       Hourleaf `0xdead10cc` termination.
-- [ ] Remove the build `16` diagnostic entries and build `17` canaries through
-      Hourleaf, then verify that no unrelated active entry changed.
+- [x] Resolve diagnostic cleanup: on 2026-08-29 the owner explicitly chose to
+      keep the build `16` diagnostic entries and build `17` canaries. No cleanup
+      deletion or direct database mutation was performed.
 
 ### Owner-controlled distribution
 
@@ -67,8 +68,14 @@ immutable history.
   The completion sheet identified `Hourleaf 1.0.4 (17)` as uploaded, Organizer
   read back build `17` as `Uploaded to Apple`, and the distribution critical log
   was empty. At 18:03 EEST App Store Connect listed build `17` as ready for
-  testing and assigned to the `Hourleaf Internal` group. TestFlight installation
-  and the physical crash-log acceptance remain pending their fresh receipts.
+  testing and assigned to the `Hourleaf Internal` group.
+- TestFlight updated the physical iPhone 15 Pro on iOS 26.6 from build `16` to
+  build `17` in place. Read-only table comparison showed that every existing
+  ledger row was unchanged. The Russian Siri flows asked “Сколько минут?” and
+  persisted exactly one requested service entry and one requested credit entry.
+  Fresh system crash logs contained no new Hourleaf crash file after either
+  action. On 2026-08-29 the owner explicitly chose to retain the diagnostic and
+  canary entries; no cleanup mutation was performed.
 
 ### Build 16 TestFlight receipt — 2026-08-28
 

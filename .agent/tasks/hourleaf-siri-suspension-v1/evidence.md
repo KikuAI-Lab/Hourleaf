@@ -2,9 +2,9 @@
 
 ## Current verdict
 
-PARTIAL. AC1 through AC4 have current PASS evidence. AC5 and AC6 require the
-signed build 17 TestFlight install, physical Siri runs, fresh device crash-log
-comparison, and deletion of diagnostic entries through Hourleaf.
+PASS. AC1 through AC5 have current PASS evidence. The owner explicitly waived
+AC6 cleanup and chose to retain the diagnostic and canary entries, so no ledger
+deletion or direct database mutation was performed.
 
 ## AC1 — PASS: physical failure identified
 
@@ -42,13 +42,21 @@ comparison, and deletion of diagnostic entries through Hourleaf.
 - See `raw/full-unit-summary.json`, `raw/ui-summary.json`, and
   `raw/release17-package.md`.
 
-## AC5 — PENDING: physical build 17 acceptance
+## AC5 — PASS: physical build 17 acceptance
 
-- Requires one service and one credit Siri action from the processed build 17
-  TestFlight package plus exact read-only ledger and fresh crash-log comparison.
+- TestFlight updated the same physical iPhone from build 16 to build 17 without
+  changing any existing ledger row.
+- The production Siri actions asked for minutes and persisted exactly one
+  requested service entry and one requested credit entry through the shortcut
+  source.
+- A fresh system crash-log comparison after both actions contained no new
+  Hourleaf crash file and therefore no new `0xdead10cc` termination.
+- See `raw/build17-physical-acceptance.md`.
 
-## AC6 — PENDING: diagnostic cleanup
+## AC6 — WAIVED: diagnostic entries retained
 
-- Requires deleting build 16 diagnostic entries and build 17 canaries through
-  Hourleaf, followed by read-only proof that unrelated active entries did not
-  change.
+- On 2026-08-29 the owner explicitly chose to retain the build 16 diagnostic
+  entries and build 17 canaries.
+- No cleanup mutation was performed. The read-only physical comparison already
+  proved that the TestFlight update and both build 17 Siri actions changed no
+  pre-existing ledger row.
