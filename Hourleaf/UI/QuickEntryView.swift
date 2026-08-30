@@ -151,6 +151,7 @@ struct QuickEntryView: View {
             TextField("entry.note_placeholder", text: $note, axis: .vertical)
                 .lineLimit(1...3)
                 .focused($noteFocused)
+                .accessibilityLabel(Text("entry.note_placeholder"))
                 .accessibilityIdentifier("entryNoteField")
 
             Button(action: save) {

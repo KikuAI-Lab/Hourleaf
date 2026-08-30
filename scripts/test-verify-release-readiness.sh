@@ -264,8 +264,8 @@ assert_failure_contains "all shipping targets must use marketing version 1.0.5"
 reset_fixture
 replace_in_file \
     "$fixture_root/Hourleaf.xcodeproj/project.pbxproj" \
-    's/CURRENT_PROJECT_VERSION = 18;/CURRENT_PROJECT_VERSION = 17;/g'
-assert_failure_contains "all shipping targets must use build number 18"
+    's/CURRENT_PROJECT_VERSION = 19;/CURRENT_PROJECT_VERSION = 18;/g'
+assert_failure_contains "all shipping targets must use build number 19"
 
 reset_fixture
 replace_in_file \

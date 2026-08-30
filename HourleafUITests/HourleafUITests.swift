@@ -572,7 +572,7 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.pickerWheels.element(boundBy: 0).waitForExistence(timeout: 5))
         XCTAssertTrue(app.segmentedControls["entryKindPicker"].buttons["Service"].isSelected)
         XCTAssertFalse(app.buttons["saveEntryButton"].isEnabled)
-        XCTAssertEqual(app.textFields["entryNoteField"].value as? String, "Note")
+        assertEmptyNoteField(app.textFields["entryNoteField"])
 
         enableQuickSurfaceTimer(in: app)
 
@@ -582,7 +582,7 @@ final class HourleafUITests: XCTestCase {
         XCTAssertFalse(app.buttons["stopQuickSurfaceTimerButton"].exists)
         XCTAssertTrue(app.segmentedControls["entryKindPicker"].buttons["Service"].isSelected)
         XCTAssertFalse(app.buttons["saveEntryButton"].isEnabled)
-        XCTAssertEqual(app.textFields["entryNoteField"].value as? String, "Note")
+        assertEmptyNoteField(app.textFields["entryNoteField"])
     }
 
     func testQuickSurfaceRunningTimerPersistsAcrossTerminationAndRelaunch() {
@@ -845,7 +845,7 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(app.buttons["saveEntryButton"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.segmentedControls["entryKindPicker"].buttons["Service"].isSelected)
         XCTAssertFalse(app.buttons["saveEntryButton"].isEnabled)
-        XCTAssertEqual(noteField.value as? String, "Note")
+        assertEmptyNoteField(noteField)
 
         app.pickerWheels.element(boundBy: 1).adjust(toPickerWheelValue: "1")
         app.buttons["saveEntryButton"].tap()
@@ -1197,12 +1197,12 @@ final class HourleafUITests: XCTestCase {
         let save = app.buttons["saveEntryButton"]
         XCTAssertTrue(kindPicker.buttons["Service"].isSelected)
         XCTAssertFalse(save.isEnabled)
-        XCTAssertEqual(noteField.value as? String, "Note")
+        assertEmptyNoteField(noteField)
 
         enableQuickSurfaceTimer(in: app)
         XCTAssertTrue(kindPicker.buttons["Service"].isSelected)
         XCTAssertFalse(save.isEnabled)
-        XCTAssertEqual(noteField.value as? String, "Note")
+        assertEmptyNoteField(noteField)
 
         let start = app.buttons["startQuickSurfaceTimerButton"]
         XCTAssertTrue(start.waitForExistence(timeout: 5))
@@ -1430,7 +1430,7 @@ final class HourleafUITests: XCTestCase {
         let toggle = app.switches["quickSurfaceTimerToggle"]
         XCTAssertTrue(scrollQuickSurfaceSettingsUntilVisible(toggle, in: app))
         XCTAssertEqual(toggle.value as? String, "0")
-        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        toggle.tap()
         expectation(for: NSPredicate(format: "value == %@", "1"), evaluatedWith: toggle)
         waitForExpectations(timeout: 5)
 
@@ -1524,6 +1524,23 @@ final class HourleafUITests: XCTestCase {
         let label = element.label.trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertFalse(label.isEmpty, "Empty accessibility label for \(identifier)", file: file, line: line)
         XCTAssertNotEqual(label, identifier, "Raw identifier exposed as label for \(identifier)", file: file, line: line)
+    }
+
+    private func assertEmptyNoteField(
+        _ field: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "Missing note field", file: file, line: line)
+        XCTAssertEqual(field.label, "Note", "Unexpected note field label", file: file, line: line)
+
+        let value = field.value as? String
+        XCTAssertTrue(
+            value == nil || value == "" || value == "Note",
+            "Expected an empty note field, got \(value ?? "<nil>")",
+            file: file,
+            line: line
+        )
     }
 
     private func reportBreakdownLine(_ label: String, in app: XCUIApplication) -> XCUIElement {

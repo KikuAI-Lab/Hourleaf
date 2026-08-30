@@ -1,6 +1,6 @@
 # Hourleaf delivery checklist
 
-## Active release: 1.0.5 (18)
+## Active release: 1.0.5 (19)
 
 This active section is the maintained release contract. Dated receipts below
 remain immutable history.
@@ -8,10 +8,10 @@ remain immutable history.
 ### Scope and source
 
 - [x] All iPhone, WidgetKit, and Watch shipping configurations use version
-      `1.0.5` build `18`.
+      `1.0.5` build `19`.
 - [x] The read-only monthly-report Shortcut, localized Share/Rate actions,
-      Ukrainian guide routing, and delayed once-per-version review request are
-      merged to `main`.
+      Ukrainian guide routing, delayed once-per-version review request, and
+      explicit localized note-field VoiceOver labels are implemented.
 - [x] English, Russian, and Ukrainian metadata describes only implemented
       behavior and passes the repository character-limit guard.
 
@@ -20,8 +20,8 @@ remain immutable history.
 - [x] Focused App Intent suite passes: 30 of 30 tests.
 - [x] Focused localized settings accessibility test passes in English,
       Russian, and Ukrainian.
-- [x] Full CI passes on the exact merged tree: 531 unit/integration tests and
-      53 app-owned UI tests, with zero failures (run `33264052461`).
+- [ ] Full CI passes on the exact build-19 tree: 531 unit/integration tests and
+      53 app-owned UI tests, with zero failures.
 - [x] Release guard, guard self-test, local installer self-test, and diff checks
       pass.
 
@@ -42,9 +42,9 @@ remain immutable history.
 
 - [ ] Wait for the submitted `1.0.4` (`17`) review to resolve; approval and
       public availability are separate readbacks.
-- [ ] Create and inspect the signed `1.0.5` (`18`) App Store archive only after
+- [ ] Create and inspect the signed `1.0.5` (`19`) App Store archive only after
       physical acceptance.
-- [ ] Upload build `18`, wait for processing, and attach it to a new version
+- [ ] Upload build `19`, wait for processing, and attach it to a new version
       only after a fresh owner-controlled release gate.
 - [ ] Save EN/RU/UK metadata and reviewer notes, submit, and verify the displayed
       review status.

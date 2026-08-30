@@ -370,6 +370,7 @@ private struct EntryEditorView: View {
                 .accessibilityIdentifier("editEntryDatePicker")
                 TimeWheelPicker(hours: $hours, minutes: $minutes)
                 TextField("entry.note_placeholder", text: $note, axis: .vertical)
+                    .accessibilityLabel(Text("entry.note_placeholder"))
                     .accessibilityIdentifier("editEntryNoteField")
                 Section {
                     Button(role: .destructive) {
