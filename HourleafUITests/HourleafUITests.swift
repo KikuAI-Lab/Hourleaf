@@ -1431,6 +1431,15 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(scrollQuickSurfaceSettingsUntilVisible(toggle, in: app))
         XCTAssertEqual(toggle.value as? String, "0")
         toggle.tap()
+
+        let directTap = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "1"),
+            object: toggle
+        )
+        if XCTWaiter.wait(for: [directTap], timeout: 1) != .completed {
+            toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        }
+
         expectation(for: NSPredicate(format: "value == %@", "1"), evaluatedWith: toggle)
         waitForExpectations(timeout: 5)
 
