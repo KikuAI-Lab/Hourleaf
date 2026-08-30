@@ -4,7 +4,7 @@ Hourleaf is an open-source, local-first ministry time ledger for iPhone and Appl
 Watch. It records service and credit time, follows service-year progress, and
 prepares monthly reports without an account or remote backend.
 
-- App Store: **[Download Hourleaf](https://apps.apple.com/app/id6801032003)**
+- App Store: **[Download Hourleaf](https://apps.apple.com/app/apple-store/id6801032003?pt=129302835&ct=github&mt=8)**
 - App Store name: **Hourleaf: Ministry Hours**
 - Platforms: iOS 17+ and watchOS 10+
 - Languages: English, Russian, Ukrainian
