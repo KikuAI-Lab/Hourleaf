@@ -44,16 +44,16 @@ unchanged core entry, history, report, sharing, and data-management flows.
 ## Paste-ready Notes field
 
 ```text
-Hourleaf 1.0.4 (build 17) review information
+Hourleaf 1.0.5 (build 19) review information
 
 UPDATE SCOPE
-Build 17 adds small and medium Hourleaf widgets and makes Siri entry unambiguous. With monthly totals enabled in Hourleaf settings, the small widget shows service, credit, and Bible-study count; the medium widget also shows service-year progress. Siri asks specifically how many minutes to record, and service and credit use separate actions. Totals remain opt-in and privacy-sensitive. This update adds no account, purchase, external service, sensitive-data permission, or new data category.
+Build 19 adds a read-only “Get monthly report” action for Apple Shortcuts, localized Share Hourleaf and Rate Hourleaf actions in Settings, correct Ukrainian guide routing, and explicit localized VoiceOver labels for note fields. The report action requires local device authentication, returns only the existing calculated report text, compares the ledger before and after reading, never changes an entry, and never sends anything. The native rating request is attempted only after the user marks a report sent and at most once per app version. This update adds no account, purchase, backend, third-party SDK, sensitive-data permission, or new data category.
 
 ACCESS AND MAIN FEATURES
 No account, login, purchase, credentials, or sample file is required. Launch Hourleaf and use Add to choose Service or Credit, set hours/minutes, optionally add a note, and save. The Bible studies stepper records the current month's count. History switches between list and calendar. Progress prepares the monthly report and opens the system share sheet. Settings > Data Management provides local backup, restore, and CSV export/import. Settings > Widgets & Control Center lets the user opt in to showing monthly totals outside Hourleaf. Add an Hourleaf small or medium widget from the iPhone widget gallery. On a paired Apple Watch, choose Service or Credit, set time with the Digital Crown, and confirm; the paired iPhone commits the entry.
 
-VOICE ENTRY
-In Apple Shortcuts, run “Record service” or “Record credit”. Each action asks “How many minutes?” (localized in English, Russian, and Ukrainian) and saves through the same validated local entry path as the app. Service and credit have separate fixed actions; the retained legacy service action remains executable only for existing user shortcuts and is not offered for new setup. The actions work offline and do not reveal history, notes, totals, or reports.
+SHORTCUTS
+In Apple Shortcuts, run “Record service” or “Record credit”; each asks “How many minutes?” and saves through the same validated local entry path as the app. Run “Get monthly report” to receive the selected month's prepared text after device authentication. Entry actions work offline. The report action is read-only and does not expose notes or history.
 
 AUDIENCE AND VALUE
 Hourleaf is a private, local-first ministry-time ledger for individual volunteers keeping their own records. It replaces handwritten or spreadsheet calculations while keeping service and credit separate.
@@ -65,7 +65,7 @@ REGIONS AND THIRD-PARTY MATERIAL
 Features are consistent across all regions and localized in English, Russian, and Ukrainian. Hourleaf is not a regulated service and contains no protected third-party database, media, or organization-owned content. It is an independent personal tool and is not affiliated with or endorsed by any religious organization.
 
 TEST EVIDENCE
-Core flows were tested on an iPhone 15 Pro running iOS 26.6 and an Apple Watch Series 10 running watchOS 26.6. The unchanged core entry, history, report, sharing, and data-management flows remain demonstrated by the physical-device recording supplied during the version 1.0 review. Build 17 passed 523 unit and integration tests and 53 app-owned UI tests. On the physical iPhone, the Russian Siri service and credit actions each asked how many minutes to record and each saved exactly one requested entry. Fresh system crash logs after both actions contained no new Hourleaf crash or running-board suspension termination.
+Core flows were tested on an iPhone 15 Pro running iOS 26.6 and an Apple Watch Series 10 running watchOS 26.6. The unchanged entry, history, report, sharing, and data-management flow is shown in the physical-device recording supplied during the version 1.0 review. Build 19's localized VoiceOver labels were verified on the physical iPhone, and no Watch source changed from the previously accepted build. Physical Siri service and credit actions each asked how many minutes to record and saved exactly one requested entry; fresh crash logs contained no new Hourleaf crash or suspension termination.
 ```
 
 ## Resolution Center reply

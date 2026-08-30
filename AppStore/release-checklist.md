@@ -27,29 +27,54 @@ remain immutable history.
 
 ### Physical acceptance
 
-- [ ] Install the separate local-development bundle on the physical iPhone;
-      do not replace the App Store/TestFlight bundle or touch its ledger.
-- [ ] Verify Share Hourleaf, Rate Hourleaf, and Ukrainian guide routing.
-- [ ] Prepare one synthetic monthly report through Shortcuts and confirm the
-      returned text is correct and the ledger is unchanged.
-- [ ] Mark a synthetic report sent and verify the review request path does not
-      interrupt the action or repeat in the same app version. StoreKit may
-      legitimately suppress the system prompt.
-- [ ] Verify the medium Continuity widget on Mac if the nearby-iPhone gallery
-      exposes the current Hourleaf widget.
+- [x] Install the separate local-development bundle on the physical iPhone
+      without replacing the App Store/TestFlight bundle or touching its ledger.
+- [x] Reproduce the empty note-field accessibility mismatch on the physical
+      iPhone and verify that the build-19 source exposes the localized label.
+- [x] Preserve the earlier physical Watch entry acceptance: no Watch source
+      changed between accepted build 17 and build 19.
+- [x] The owner accepted current app behavior on 2026-08-30 and explicitly
+      ended the remaining optional phone canaries; they are not release gates.
 
 ### Owner-controlled distribution
 
-- [ ] Wait for the submitted `1.0.4` (`17`) review to resolve; approval and
+- [x] Wait for the submitted `1.0.4` (`17`) review to resolve; approval and
       public availability are separate readbacks.
-- [ ] Create and inspect the signed `1.0.5` (`19`) App Store archive only after
+- [x] Create and inspect the signed `1.0.5` (`19`) App Store archive only after
       physical acceptance.
-- [ ] Upload build `19`, wait for processing, and attach it to a new version
-      only after a fresh owner-controlled release gate.
-- [ ] Save EN/RU/UK metadata and reviewer notes, submit, and verify the displayed
+- [x] Upload build `19` and wait for App Store Connect processing.
+- [x] Attach build `19` to the prepared `1.0.5` version.
+- [x] Save EN/RU/UK metadata and reviewer notes, submit, and verify the displayed
       review status.
 - [ ] Publish the matching EN/RU/UK website and campaign links only when the
       advertised build is actually available.
+
+### Build 19 archive and upload receipt — 2026-08-30
+
+- Shipping source: `2184275`; the later `568526d` changes only UI-test
+  interaction so the uploaded app binary is unchanged.
+- Retained archive:
+  `~/Library/Developer/Xcode/Archives/2026-08-30/Hourleaf 1.0.5 (19).xcarchive`.
+- Archive readback contains iPhone `com.kikuai.hourleaf`, WidgetKit
+  `com.kikuai.hourleaf.quick-surfaces`, and Watch
+  `com.kikuai.hourleaf.watchkitapp`, all at `1.0.5` build `19`.
+- Production App Group readback is exactly `group.com.kikuai.hourleaf` for the
+  iPhone app and WidgetKit extension. All three privacy manifests declare no
+  tracking; App Intents metadata and all three dSYM bundles are present.
+- Xcode reported `Upload succeeded` at 23:32 EEST. App Store Connect then moved
+  build `19` to `Ready to Submit` and added it to the Hourleaf Internal group.
+- Earlier build-18 source passed the complete `531` unit/integration and `53`
+  app-owned UI suite. For build 19, all `531` unit/integration tests passed and
+  the only full-UI failures came from a test-only switch interaction; its
+  representative fallback then passed. The owner accepted the app and ended
+  further optional test cycles rather than delaying release.
+- EN/RU/UK release notes are saved in the prepared `1.0.5` version. Build `19`
+  was attached and submitted at 23:59 EEST.
+- App Store Connect submission
+  `c3e3fbfd-a784-4e49-90f7-172d7b9b4b0d` contains one object,
+  `iOS 1.0.5 (19)`, and displays `Waiting for Review` with zero drafts.
+- Automatic release after approval, immediate availability to all users, and
+  preservation of the current rating remain selected.
 
 ## Submitted release: 1.0.4 (17)
 
