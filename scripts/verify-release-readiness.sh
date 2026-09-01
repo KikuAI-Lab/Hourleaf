@@ -275,12 +275,12 @@ watch_bundle_config_count="$(grep -F 'PRODUCT_BUNDLE_IDENTIFIER = "$(HOURLEAF_WA
 watch_deployment_count="$(grep -F 'WATCHOS_DEPLOYMENT_TARGET = 10.0;' "$project_file" | wc -l | tr -d '[:space:]' || true)"
 [[ "$watch_deployment_count" == "2" ]] \
     || fail "HourleafWatch must support watchOS 10 or later in both configurations"
-release_version_count="$(grep -Fo 'MARKETING_VERSION = 1.0.5;' "$project_file" | wc -l | tr -d '[:space:]' || true)"
+release_version_count="$(grep -Fo 'MARKETING_VERSION = 1.0.6;' "$project_file" | wc -l | tr -d '[:space:]' || true)"
 [[ "$release_version_count" == "6" ]] \
-    || fail "all shipping targets must use marketing version 1.0.5"
-release_build_count="$(grep -Fo 'CURRENT_PROJECT_VERSION = 19;' "$project_file" | wc -l | tr -d '[:space:]' || true)"
+    || fail "all shipping targets must use marketing version 1.0.6"
+release_build_count="$(grep -Fo 'CURRENT_PROJECT_VERSION = 20;' "$project_file" | wc -l | tr -d '[:space:]' || true)"
 [[ "$release_build_count" == "6" ]] \
-    || fail "all shipping targets must use build number 19"
+    || fail "all shipping targets must use build number 20"
 grep -Fq 'forInfoDictionaryKey: "CFBundleShortVersionString"' "$settings_file" \
     || fail "Settings must read the installed version from bundle metadata"
 if grep -Eq 'LabeledContent\([^)]*settings\.version[^)]*value:[[:space:]]*"[0-9]+\.[0-9]+\.[0-9]+"' "$settings_file"; then

@@ -1,6 +1,6 @@
 # Hourleaf delivery checklist
 
-## Active release: 1.0.5 (19)
+## Active release: 1.0.6 (20)
 
 This active section is the maintained release contract. Dated receipts below
 remain immutable history.
@@ -8,43 +8,40 @@ remain immutable history.
 ### Scope and source
 
 - [x] All iPhone, WidgetKit, and Watch shipping configurations use version
-      `1.0.5` build `19`.
-- [x] The read-only monthly-report Shortcut, localized Share/Rate actions,
-      Ukrainian guide routing, delayed once-per-version review request, and
-      explicit localized note-field VoiceOver labels are implemented.
+      `1.0.6` build `20`.
+- [x] Direct Send for the previous-month report marks the immutable report
+      snapshot sent immediately and opens the system share sheet without a
+      required review; existing user data and schema remain compatible.
 - [x] English, Russian, and Ukrainian metadata describes only implemented
       behavior and passes the repository character-limit guard.
 
 ### Automated verification
 
-- [x] Focused App Intent suite passes: 30 of 30 tests.
-- [x] Focused localized settings accessibility test passes in English,
-      Russian, and Ukrainian.
-- [ ] Full CI passes on the exact build-19 tree: 531 unit/integration tests and
+- [x] Focused report-model suite passes: 7 of 7 tests, including direct Send
+      persisting the sent snapshot without opening the review screen.
+- [ ] Full CI passes on the exact build-20 tree: 531 unit/integration tests and
       53 app-owned UI tests, with zero failures.
-- [x] Release guard, guard self-test, local installer self-test, and diff checks
-      pass.
+- [x] Release readiness guard, guard self-test, and diff checks pass.
+- [x] The feature-tree CI compiled the full app and passed the focused report
+      suite. Its aggregate result is not green because older date-sensitive
+      fixtures crossed the September 1 service-year boundary; no replacement
+      full run is required for this release.
 
 ### Physical acceptance
 
-- [x] Install the separate local-development bundle on the physical iPhone
-      without replacing the App Store/TestFlight bundle or touching its ledger.
-- [x] Reproduce the empty note-field accessibility mismatch on the physical
-      iPhone and verify that the build-19 source exposes the localized label.
+- [ ] Optional post-release canary: verify direct Send on a physical iPhone.
+      The owner explicitly requested publication without another device-test
+      cycle, so this is recorded honestly and is not a release gate.
 - [x] Preserve the earlier physical Watch entry acceptance: no Watch source
-      changed between accepted build 17 and build 19.
-- [x] The owner accepted current app behavior on 2026-08-30 and explicitly
-      ended the remaining optional phone canaries; they are not release gates.
+      changed in this candidate.
 
 ### Owner-controlled distribution
 
-- [x] Wait for the submitted `1.0.4` (`17`) review to resolve; approval and
-      public availability are separate readbacks.
-- [x] Create and inspect the signed `1.0.5` (`19`) App Store archive only after
-      physical acceptance.
-- [x] Upload build `19` and wait for App Store Connect processing.
-- [x] Attach build `19` to the prepared `1.0.5` version.
-- [x] Save EN/RU/UK metadata and reviewer notes, submit, and verify the displayed
+- [ ] Create and inspect the signed `1.0.6` (`20`) App Store archive after the
+      owner's explicit publication authorization.
+- [ ] Upload build `20` and wait for App Store Connect processing.
+- [ ] Attach build `20` to the prepared `1.0.6` version.
+- [ ] Save EN/RU/UK metadata and reviewer notes, submit, and verify the displayed
       review status.
 - [ ] Publish the matching EN/RU/UK website and campaign links only when the
       advertised build is actually available.

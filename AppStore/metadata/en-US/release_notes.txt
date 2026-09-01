@@ -1,1 +1,1 @@
-Prepare a monthly report with Shortcuts without changing your records. Settings now makes it easy to share Hourleaf, leave an App Store rating, and open the guide in English, Russian, or Ukrainian.
+Send last month's report without a required review. Hourleaf marks it sent immediately and opens the system share sheet.
