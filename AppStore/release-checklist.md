@@ -37,14 +37,44 @@ remain immutable history.
 
 ### Owner-controlled distribution
 
-- [ ] Create and inspect the signed `1.0.6` (`20`) App Store archive after the
+- [x] Create and inspect the signed `1.0.6` (`20`) App Store archive after the
       owner's explicit publication authorization.
-- [ ] Upload build `20` and wait for App Store Connect processing.
-- [ ] Attach build `20` to the prepared `1.0.6` version.
-- [ ] Save EN/RU/UK metadata and reviewer notes, submit, and verify the displayed
+- [x] Upload build `20` and wait for App Store Connect processing.
+- [x] Attach build `20` to the prepared `1.0.6` version.
+- [x] Save EN/RU/UK metadata and reviewer notes, submit, and verify the displayed
       review status.
 - [ ] Publish the matching EN/RU/UK website and campaign links only when the
       advertised build is actually available.
+
+### Build 20 archive, upload, and submission receipt — 2026-09-01
+
+- Shipping source: `1809aa83f0264b2a9f70bb79c976ca840aaf4cce` on
+  `main`.
+- Retained archive:
+  `~/Library/Developer/Xcode/Archives/2026-09-01/Hourleaf 1.0.6 (20).xcarchive`.
+- Archive readback contains iPhone `com.kikuai.hourleaf`, WidgetKit
+  `com.kikuai.hourleaf.quick-surfaces`, and Watch
+  `com.kikuai.hourleaf.watchkitapp`, all at `1.0.6` build `20`, with valid
+  signatures, three privacy manifests, App Intents metadata, and three dSYM
+  bundles. The iPhone and WidgetKit App Group is exactly
+  `group.com.kikuai.hourleaf`.
+- Xcode reported `Upload succeeded`. App Store Connect completed processing,
+  listed build `20` as ready to submit, and assigned it to the
+  `Hourleaf Internal` TestFlight group.
+- EN/RU/UK release notes and the build-20 App Review notes were saved. Build
+  `20` was attached to version `1.0.6`.
+- At 21:39 EEST, App Store Connect submission
+  `5fa95a97-2118-4eef-b015-0c9f3b123812` contained exactly one object,
+  `iOS 1.0.6 (20)`, displayed `Waiting for Review`, and showed zero drafts.
+- Automatic release after approval, immediate availability to all users, and
+  preservation of the current rating remain selected.
+- Focused report-model verification passed 7 of 7 tests, including direct Send
+  persisting the sent snapshot without opening the review screen. The aggregate
+  feature-tree CI result remains non-green only because older date-sensitive
+  fixtures crossed the September 1 service-year boundary; the owner explicitly
+  declined another broad test loop for this release.
+- Approval and public storefront availability remain separate future gates and
+  are not claimed by this receipt.
 
 ### Build 19 archive and upload receipt — 2026-08-30
 
