@@ -117,7 +117,7 @@
 "report.action.prepare_correction" = "Підготувати виправлений звіт";
 "report.action.share_prepared" = "Поділитися підготовленим звітом";
 "report.action.mark_sent" = "Позначити надісланим";
-"report.action.send_now" = "Надіслати одразу";
+"report.action.send_now" = "Надіслати";
 "report.action.send_now_note" = "Hourleaf одразу позначить звіт надісланим.";
 "report.action.open" = "Відкрити звіт";
 "report.banner.ready_format" = "Звіт за %@ готовий";

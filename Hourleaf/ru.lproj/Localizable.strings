@@ -117,7 +117,7 @@
 "report.action.prepare_correction" = "Подготовить исправленный отчёт";
 "report.action.share_prepared" = "Поделиться подготовленным отчётом";
 "report.action.mark_sent" = "Отметить отправленным";
-"report.action.send_now" = "Отправить сразу";
+"report.action.send_now" = "Отправить";
 "report.action.send_now_note" = "Hourleaf сразу отметит отчёт отправленным.";
 "report.action.open" = "Открыть отчёт";
 "report.banner.ready_format" = "Отчёт за %@ готов";

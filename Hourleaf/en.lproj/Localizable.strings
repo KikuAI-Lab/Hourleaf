@@ -117,7 +117,7 @@
 "report.action.prepare_correction" = "Prepare corrected report";
 "report.action.share_prepared" = "Share prepared report";
 "report.action.mark_sent" = "Mark as sent";
-"report.action.send_now" = "Send now";
+"report.action.send_now" = "Send";
 "report.action.send_now_note" = "Hourleaf will mark it as sent right away.";
 "report.action.open" = "Open report";
 "report.banner.ready_format" = "The report for %@ is ready";
