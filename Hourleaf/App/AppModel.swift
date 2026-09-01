@@ -1080,6 +1080,24 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Prepares a closed-month report and records the user's explicit "send now"
+    /// choice before the system share sheet opens. The existing review operation
+    /// is reused as a fingerprint guard, but no review screen is required.
+    func sendReportImmediately(_ draft: ReportDraft) async -> ReportSnapshotMetadata? {
+        switch lifecycleState(for: draft.month) {
+        case .ready, .changed:
+            guard await reviewReport(draft) else { return nil }
+        case .reviewed, .prepared, .sent:
+            break
+        case .draft:
+            return nil
+        }
+
+        guard let snapshot = await prepareReport(draft) else { return nil }
+        guard await markReportSent(snapshot) else { return nil }
+        return reportSnapshots.first(where: { $0.id == snapshot.id }) ?? snapshot
+    }
+
     @discardableResult
     func markReportSent(_ snapshot: ReportSnapshotMetadata) async -> Bool {
         guard markingSentSnapshotIDs.insert(snapshot.id).inserted else { return false }

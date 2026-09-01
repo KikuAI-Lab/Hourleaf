@@ -1,5 +1,10 @@
 import SwiftUI
 
+private struct PreviousReportSharePayload: Identifiable {
+    let id = UUID()
+    let text: String
+}
+
 struct QuickEntryView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -13,6 +18,8 @@ struct QuickEntryView: View {
     @State private var isSaving = false
     @State private var didInitializeDate = false
     @State private var bibleStudyFeedback = SelectionHapticFeedback()
+    @State private var previousReportSharePayload: PreviousReportSharePayload?
+    @State private var isSendingPreviousReport = false
     @FocusState private var noteFocused: Bool
 
     private var previousMonth: MonthKey {
@@ -54,6 +61,11 @@ struct QuickEntryView: View {
             .navigationBarTitleDisplayMode(.inline)
             .scrollBounceBehavior(.basedOnSize)
             .scrollDismissesKeyboard(.interactively)
+            .sheet(item: $previousReportSharePayload) { payload in
+                ActivityView(text: payload.text) { _ in
+                    previousReportSharePayload = nil
+                }
+            }
             .onChange(of: model.quickEntryResetGeneration) { _, _ in
                 resetDraft()
             }
@@ -99,9 +111,7 @@ struct QuickEntryView: View {
             monthLabel
         )
 
-        return Button {
-            model.openReport(previousMonth)
-        } label: {
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
                 Image(systemName: state.symbolName)
                     .foregroundStyle(Color.accentColor)
@@ -114,16 +124,69 @@ struct QuickEntryView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
             }
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-            .padding()
-            .background(Color.accentColor.opacity(0.09), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: 8) { previousReportActions(state, title: title) }
+                } else {
+                    HStack(spacing: 8) { previousReportActions(state, title: title) }
+                }
+            }
+
+            Text("report.action.send_now_note")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
-        .buttonStyle(.plain)
+        .padding()
+        .background(
+            Color.accentColor.opacity(0.09),
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+        )
+    }
+
+    @ViewBuilder
+    private func previousReportActions(_ state: PreviousReportBannerState, title: String) -> some View {
+        Button {
+            model.openReport(previousMonth)
+        } label: {
+            Text(state.reviewActionKey)
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.bordered)
         .accessibilityLabel(Text(verbatim: title))
         .accessibilityValue(Text(state.statusKey))
         .accessibilityIdentifier("previousReportBanner")
+
+        Button {
+            sendPreviousReportNow()
+        } label: {
+            Group {
+                if isSendingPreviousReport {
+                    ProgressView()
+                } else {
+                    Label("report.action.send_now", systemImage: "paperplane.fill")
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(Color.accentColor)
+        .disabled(isSendingPreviousReport)
+        .accessibilityIdentifier("sendPreviousReportNowButton")
+    }
+
+    private func sendPreviousReportNow() {
+        guard !isSendingPreviousReport else { return }
+        let displayedDraft = model.reportDraft(for: previousMonth)
+        isSendingPreviousReport = true
+
+        Task { @MainActor in
+            defer { isSendingPreviousReport = false }
+            guard let snapshot = await model.sendReportImmediately(displayedDraft) else { return }
+            previousReportSharePayload = PreviousReportSharePayload(text: snapshot.receipt.text)
+        }
     }
 
     private var entryCard: some View {
@@ -384,6 +447,17 @@ private enum PreviousReportBannerState {
             "report.state.reviewed"
         case .prepared:
             "report.state.prepared"
+        }
+    }
+
+    var reviewActionKey: LocalizedStringKey {
+        switch self {
+        case .ready:
+            "report.action.review"
+        case .changed:
+            "report.action.review_correction"
+        case .reviewed, .prepared:
+            "report.action.open"
         }
     }
 

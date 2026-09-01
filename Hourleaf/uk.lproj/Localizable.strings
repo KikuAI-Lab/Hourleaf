@@ -105,7 +105,7 @@
 "report.mark_sent" = "Позначити надісланим";
 "report.not_sent" = "Не надіслано";
 "report.state.draft" = "Місяць триває";
-"report.state.ready" = "Готово до перевірки";
+"report.state.ready" = "Готово до надсилання";
 "report.state.reviewed" = "Перевірено";
 "report.state.prepared" = "Підготовлено до надсилання";
 "report.state.sent" = "Позначено надісланим";
@@ -117,11 +117,14 @@
 "report.action.prepare_correction" = "Підготувати виправлений звіт";
 "report.action.share_prepared" = "Поділитися підготовленим звітом";
 "report.action.mark_sent" = "Позначити надісланим";
-"report.banner.ready_format" = "Звіт за %@ готовий до перевірки";
-"report.banner.changed_format" = "Звіт за %@ змінено — перевірте його знову";
+"report.action.send_now" = "Надіслати одразу";
+"report.action.send_now_note" = "Hourleaf одразу позначить звіт надісланим.";
+"report.action.open" = "Відкрити звіт";
+"report.banner.ready_format" = "Звіт за %@ готовий";
+"report.banner.changed_format" = "Звіт за %@ змінено";
 "report.banner.reviewed_format" = "Звіт за %@ перевірено";
 "report.banner.prepared_format" = "Звіт за %@ підготовлено до надсилання";
-"report.ready.explanation" = "Місяць завершився. Перевірте записи й підсумок перед надсиланням.";
+"report.ready.explanation" = "Надішліть одразу або спершу перевірте записи й підсумок.";
 "report.draft.explanation" = "Цей місяць ще триває. Перевірка й надсилання будуть доступні після його завершення.";
 "report.changed.explanation" = "Збережені версії не змінилися. Перевірте поточні записи перед підготовкою виправлення.";
 "report.share.disclaimer" = "Меню поширення не підтверджує доставку. Позначте звіт надісланим, лише якщо знаєте, що його доставлено.";
@@ -234,7 +237,7 @@
 "report_reminder.allow_notifications" = "Дозволити сповіщення";
 "report_reminder.open_settings" = "Відкрити налаштування iPhone";
 "report_reminder.notification.title" = "Звіт Hourleaf";
-"report_reminder.notification.body" = "Звіт за минулий місяць готовий до перевірки.";
+"report_reminder.notification.body" = "Звіт за минулий місяць готовий до надсилання.";
 "intent.record.title" = "Запиши служіння";
 "intent.record.description" = "Записує час служіння або кредиту.";
 "intent.record.kind" = "Тип";

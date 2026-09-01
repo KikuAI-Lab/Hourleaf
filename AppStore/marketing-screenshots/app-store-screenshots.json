@@ -69,9 +69,9 @@
           "uk": ""
         },
         "headline": {
-          "en-US": "Your report.\nReady to review.",
-          "ru": "Ваш отчёт.\nГотов к проверке.",
-          "uk": "Ваш звіт.\nГотовий до перевірки."
+          "en-US": "Your report.\nReady to send.",
+          "ru": "Ваш отчёт.\nГотов к отправке.",
+          "uk": "Ваш звіт.\nГотовий до надсилання."
         },
         "screenshot": "/screenshots/apple/iphone/{locale}/04.png",
         "inverted": true

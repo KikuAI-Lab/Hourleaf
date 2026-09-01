@@ -116,6 +116,35 @@ final class ReportAppModelTests: XCTestCase {
         XCTAssertEqual(model.reportSnapshots, storedLedger.reportSnapshots)
     }
 
+    func testSendImmediatelySkipsReviewScreenAndPersistsSentSnapshot() async throws {
+        let now = testDate(year: 2026, month: 10, day: 2)
+        let base = makeRepository(now: now)
+        try await configureLedger(base, starting: MonthKey(year: 2026, month: 9))
+        let repository = ReportAppModelGatedRepository(base: base)
+        let model = AppModel(
+            repository: repository,
+            reminderScheduler: ReportAppModelReminderScheduler(),
+            now: { now }
+        )
+        await model.loadInitialSnapshot()
+        let month = MonthKey(year: 2026, month: 9)
+        let draft = model.reportDraft(for: month)
+
+        let sentResult = await model.sendReportImmediately(draft)
+        let sent = try XCTUnwrap(sentResult)
+        let storedLedger = try await base.ledgerSnapshot()
+        let reviewRequestCount = await repository.reviewRequestCount()
+        let prepareRequestCount = await repository.prepareRequestCount()
+        let markSentRequestCount = await repository.markSentRequestCount()
+
+        XCTAssertEqual(reviewRequestCount, 1)
+        XCTAssertEqual(prepareRequestCount, 1)
+        XCTAssertEqual(markSentRequestCount, 1)
+        XCTAssertEqual(sent.receipt.confirmedSentAt, now)
+        XCTAssertEqual(model.lifecycleState(for: month), .sent)
+        XCTAssertEqual(model.reportSnapshots, storedLedger.reportSnapshots)
+    }
+
     func testFingerprintMismatchRefreshesLedgerAndShowsLocalizedChangedError() async throws {
         let now = testDate(year: 2026, month: 10, day: 2)
         let repository = makeRepository(now: now)

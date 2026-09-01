@@ -23,6 +23,7 @@ struct ProgressScreen: View {
     @Environment(\.requestReview) private var requestReview
     @State private var sharePayload: ReportSharePayload?
     @State private var reviewRequestToken: UUID?
+    @State private var isSendingImmediately = false
 
     private var selectedMonth: MonthKey { model.selectedReportMonth }
     private var earliestMonth: MonthKey { model.settings.ledgerStartMonth }
@@ -392,20 +393,43 @@ struct ProgressScreen: View {
             EmptyView()
 
         case .ready, .changed:
-            NavigationLink {
-                ReportReviewView(draft: draft)
-            } label: {
-                Label(
-                    lifecycleState == .changed
-                        ? "report.action.review_correction"
-                        : "report.action.review",
-                    systemImage: "doc.text.magnifyingglass"
-                )
-                .frame(maxWidth: .infinity, minHeight: 44)
+            VStack(alignment: .leading, spacing: 10) {
+                Button {
+                    sendImmediately(draft)
+                } label: {
+                    Group {
+                        if isSendingImmediately {
+                            ProgressView()
+                        } else {
+                            Label("report.action.send_now", systemImage: "paperplane.fill")
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.accentColor)
+                .disabled(isSendingImmediately)
+                .accessibilityIdentifier("sendReportNowButton")
+
+                NavigationLink {
+                    ReportReviewView(draft: draft)
+                } label: {
+                    Label(
+                        lifecycleState == .changed
+                            ? "report.action.review_correction"
+                            : "report.action.review",
+                        systemImage: "doc.text.magnifyingglass"
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isSendingImmediately)
+                .accessibilityIdentifier("reportReviewButton")
+
+                Text("report.action.send_now_note")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.accentColor)
-            .accessibilityIdentifier("reportReviewButton")
 
         case .reviewed:
             Button {
@@ -491,6 +515,17 @@ struct ProgressScreen: View {
         .buttonStyle(.borderedProminent)
         .tint(Color.accentColor)
         .accessibilityIdentifier("sharePreparedReportButton")
+    }
+
+    private func sendImmediately(_ displayedDraft: ReportDraft) {
+        guard !isSendingImmediately else { return }
+        isSendingImmediately = true
+
+        Task { @MainActor in
+            defer { isSendingImmediately = false }
+            guard let snapshot = await model.sendReportImmediately(displayedDraft) else { return }
+            sharePayload = ReportSharePayload(text: snapshot.receipt.text)
+        }
     }
 
     @ViewBuilder

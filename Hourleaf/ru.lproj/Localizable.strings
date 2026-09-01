@@ -105,7 +105,7 @@
 "report.mark_sent" = "Отметить отправленным";
 "report.not_sent" = "Не отправлен";
 "report.state.draft" = "Месяц продолжается";
-"report.state.ready" = "Готов к проверке";
+"report.state.ready" = "Готов к отправке";
 "report.state.reviewed" = "Проверен";
 "report.state.prepared" = "Подготовлен к отправке";
 "report.state.sent" = "Отмечен отправленным";
@@ -117,11 +117,14 @@
 "report.action.prepare_correction" = "Подготовить исправленный отчёт";
 "report.action.share_prepared" = "Поделиться подготовленным отчётом";
 "report.action.mark_sent" = "Отметить отправленным";
-"report.banner.ready_format" = "Отчёт за %@ готов к проверке";
-"report.banner.changed_format" = "Отчёт за %@ изменён — проверьте его снова";
+"report.action.send_now" = "Отправить сразу";
+"report.action.send_now_note" = "Hourleaf сразу отметит отчёт отправленным.";
+"report.action.open" = "Открыть отчёт";
+"report.banner.ready_format" = "Отчёт за %@ готов";
+"report.banner.changed_format" = "Отчёт за %@ изменён";
 "report.banner.reviewed_format" = "Отчёт за %@ проверен";
 "report.banner.prepared_format" = "Отчёт за %@ подготовлен к отправке";
-"report.ready.explanation" = "Месяц закончился. Проверьте записи и итог перед отправкой.";
+"report.ready.explanation" = "Отправьте сразу или сначала проверьте записи и итог.";
 "report.draft.explanation" = "Этот месяц ещё продолжается. Проверка и отправка будут доступны после его окончания.";
 "report.changed.explanation" = "Сохранённые версии не изменились. Проверьте текущие записи перед подготовкой исправления.";
 "report.share.disclaimer" = "Меню «Поделиться» не подтверждает доставку. Отметьте отчёт отправленным, только если знаете, что он доставлен.";
@@ -234,7 +237,7 @@
 "report_reminder.allow_notifications" = "Разрешить уведомления";
 "report_reminder.open_settings" = "Открыть настройки iPhone";
 "report_reminder.notification.title" = "Отчёт Hourleaf";
-"report_reminder.notification.body" = "Отчёт за прошлый месяц готов к проверке.";
+"report_reminder.notification.body" = "Отчёт за прошлый месяц готов к отправке.";
 "intent.record.title" = "Запиши служение";
 "intent.record.description" = "Записывает время служения или кредита.";
 "intent.record.kind" = "Тип";

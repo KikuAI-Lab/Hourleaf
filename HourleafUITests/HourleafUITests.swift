@@ -38,7 +38,7 @@ final class HourleafUITests: XCTestCase {
         XCTAssertTrue(preview.label.contains("Hours: 52"))
         XCTAssertTrue(preview.label.contains("Credit hours: 7"))
         XCTAssertEqual(app.staticTexts["selectedReportMonth"].label, "September 2026")
-        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Ready to review")
+        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Ready to send")
         XCTAssertTrue(app.buttons["reportReviewButton"].isEnabled)
         XCTAssertFalse(app.buttons["sharePreparedReportButton"].exists)
         XCTAssertFalse(app.buttons["markReportSentButton"].exists)
@@ -108,7 +108,7 @@ final class HourleafUITests: XCTestCase {
         let month = app.staticTexts["selectedReportMonth"]
         XCTAssertTrue(month.waitForExistence(timeout: 5))
         XCTAssertEqual(month.label, "September 2026")
-        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Ready to review")
+        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Ready to send")
         XCTAssertTrue(app.staticTexts["reportPreview"].label.contains("Hours: 0"))
     }
 
@@ -171,7 +171,7 @@ final class HourleafUITests: XCTestCase {
             app.buttons["previousReportMonthButton"].tap()
         }
         XCTAssertEqual(month.label, "August 2026")
-        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Ready to review")
+        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Ready to send")
 
         let preview = app.staticTexts["reportPreview"]
         XCTAssertTrue(preview.waitForExistence(timeout: 5))
@@ -307,8 +307,8 @@ final class HourleafUITests: XCTestCase {
         let app = launchLocalizedReportApp(language: "ru")
         app.tabBars.buttons["Прогресс"].tap()
 
-        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Готов к проверке")
-        XCTAssertTrue(app.staticTexts["Месяц закончился. Проверьте записи и итог перед отправкой."].exists)
+        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Готов к отправке")
+        XCTAssertTrue(app.staticTexts["Отправьте сразу или сначала проверьте записи и итог."].exists)
         let review = app.buttons["reportReviewButton"]
         XCTAssertEqual(review.label, "Проверить отчёт")
         review.tap()
@@ -320,8 +320,8 @@ final class HourleafUITests: XCTestCase {
         let app = launchLocalizedReportApp(language: "uk")
         app.tabBars.buttons["Прогрес"].tap()
 
-        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Готово до перевірки")
-        XCTAssertTrue(app.staticTexts["Місяць завершився. Перевірте записи й підсумок перед надсиланням."].exists)
+        XCTAssertEqual(app.staticTexts["reportLifecycleState"].label, "Готово до надсилання")
+        XCTAssertTrue(app.staticTexts["Надішліть одразу або спершу перевірте записи й підсумок."].exists)
         let review = app.buttons["reportReviewButton"]
         XCTAssertEqual(review.label, "Перевірити звіт")
         review.tap()
