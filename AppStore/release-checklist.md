@@ -1,8 +1,8 @@
 # Hourleaf delivery checklist
 
-## Active release: 1.0.6 (20)
+## Public release: 1.0.6 (20)
 
-This active section is the maintained release contract. Dated receipts below
+This section is the maintained release contract. Dated receipts below
 remain immutable history.
 
 ### Scope and source
@@ -43,8 +43,30 @@ remain immutable history.
 - [x] Attach build `20` to the prepared `1.0.6` version.
 - [x] Save EN/RU/UK metadata and reviewer notes, submit, and verify the displayed
       review status.
-- [ ] Publish the matching EN/RU/UK website and campaign links only when the
+- [x] Publish the matching EN/RU/UK website and campaign links only when the
       advertised build is actually available.
+
+### Public release receipt — 2026-09-03
+
+- Apple's official lookup returned `1.0.6`, bundle
+  `com.kikuai.hourleaf`, and release timestamp `2026-09-02T13:41:04Z` in
+  the United States, Lithuania, and Ukraine. The corresponding product pages
+  returned HTTP `200`.
+- GitHub release [`v1.0.6`](https://github.com/KikuAI-Lab/Hourleaf/releases/tag/v1.0.6)
+  is public, is neither a draft nor a prerelease, and its tag points exactly to
+  shipping source `1809aa83f0264b2a9f70bb79c976ca840aaf4cce`.
+- kikuai.dev PR [#95](https://github.com/KikuAI-Lab/kikuai.dev/pull/95)
+  merged as `f958c1c1e4fe9274f3f4f3d6e9d275c3d91acb3b`. Cloudflare production
+  deployment completed successfully at `2026-09-03T21:04:44Z`.
+- Fresh live readback returned HTTP `200` for the English, Russian, and
+  Ukrainian product pages and for `/hourleaf.md`. Each localized page identifies
+  version `1.0.6`, explains that Send marks a ready previous-month report sent
+  before opening the system share sheet, and contains its exact `web-en`,
+  `web-ru`, or `web-uk` campaign token. The facts page returns Markdown and does
+  not claim delivery proof.
+- The matching setup guides, privacy page, and support page also returned HTTP
+  `200`. No additional app test cycle or physical-device access was used for
+  this public reconciliation.
 
 ### Build 20 archive, upload, and submission receipt — 2026-09-01
 
