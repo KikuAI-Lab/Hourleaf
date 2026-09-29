@@ -4,6 +4,20 @@ This file is the maintained source for the App Review Information Notes field.
 Update it when the review path, shipped capabilities, or verified physical-device
 matrix changes. Keep private reviewer contact details only in App Store Connect.
 
+## Version 1.0.7 candidate update
+
+Build 21 adds a brief celebration when current-month service and credit
+together reach 50 hours. It changes presentation only: report calculations,
+the 600-hour service-year goal, and stored entries remain unchanged. The
+celebration occurs once per month, respects Reduce Motion, and is announced by
+VoiceOver. Existing totals are not celebrated retroactively after an update.
+This update adds no account, purchase, backend, third-party SDK,
+sensitive-data permission, or new data category. No Watch source changed.
+
+Four focused milestone tests passed in hosted CI. The broader suite retained
+the same unrelated failures previously recorded for build 20; its aggregate
+result is not green.
+
 ## Version 1.0.6 candidate update
 
 Build 20 adds direct Send for the previous-month report. The user can send it
@@ -57,10 +71,10 @@ unchanged core entry, history, report, sharing, and data-management flows.
 ## Paste-ready Notes field
 
 ```text
-Hourleaf 1.0.6 (build 20) review information
+Hourleaf 1.0.7 (build 21) review information
 
 UPDATE SCOPE
-Build 20 adds direct Send for the previous month's report. The action does not require a review: it marks the immutable report snapshot sent immediately and opens the system share sheet for the user to choose a destination. Existing user data and the local schema remain compatible. The read-only report Shortcut remains read-only and does not send anything. This update adds no account, purchase, backend, third-party SDK, sensitive-data permission, or new data category.
+Build 21 adds a brief celebration when current-month Service and Credit entries together reach 50 hours. It occurs once per month, respects Reduce Motion, and has a VoiceOver announcement. It does not change report calculations, service-year progress, stored entries, or the local schema. The existing direct Send and read-only report Shortcut remain unchanged. This update adds no account, purchase, backend, third-party SDK, sensitive-data permission, or new data category.
 
 ACCESS AND MAIN FEATURES
 No account, login, purchase, credentials, or sample file is required. Launch Hourleaf and use Add to choose Service or Credit, set hours/minutes, optionally add a note, and save. The Bible studies stepper records the current month's count. History switches between list and calendar. Progress prepares the monthly report and opens the system share sheet. Send for the previous-month report marks the immutable snapshot sent immediately and opens the system share sheet without requiring a review. Settings > Data Management provides local backup, restore, and CSV export/import. Settings > Widgets & Control Center lets the user opt in to showing monthly totals outside Hourleaf. Add an Hourleaf small or medium widget from the iPhone widget gallery. On a paired Apple Watch, choose Service or Credit, set time with the Digital Crown, and confirm; the paired iPhone commits the entry.
@@ -78,7 +92,7 @@ REGIONS AND THIRD-PARTY MATERIAL
 Features are consistent across all regions and localized in English, Russian, and Ukrainian. Hourleaf is not a regulated service and contains no protected third-party database, media, or organization-owned content. It is an independent personal tool and is not affiliated with or endorsed by any religious organization.
 
 TEST EVIDENCE
-Core flows were previously tested on an iPhone 15 Pro running iOS 26.6 and an Apple Watch Series 10 running watchOS 26.6. The unchanged entry, history, report, sharing, and data-management flow is shown in the physical-device recording supplied during the version 1.0 review. The focused report-model suite passes 7 of 7 tests, including direct Send persisting the sent snapshot without opening the review screen. No Watch source changed in this update.
+Core flows were previously tested on an iPhone 15 Pro running iOS 26.6 and an Apple Watch Series 10 running watchOS 26.6. The unchanged entry, history, report, sharing, and data-management flow is shown in the physical-device recording supplied during the version 1.0 review. Four focused 50-hour milestone tests passed in hosted CI; the full suite retains the same unrelated date-sensitive baseline failures as version 1.0.6. No Watch source changed in this update.
 ```
 
 ## Resolution Center reply

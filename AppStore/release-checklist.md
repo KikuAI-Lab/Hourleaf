@@ -1,5 +1,39 @@
 # Hourleaf delivery checklist
 
+## Public release candidate: 1.0.7 (21)
+
+This is the live release contract. The 1.0.6 section below is retained as
+historical evidence.
+
+### Scope
+
+- [x] iPhone, WidgetKit, and Watch shipping targets use 1.0.7 build 21.
+- [x] Reaching 50 current-month hours from service and credit together shows
+      a brief localized celebration. The threshold does not change report
+      accounting or the 600-hour service-year goal.
+- [x] An existing total above 50 hours does not trigger a retroactive
+      celebration; the milestone appears at most once per month.
+- [x] Reduce Motion removes confetti; VoiceOver announces the milestone.
+- [x] No Core Data model, migration, entitlement, privacy permission,
+      account, purchase, backend, or Watch behavior changed.
+- [x] EN/RU/UK release notes describe the new behavior.
+
+### Verification and distribution
+
+- [x] Four focused milestone tests passed in hosted CI. All application and
+      test targets compiled in a clean generic iPhone build-for-testing.
+- [x] The full hosted suite repeated the existing 1.0.6 date-sensitive
+      failures: 24 unit failures and the same quick-entry height UI failure.
+      The four new tests passed; the aggregate run is not green.
+- [x] Release readiness guard and self-test pass on the versioned tree.
+- [ ] Inspect a signed archive containing matching iPhone, WidgetKit, and
+      Watch versions, entitlements, manifests, App Intents, and dSYMs.
+- [ ] Upload build 21, wait for App Store Connect processing, and verify the
+      internal TestFlight assignment.
+- [ ] Attach build 21 to iOS 1.0.7, save EN/RU/UK metadata and current review
+      notes, submit, and verify the displayed review status.
+- [ ] Verify public 1.0.7 availability separately after Apple's approval.
+
 ## Public release: 1.0.6 (20)
 
 This section is the maintained release contract. Dated receipts below

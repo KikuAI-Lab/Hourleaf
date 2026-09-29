@@ -1,1 +1,1 @@
-Send last month's report without a required review. Hourleaf marks it sent immediately and opens the system share sheet.
+Hourleaf now celebrates when your service and credit reach 50 hours together in a month. A brief confetti animation marks the moment, with a calmer presentation when Reduce Motion is enabled.
