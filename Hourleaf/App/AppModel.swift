@@ -43,12 +43,14 @@ final class AppModel: ObservableObject {
     @Published private(set) var isRepeatingLastEntry = false
     @Published private(set) var quickSurfaceHostSnapshot: QuickSurfaceHostSnapshot = .unavailable
     @Published private(set) var isQuickSurfaceActionInFlight = false
+    @Published private(set) var monthlyGoalCelebration: MonthlyGoalCelebration?
 
     let repository: any LedgerRepository
     private let reminderScheduler: ReminderScheduling
     private let quickSurfaceHost: QuickSurfaceHostController
     private let quickSurfaceSystemReloader: QuickSurfaceSystemReloader
     private let monthlyReportReminderDefaults: UserDefaults
+    private let monthlyGoalCelebrationTracker: MonthlyGoalCelebrationTracker
     private let now: @Sendable () -> Date
     private var latestLedgerSnapshot: LedgerSnapshot?
     private var initialSnapshotLoaded = false
@@ -59,6 +61,7 @@ final class AppModel: ObservableObject {
     private var restoringEntryIDs = Set<UUID>()
     private var isUndoing = false
     private var mutationConfirmationTask: Task<Void, Never>?
+    private var monthlyGoalCelebrationTask: Task<Void, Never>?
     private var storeRefreshRequested = false
     private var isStoreRefreshInFlight = false
     private var isWholeStoreRestoreInProgress = false
@@ -73,7 +76,8 @@ final class AppModel: ObservableObject {
         quickSurfaceHost: QuickSurfaceHostController? = nil,
         quickSurfaceSystemReloader: QuickSurfaceSystemReloader = .disabled,
         now: @escaping @Sendable () -> Date = { .now },
-        monthlyReportReminderDefaults: UserDefaults = .standard
+        monthlyReportReminderDefaults: UserDefaults = .standard,
+        monthlyGoalCelebrationDefaults: UserDefaults = .standard
     ) {
         let initialDate = now()
         let initialMonth = ReportReadiness.currentMonth(asOf: initialDate)
@@ -95,6 +99,9 @@ final class AppModel: ObservableObject {
             : .unavailable
         self.now = now
         self.monthlyReportReminderDefaults = monthlyReportReminderDefaults
+        monthlyGoalCelebrationTracker = MonthlyGoalCelebrationTracker(
+            defaults: monthlyGoalCelebrationDefaults
+        )
         currentDate = initialDate
         currentMonth = initialMonth
         selectedReportMonth = initialMonth
@@ -143,6 +150,9 @@ final class AppModel: ObservableObject {
         mutationConfirmationTask?.cancel()
         mutationConfirmationTask = nil
         visibleMutationConfirmation = nil
+        monthlyGoalCelebrationTask?.cancel()
+        monthlyGoalCelebrationTask = nil
+        monthlyGoalCelebration = nil
         undoCandidate = nil
         undoStateGeneration &+= 1
     }
@@ -404,7 +414,49 @@ final class AppModel: ObservableObject {
         serviceYearArchives = snapshot.serviceYearArchives
         planningPreferences = planningPreferences(from: snapshot)
         dayAcknowledgements = snapshot.dayAcknowledgements
+        observeMonthlyGoal(in: snapshot)
         updateSelectedReportMonth(from: snapshot, preferLatestClosed: false)
+    }
+
+    private func observeMonthlyGoal(in snapshot: LedgerSnapshot) {
+        let currentEntries = snapshot.entries.filter {
+            !$0.isDeleted && $0.entry.day.monthKey == currentMonth
+        }
+        let serviceMinutes = currentEntries
+            .filter { $0.entry.kind == .service }
+            .reduce(0) { $0 + $1.entry.minutes }
+        let creditMinutes = currentEntries
+            .filter { $0.entry.kind == .credit }
+            .reduce(0) { $0 + $1.entry.minutes }
+
+        guard monthlyGoalCelebrationTracker.observe(
+            month: currentMonth,
+            serviceMinutes: serviceMinutes,
+            creditMinutes: creditMinutes,
+            allowsCelebration: startupState == .ready && !isWholeStoreRestoreInProgress
+        ) else { return }
+
+        presentMonthlyGoalCelebration(for: currentMonth)
+    }
+
+    private func presentMonthlyGoalCelebration(for month: MonthKey) {
+        monthlyGoalCelebrationTask?.cancel()
+        let celebration = MonthlyGoalCelebration(month: month)
+        monthlyGoalCelebration = celebration
+        monthlyGoalCelebrationTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard
+                !Task.isCancelled,
+                self?.monthlyGoalCelebration?.id == celebration.id
+            else { return }
+            self?.monthlyGoalCelebration = nil
+        }
+    }
+
+    func dismissMonthlyGoalCelebration() {
+        monthlyGoalCelebrationTask?.cancel()
+        monthlyGoalCelebrationTask = nil
+        monthlyGoalCelebration = nil
     }
 
     private func applyAuthoritativeSnapshot(_ snapshot: LedgerSnapshot) async {

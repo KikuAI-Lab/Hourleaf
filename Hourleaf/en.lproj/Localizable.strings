@@ -389,3 +389,6 @@
 "quick_surfaces.restore.blocked" = "Stop the timer, then save or discard it before restoring a backup.";
 "quick_surfaces.restore.reset_required" = "Reset Quick Surfaces before restoring a backup.";
 "quick_surfaces.restore.unavailable" = "Quick Actions are temporarily unavailable. Unlock this iPhone, open Hourleaf, and try again.";
+"monthly_goal.celebration.title" = "50 hours this month!";
+"monthly_goal.celebration.message" = "Congratulations — you reached your monthly goal.";
+"monthly_goal.celebration.announcement" = "Congratulations. You reached 50 hours this month.";

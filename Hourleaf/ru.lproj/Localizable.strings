@@ -389,3 +389,6 @@
 "quick_surfaces.restore.blocked" = "Перед восстановлением резервной копии остановите таймер, затем сохраните время или выберите «Не сохранять».";
 "quick_surfaces.restore.reset_required" = "Перед восстановлением резервной копии сбросьте быстрые действия.";
 "quick_surfaces.restore.unavailable" = "Быстрые действия временно недоступны. Разблокируйте iPhone, откройте Hourleaf и попробуйте ещё раз.";
+"monthly_goal.celebration.title" = "50 часов в этом месяце!";
+"monthly_goal.celebration.message" = "Поздравляем, месячная цель достигнута.";
+"monthly_goal.celebration.announcement" = "Поздравляем. Вы достигли 50 часов в этом месяце.";

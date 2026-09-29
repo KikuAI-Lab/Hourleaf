@@ -76,6 +76,14 @@ struct RootView: View {
                         .padding(.bottom, tabBarClearance(in: geometry))
                     }
                 }
+                .overlay {
+                    if let celebration = model.monthlyGoalCelebration {
+                        MonthlyGoalCelebrationView(celebration: celebration)
+                            .transition(.opacity)
+                            .zIndex(2)
+                    }
+                }
+                .animation(.easeOut(duration: 0.2), value: model.monthlyGoalCelebration)
         }
     }
 

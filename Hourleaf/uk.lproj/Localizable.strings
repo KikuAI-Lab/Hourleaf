@@ -389,3 +389,6 @@
 "quick_surfaces.restore.blocked" = "Перш ніж відновлювати резервну копію, зупиніть таймер, потім збережіть час або виберіть «Не зберігати».";
 "quick_surfaces.restore.reset_required" = "Перед відновленням резервної копії скиньте швидкі дії.";
 "quick_surfaces.restore.unavailable" = "Швидкі дії тимчасово недоступні. Розблокуйте iPhone, відкрийте Hourleaf і спробуйте ще раз.";
+"monthly_goal.celebration.title" = "50 годин цього місяця!";
+"monthly_goal.celebration.message" = "Вітаємо, місячної мети досягнуто.";
+"monthly_goal.celebration.announcement" = "Вітаємо. Ви досягли 50 годин цього місяця.";
