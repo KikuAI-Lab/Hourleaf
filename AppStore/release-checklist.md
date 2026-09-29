@@ -26,13 +26,30 @@ historical evidence.
       failures: 24 unit failures and the same quick-entry height UI failure.
       The four new tests passed; the aggregate run is not green.
 - [x] Release readiness guard and self-test pass on the versioned tree.
-- [ ] Inspect a signed archive containing matching iPhone, WidgetKit, and
+- [x] Inspect a signed archive containing matching iPhone, WidgetKit, and
       Watch versions, entitlements, manifests, App Intents, and dSYMs.
-- [ ] Upload build 21, wait for App Store Connect processing, and verify the
+- [x] Upload build 21, wait for App Store Connect processing, and verify the
       internal TestFlight assignment.
-- [ ] Attach build 21 to iOS 1.0.7, save EN/RU/UK metadata and current review
+- [x] Attach build 21 to iOS 1.0.7, save EN/RU/UK metadata and current review
       notes, submit, and verify the displayed review status.
 - [ ] Verify public 1.0.7 availability separately after Apple's approval.
+
+### Submission receipt — 2026-09-30
+
+- Exact pushed release source: `989c1a9ea79aedf1a9637e150ea2d27b32391d5c`.
+- A clean clone archived and exported successfully with Xcode 27.0. The archive
+  contains signed iPhone, WidgetKit, and Watch bundles, all version `1.0.7`
+  build `21`; each bundle has its privacy manifest and App Intents metadata,
+  and all three have dSYMs. Strict deep code-signature verification passed.
+- Xcode reported `Upload succeeded`; App Store Connect showed upload
+  `Completed`, build `21` ready for testing, and its assignment to the
+  `Hourleaf Internal` TestFlight group.
+- App Store Connect saved EN/RU/UK release notes and reviewer notes, selected
+  build `21`, and confirmed `Submitted items: 1`. Version `1.0.7` displayed
+  `Waiting for Review`. Automatic release after approval and immediate rollout
+  to all users remain selected; the existing rating is retained.
+- Public App Store availability, GitHub release, and website version claims
+  remain pending storefront verification, not inferred from submission.
 
 ## Public release: 1.0.6 (20)
 
