@@ -1,6 +1,6 @@
 # Hourleaf delivery checklist
 
-## Public release candidate: 1.0.7 (21)
+## Public release: 1.0.7 (21)
 
 This is the live release contract. The 1.0.6 section below is retained as
 historical evidence.
@@ -32,7 +32,7 @@ historical evidence.
       internal TestFlight assignment.
 - [x] Attach build 21 to iOS 1.0.7, save EN/RU/UK metadata and current review
       notes, submit, and verify the displayed review status.
-- [ ] Verify public 1.0.7 availability separately after Apple's approval.
+- [x] Verify public 1.0.7 availability separately after Apple's approval.
 
 ### Submission receipt — 2026-09-30
 
@@ -51,10 +51,43 @@ historical evidence.
 - Public App Store availability, GitHub release, and website version claims
   remain pending storefront verification, not inferred from submission.
 
+### Public release receipt — 2026-09-30
+
+- Fresh authenticated App Store Connect readback shows iOS `1.0.7` ready for
+  distribution with build `21`. Automatic release remains selected.
+- The public [US](https://apps.apple.com/us/app/hourleaf-ministry-hours/id6801032003),
+  [Lithuanian](https://apps.apple.com/lt/app/hourleaf-ministry-hours/id6801032003),
+  and [Ukrainian](https://apps.apple.com/ua/app/hourleaf-ministry-hours/id6801032003)
+  product pages returned HTTP `200` and identify current version `1.0.7`,
+  released at `2026-09-30T16:44:32Z`. Apple's lookup API initially lagged on
+  US/LT (`1.0.6`), while UA returned `1.0.7`; the newer product-page readback
+  confirms public availability in all three storefronts.
+- GitHub release [`v1.0.7`](https://github.com/KikuAI-Lab/Hourleaf/releases/tag/v1.0.7)
+  is public, neither a draft nor a prerelease. Its tag resolves exactly to
+  shipping source `989c1a9ea79aedf1a9637e150ea2d27b32391d5c`, not the later
+  documentation commits.
+- kikuai.dev source `229f10f28e0fc52fa89d54ccb912a63a947dafe0` updates the
+  English, Russian, Ukrainian, and agent-readable product pages to `1.0.7`.
+  Six focused public-page tests pass; the production build succeeds with
+  366 prerendered routes. The existing Cloudflare production deployment
+  completed successfully at `2026-09-30T17:30:40Z`.
+- Fresh live readback returned HTTP `200` for `/hourleaf/`, `/hourleaf/ru/`,
+  `/hourleaf/uk/`, and `/hourleaf.md`. All four identify `1.0.7`; localized
+  pages describe the 50-hour celebration and retain their exact `web-en`,
+  `web-ru`, and `web-uk` campaign links. The facts route returns Markdown and
+  preserves the distinction between the monthly celebration and the
+  service-only 600-hour goal.
+- The portfolio map records public `1.0.7` in `ede84aa`, without changing
+  Hourleaf's free, ad-free, tracking-free maintenance positioning or claiming
+  new adoption/revenue evidence.
+- No app source, data, schema, physical device, or signing configuration was
+  changed during this public-release reconciliation. Earlier test limitations
+  in this checklist remain recorded and were not relabeled as a full pass.
+
 ## Public release: 1.0.6 (20)
 
-This section is the maintained release contract. Dated receipts below
-remain immutable history.
+This section records the previous release. Dated receipts below remain
+immutable history.
 
 ### Scope and source
 
