@@ -10,6 +10,18 @@ enum ReportCalculator {
         policies: [ReportingPolicy]
     ) -> [MonthlyReport] {
         guard start <= end else { return [] }
+        // Aggregate once instead of scanning the entire ledger for every month.
+        var totals: [MonthKey: (service: Int, credit: Int)] = [:]
+        for entry in entries {
+            let month = entry.day.monthKey
+            guard month >= start, month <= end else { continue }
+            var total = totals[month, default: (0, 0)]
+            switch entry.kind {
+            case .service: total.service += entry.minutes
+            case .credit: total.credit += entry.minutes
+            }
+            totals[month] = total
+        }
         var month = start
         var serviceCarry = max(0, openingServiceCarry) % 60
         var creditCarry = max(0, openingCreditCarry) % 60
@@ -17,9 +29,9 @@ enum ReportCalculator {
 
         while month <= end {
             let policy = policy(for: month, revisions: policies)
-            let monthEntries = entries.filter { $0.day.monthKey == month }
-            let rawService = monthEntries.filter { $0.kind == .service }.reduce(0) { $0 + $1.minutes }
-            let rawCredit = monthEntries.filter { $0.kind == .credit }.reduce(0) { $0 + $1.minutes }
+            let total = totals[month, default: (0, 0)]
+            let rawService = total.service
+            let rawCredit = total.credit
             let serviceResult = report(totalMinutes: rawService + serviceCarry, month: month, policy: policy)
             let creditResult = report(totalMinutes: rawCredit + creditCarry, month: month, policy: policy)
 

@@ -56,10 +56,9 @@ enum AppDateText {
     }
 
     static func day(_ day: LocalDay) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = .current
-        formatter.dateStyle = .medium
-        return formatter.string(from: day.date(calendar: .hourleaf))
+        // Foundation caches the format style; scrolling must not construct a
+        // DateFormatter for every history row.
+        day.date(calendar: .hourleaf).formatted(date: .abbreviated, time: .omitted)
     }
 
     static func range(from start: LocalDay, through end: LocalDay) -> String {

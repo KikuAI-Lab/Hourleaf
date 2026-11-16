@@ -3,6 +3,21 @@ import XCTest
 @testable import Hourleaf
 
 final class ServiceYearAndFormatterTests: XCTestCase {
+    func testCalendarOrderingPreservesCanonicalKeyOrderAcrossBoundaries() {
+        let days = [
+            LocalDay(year: 2026, month: 1, day: 1),
+            LocalDay(year: 2025, month: 12, day: 31),
+            LocalDay(year: 2026, month: 11, day: 1),
+            LocalDay(year: 2026, month: 2, day: 9),
+            LocalDay(year: 2026, month: 2, day: 10),
+            LocalDay(year: 1, month: 1, day: 1),
+            LocalDay(year: 9999, month: 12, day: 31)
+        ]
+        XCTAssertEqual(days.sorted(), days.sorted { $0.key < $1.key })
+        let months = days.map(\.monthKey)
+        XCTAssertEqual(months.sorted(), months.sorted { $0.key < $1.key })
+    }
+
     func testServiceYearCountsDatedServiceAndExcludesCredit() {
         let entries = [
             TimeEntry(kind: .service, day: LocalDay(year: 2025, month: 9, day: 1), minutes: 100),

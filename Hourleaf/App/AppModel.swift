@@ -53,6 +53,11 @@ final class AppModel: ObservableObject {
     private let monthlyGoalCelebrationTracker: MonthlyGoalCelebrationTracker
     private let now: @Sendable () -> Date
     private var latestLedgerSnapshot: LedgerSnapshot?
+    // Derived values belong to one immutable snapshot. Invalidate before
+    // publishing a replacement so a view never reuses an old calculation.
+    private var reportDrafts: [MonthKey: ReportDraft] = [:]
+    private var serviceYearDrafts: [MonthKey: ServiceYearDraft] = [:]
+    private var serviceYearPace: (day: LocalDay, calendar: Calendar, value: ServiceYearPace)?
     private var initialSnapshotLoaded = false
     private var settingsSaveGeneration = 0
     private var settingsSaveTask: Task<Void, Never>?
@@ -399,6 +404,9 @@ final class AppModel: ObservableObject {
     }
 
     private func apply(_ snapshot: LedgerSnapshot) {
+        reportDrafts.removeAll(keepingCapacity: true)
+        serviceYearDrafts.removeAll(keepingCapacity: true)
+        serviceYearPace = nil
         latestLedgerSnapshot = snapshot
         entryRecords = snapshot.entries.filter { !$0.isDeleted }
         deletedEntryRecords = snapshot.deletedEntries.sorted {
@@ -1041,12 +1049,14 @@ final class AppModel: ObservableObject {
     }
 
     func reportDraft(for month: MonthKey) -> ReportDraft {
+        if let cached = reportDrafts[month] { return cached }
         guard
             let snapshot = latestLedgerSnapshot,
             let draft = ReportReadiness.draft(for: month, in: snapshot)
         else {
             preconditionFailure("A report draft requires a loaded month at or after the ledger start.")
         }
+        reportDrafts[month] = draft
         return draft
     }
 
@@ -1169,12 +1179,14 @@ final class AppModel: ObservableObject {
     }
 
     func serviceYearDraft(starting startMonth: MonthKey) -> ServiceYearDraft {
+        if let cached = serviceYearDrafts[startMonth] { return cached }
         guard
             let snapshot = latestLedgerSnapshot,
             let draft = ReportReadiness.serviceYearDraft(starting: startMonth, in: snapshot)
         else {
             preconditionFailure("A service-year draft requires a loaded September-to-August period.")
         }
+        serviceYearDrafts[startMonth] = draft
         return draft
     }
 
@@ -1271,13 +1283,19 @@ final class AppModel: ObservableObject {
         guard let snapshot = latestLedgerSnapshot else {
             preconditionFailure("A service-year pace requires a loaded ledger snapshot.")
         }
+        let day = LocalDay(currentDate, calendar: calendar)
+        if let cached = serviceYearPace, cached.day == day, cached.calendar == calendar {
+            return cached.value
+        }
         do {
-            return try ServiceYearPaceCalculator.calculate(
+            let value = try ServiceYearPaceCalculator.calculate(
                 records: snapshot.entries,
                 settings: snapshot.settings,
-                asOf: LocalDay(currentDate, calendar: calendar),
+                asOf: day,
                 calendar: calendar
             )
+            serviceYearPace = (day, calendar, value)
+            return value
         } catch {
             preconditionFailure("Invalid service-year pace data: \(error)")
         }

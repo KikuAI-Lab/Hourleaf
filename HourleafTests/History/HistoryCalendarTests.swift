@@ -51,6 +51,17 @@ final class HistoryCalendarTests: XCTestCase {
         XCTAssertEqual(HistoryCalendar.clampedMonth(MonthKey(year: 2026, month: 5), start: start, current: current), MonthKey(year: 2026, month: 5))
     }
 
+    func testCountsMatchActiveEntriesAndIgnoreDeletedAndOtherMonths() {
+        let month = MonthKey(year: 2026, month: 8)
+        let day = LocalDay(year: 2026, month: 8, day: 9)
+        let records = [
+            makeRecord(day: day), makeRecord(day: day),
+            makeRecord(day: day, deletedAt: Date()),
+            makeRecord(day: LocalDay(year: 2026, month: 9, day: 9))
+        ]
+        XCTAssertEqual(HistoryCalendar.activeEntryCounts(in: month, records: records), [day: 2])
+    }
+
     private func makeRecord(
         day: LocalDay,
         id: UUID = UUID(),

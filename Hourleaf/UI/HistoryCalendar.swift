@@ -55,6 +55,17 @@ enum HistoryCalendar {
         )
     }
 
+    static func activeEntryCounts(
+        in month: MonthKey,
+        records: [LedgerEntryRecord]
+    ) -> [LocalDay: Int] {
+        var counts: [LocalDay: Int] = [:]
+        for record in records where !record.isDeleted && record.entry.day.monthKey == month {
+            counts[record.entry.day, default: 0] += 1
+        }
+        return counts
+    }
+
     static func activeEntries(
         on day: LocalDay,
         records: [LedgerEntryRecord]

@@ -1,9 +1,48 @@
 # Hourleaf delivery checklist
 
+## Release candidate: 1.0.8 (22) — 2026-11-17
+
+Live release contract for [#11](https://github.com/KikuAI-Lab/Hourleaf/issues/11).
+Source changes improve history date formatting, month aggregation, numeric
+calendar ordering, per-snapshot report/pace reuse, and calendar entry counting.
+The ledger model, entitlements, stored keys/fingerprints, and dependencies are
+unchanged. Synthetic scrolling fixtures are compiled only in Debug builds.
+
+- [x] iPhone, WidgetKit, and Watch targets use 1.0.8 build 22.
+- [x] EN/RU/UK release notes describe the performance update.
+- [x] Release readiness guard, guard self-test, and `git diff --check` pass.
+- [x] Final broad run: 542 unit tests, 520 passing; the same 25 assertions
+      fail in 22 existing tests as on baseline `a5419e2` (539 tests, 517 passing).
+      Both localized report-readiness UI failures also reproduce unchanged on
+      baseline. The broad suite is not green; no new failures were introduced.
+- [x] Focused verification: 36 unit tests and both RU/UK interface smoke tests
+      pass, including report fingerprint goldens and derived-value invalidation.
+- [x] Scrolling with 240 synthetic entries, history/calendar/day filtering,
+      report-month bounds, and creating an entry through the UI pass.
+- [x] Sequential simulator Debug microbenchmarks (median of 10 samples):
+      200 history dates 11.464 -> 0.922 ms; a 60-month timeline with 2,000
+      entries 33.076 -> 2.060 ms. These are computation measurements, not a
+      physical-device FPS claim. Scroll animation duration is unchanged
+      (baseline 2.572 s, candidate 2.571 s); simulator frame hitches were not measured.
+- [x] Final signed Release archive succeeds; strict deep signature verification
+      passes. iPhone, WidgetKit and Watch all contain 1.0.8 (22), manifests,
+      App Intents metadata and matching dSYMs. Archived shipping Swift sources
+      match the verified checkout.
+- [ ] Complete App Store IPA export after macOS authorizes codesign's signing key.
+- [ ] Upload build 22 and verify Apple processing.
+- [ ] Attach build 22 to version 1.0.8 and submit for review.
+
+Distribution is pending the owner's local keychain authorization for codesign
+and App Store Connect sign-in. Neither upload nor submission is complete.
+Public storefront lookup still reports 1.0.7. The physical iPhone and its
+journal were not modified or used for this test run.
+
+The formatting change follows Apple's [FormatStyle guidance](https://developer.apple.com/documentation/foundation/formatstyle).
+Performance investigation follows Apple's [SwiftUI performance guidance](https://developer.apple.com/documentation/xcode/understanding-and-improving-swiftui-performance).
+
 ## Public release: 1.0.7 (21)
 
-This is the live release contract. The 1.0.6 section below is retained as
-historical evidence.
+This section and older releases below are retained as historical evidence.
 
 ### Scope
 

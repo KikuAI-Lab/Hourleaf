@@ -46,7 +46,9 @@ struct LocalDay: Hashable, Codable, Comparable, Sendable {
         calendar.date(from: DateComponents(year: year, month: month, day: day, hour: 12)) ?? .distantPast
     }
 
-    static func < (lhs: LocalDay, rhs: LocalDay) -> Bool { lhs.key < rhs.key }
+    static func < (lhs: LocalDay, rhs: LocalDay) -> Bool {
+        (lhs.year, lhs.month, lhs.day) < (rhs.year, rhs.month, rhs.day)
+    }
 }
 struct MonthKey: Hashable, Codable, Comparable, Sendable {
     let year: Int
@@ -85,7 +87,9 @@ struct MonthKey: Hashable, Codable, Comparable, Sendable {
         MonthKey(calendar.date(byAdding: .month, value: value, to: date(calendar: calendar)) ?? date(calendar: calendar), calendar: calendar)
     }
 
-    static func < (lhs: MonthKey, rhs: MonthKey) -> Bool { lhs.key < rhs.key }
+    static func < (lhs: MonthKey, rhs: MonthKey) -> Bool {
+        (lhs.year, lhs.month) < (rhs.year, rhs.month)
+    }
 }
 
 extension Calendar {

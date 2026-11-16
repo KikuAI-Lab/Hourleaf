@@ -210,6 +210,63 @@ final class ReportAppModelTests: XCTestCase {
         XCTAssertEqual(model.serviceYearArchives, storedLedger.serviceYearArchives)
     }
 
+    func testDerivedReportsStayFreshAfterEntrySettingsAndStudyChanges() async throws {
+        let now = testDate(year: 2026, month: 10, day: 2)
+        let repository = makeRepository(now: now)
+        try await configureLedger(repository, starting: MonthKey(year: 2026, month: 9))
+        let model = AppModel(
+            repository: repository,
+            reminderScheduler: ReportAppModelReminderScheduler(),
+            now: { now }
+        )
+        await model.loadInitialSnapshot()
+        try await assertDerivedReportsMatchStore(model, repository: repository)
+
+        _ = await model.addEntry(kind: .service, date: now, hours: 1, minutes: 15, note: nil)
+        try await assertDerivedReportsMatchStore(model, repository: repository)
+        XCTAssertEqual(model.reportDraft(for: model.currentMonth).report.rawServiceMinutes, 75)
+
+        _ = await model.updateBibleStudyCount(3, for: model.currentMonth)
+        try await assertDerivedReportsMatchStore(model, repository: repository)
+        XCTAssertEqual(model.reportDraft(for: model.currentMonth).report.bibleStudyCount, 3)
+
+        var settings = model.settings
+        settings.reportLanguage = .ukrainian
+        settings.baselineServiceYearStart = MonthKey(year: 2026, month: 9)
+        settings.baselineServiceYearMinutes = 120
+        await model.saveSettings(settings)
+        try await assertDerivedReportsMatchStore(model, repository: repository)
+        XCTAssertEqual(model.reportDraft(for: model.currentMonth).reportLanguage, .ukrainian)
+
+        let record = try XCTUnwrap(model.entryRecords.first)
+        let deleted = await model.deleteEntry(record)
+        XCTAssertTrue(deleted)
+        try await assertDerivedReportsMatchStore(model, repository: repository)
+        XCTAssertEqual(model.reportDraft(for: model.currentMonth).report.rawServiceMinutes, 0)
+    }
+
+    private func assertDerivedReportsMatchStore(
+        _ model: AppModel,
+        repository: CoreDataLedgerRepository
+    ) async throws {
+        let snapshot = try await repository.ledgerSnapshot()
+        let month = model.currentMonth
+        let year = ServiceYearCalculator.serviceYearStart(
+            containing: LocalDay(model.currentDate, calendar: .hourleaf)
+        ).monthKey
+        // Repeat each read to exercise both initial computation and cached reads.
+        for _ in 0..<2 {
+            XCTAssertEqual(model.reportDraft(for: month), ReportReadiness.draft(for: month, in: snapshot))
+            XCTAssertEqual(model.serviceYearDraft(starting: year), ReportReadiness.serviceYearDraft(starting: year, in: snapshot))
+            XCTAssertEqual(model.currentServiceYearPace(), try ServiceYearPaceCalculator.calculate(
+                records: snapshot.entries,
+                settings: snapshot.settings,
+                asOf: LocalDay(model.currentDate, calendar: .hourleaf),
+                calendar: .hourleaf
+            ))
+        }
+    }
+
     private func makeRepository(now: Date) -> CoreDataLedgerRepository {
         let persistence = PersistenceController(inMemory: true, cloudSyncEnabled: false)
         return CoreDataLedgerRepository(persistence: persistence, clock: { now })

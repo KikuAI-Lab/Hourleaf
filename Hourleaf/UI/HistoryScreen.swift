@@ -133,7 +133,7 @@ struct HistoryScreen: View {
 
     private var calendarPanel: some View {
         let month = displayedCalendarMonth
-        let activeDays = HistoryCalendar.activeDays(in: month, records: model.entryRecords)
+        let entryCounts = HistoryCalendar.activeEntryCounts(in: month, records: model.entryRecords)
         let cells = HistoryCalendar.cells(in: month)
 
         return VStack(spacing: 12) {
@@ -179,10 +179,7 @@ struct HistoryScreen: View {
                 }
                 ForEach(cells) { cell in
                     if let day = cell.day {
-                        let entryCount = activeDays.contains(day)
-                            ? HistoryCalendar.activeEntries(on: day, records: model.entryRecords).count
-                            : 0
-                        calendarDayButton(day, entryCount: entryCount)
+                        calendarDayButton(day, entryCount: entryCounts[day, default: 0])
                     } else {
                         Color.clear
                             .frame(maxWidth: .infinity, minHeight: 44)

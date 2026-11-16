@@ -544,6 +544,31 @@ final class HourleafAppLauncher: ObservableObject {
                 _ = await model.updateBibleStudyCount(1, for: model.currentMonth)
             }
 #if DEBUG
+            if arguments.contains("-seedScrollPerformanceUITest") {
+                settings.ledgerStartMonth = model.currentMonth.advanced(by: -24, calendar: .hourleaf)
+                await model.saveSettings(settings)
+                do {
+                    for index in 0..<240 {
+                        let date = model.currentDate.addingTimeInterval(-Double(index) * 86_400)
+                        _ = try await model.repository.apply(EntryMutationCommand(
+                            entryID: UUID(),
+                            expectedRevision: nil,
+                            operation: .create,
+                            values: EntryMutationValues(
+                                kind: index.isMultiple(of: 3) ? .credit : .service,
+                                day: LocalDay(date, calendar: .hourleaf),
+                                minutes: index % 120 + 1,
+                                note: "Synthetic scroll entry \(index)"
+                            ),
+                            occurredAt: clock(),
+                            source: .appQuickEntry
+                        ))
+                    }
+                    await model.reload()
+                } catch {
+                    model.errorMessage = error.localizedDescription
+                }
+            }
             // UI tests use an in-memory Core Data store on every launch while
             // intentionally preserving the disposable quick-surface sidecar.
             // Re-enable the host preference through the real asymmetric flow
