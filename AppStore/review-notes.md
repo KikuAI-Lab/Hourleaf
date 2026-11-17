@@ -4,6 +4,18 @@ This file is the maintained source for the App Review Information Notes field.
 Update it when the review path, shipped capabilities, or verified physical-device
 matrix changes. Keep private reviewer contact details only in App Store Connect.
 
+## Version 1.0.8 review notes
+
+Hourleaf 1.0.8 (build 22)
+
+UPDATE: Performance maintenance. Monthly totals are aggregated once, report and service-year calculations are reused until the ledger snapshot changes, calendar counts use one pass, and history dates use Foundation format styles. Calendar comparisons use numeric components; persisted date keys and report fingerprints remain compatible.
+
+ACCESS: No account, login, payment, credentials or sample files are required. Add records Service or Credit hours/minutes. History provides list/calendar views and editing. Progress prepares monthly reports. Settings includes reminders, backup/restore and CSV import/export. The embedded Apple Watch companion remains included.
+
+PRIVACY: Offline, on-device Apple frameworks only. No backend, analytics, ads, AI, third-party SDK, new permission, entitlement, migration or data category. Records leave the device only through user-selected export or sharing.
+
+TESTING: 36 focused unit checks and RU/UK interface smoke checks passed. Scrolling with 240 synthetic entries, history/calendar filtering, report-month bounds and quick entry passed in the simulator. Existing unrelated unit and localized report-readiness failures reproduced identically on the baseline; the aggregate suite is not green. Physical-device FPS improvement is not claimed.
+
 ## Version 1.0.7 candidate update
 
 Build 21 adds a brief celebration when current-month service and credit

@@ -1,6 +1,6 @@
 # Hourleaf delivery checklist
 
-## Release candidate: 1.0.8 (22) — 2026-11-17
+## Submitted release: 1.0.8 (22) — 2026-11-17
 
 Live release contract for [#11](https://github.com/KikuAI-Lab/Hourleaf/issues/11).
 Source changes improve history date formatting, month aggregation, numeric
@@ -28,14 +28,25 @@ unchanged. Synthetic scrolling fixtures are compiled only in Debug builds.
       passes. iPhone, WidgetKit and Watch all contain 1.0.8 (22), manifests,
       App Intents metadata and matching dSYMs. Archived shipping Swift sources
       match the verified checkout.
-- [ ] Complete App Store IPA export after macOS authorizes codesign's signing key.
-- [ ] Upload build 22 and verify Apple processing.
-- [ ] Attach build 22 to version 1.0.8 and submit for review.
+- [x] Complete App Store IPA export and verify distribution signatures/profiles
+      for all three bundles; no development-device provisioning remains.
+- [x] Upload build 22 and verify completed Apple processing and binary validation.
+- [x] Attach build 22 to version 1.0.8, save/read back EN/RU/UK release notes,
+      update review notes, and submit for review.
 
-Distribution is pending the owner's local keychain authorization for codesign
-and App Store Connect sign-in. Neither upload nor submission is complete.
-Public storefront lookup still reports 1.0.7. The physical iPhone and its
-journal were not modified or used for this test run.
+### Submission receipt — 2026-11-17
+
+- Uploaded shipping source: `9930336fe5c8a2eafa8dd7917f0bddc9d8f67bee`.
+- Xcode reported upload success at 01:55:55 Europe/Kiev. App Store Connect
+  processed build `22` (`9442eccd-7cd6-433b-ba15-67160497cc02`), validated
+  the binary and showed it ready for submission.
+- Version `1.0.8` includes build `22`. App Store Connect confirmed one submitted
+  item and displays **Waiting for Review** (17 November, approximately 02:04
+  Europe/Kiev). Automatic release after approval and immediate rollout remain
+  selected; the existing rating is retained.
+- Public availability remains pending Apple approval; no 1.0.8 live claim,
+  public GitHub release or website version change is made from submission alone.
+- The physical iPhone and its journal were not modified or used for this test run.
 
 The formatting change follows Apple's [FormatStyle guidance](https://developer.apple.com/documentation/foundation/formatstyle).
 Performance investigation follows Apple's [SwiftUI performance guidance](https://developer.apple.com/documentation/xcode/understanding-and-improving-swiftui-performance).
